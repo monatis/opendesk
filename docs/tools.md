@@ -52,11 +52,11 @@ await tool.execute(ctx, params(action="get_value", app="Safari", title="Address 
 
 ### Platform notes
 
-- **macOS**: uses AppleScript / System Events. Process name must match Activity Monitor exactly (e.g. `"Google Chrome"` not `"chrome"`).
+- **macOS**: uses AppleScript / System Events. App name must match Activity Monitor (e.g. `"Google Chrome"` not `"chrome"`).
 - **Linux**: uses AT-SPI2 (`pyatspi`) with `xdotool` fallback for type/press_key.
-- **Windows**: uses `pywinauto` UI Automation with Win32 fallback.
+- **Windows**: uses UI Automation with Win32 fallback. App name matches window title or process name.
 
-When the app uses custom rendering (Electron games, canvas apps), `get_tree` returns an empty tree and suggests falling back to the mouse tool.
+When an app uses custom rendering (canvas apps, games, Electron), `get_tree` may return an empty tree — fall back to `screenshot(marks=True)` and the `mouse` tool.
 
 ---
 
@@ -270,7 +270,7 @@ print(result.output)
 result = await tool.execute(ctx, params(region=[400, 200, 600, 300]))
 ```
 
-Backends tried in order: `pytesseract` → macOS Vision → Windows WinRT → install hint.
+Backends tried in order: `pytesseract` → macOS Vision (macOS only) → Windows WinRT (Windows only) → install hint if none available.
 
 ---
 
@@ -299,3 +299,59 @@ class Attachment:
 
     def to_base64(self) -> str: ...
 ```
+
+---
+
+## `learn` — Record and replay tasks
+
+```python
+from opendesk.tools.learn import LearnTool
+tool = LearnTool()
+```
+
+Requires `pip install 'opendesk[learn]'` (installs `pynput`).
+
+### Actions
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| `start` | `task_name` | Begin recording mouse, keyboard, and screenshots globally |
+| `stop` | — | Stop recording; returns trajectory summary and screenshots |
+| `save` | `task_name`, `procedure` | Save a procedure JSON string to `.opendesk/learned/` |
+| `replay` | `task_name` | Load a procedure and return step-by-step replay instructions |
+| `list` | — | List all saved procedures in the current directory |
+
+### Examples
+
+```python
+params = LearnTool.Params
+
+# Start recording
+await tool.execute(ctx, params(action="start", task_name="fill-form"))
+
+# ... user performs the task ...
+
+# Stop and review trajectory
+result = await tool.execute(ctx, params(action="stop"))
+print(result.output)
+
+# Save procedure (JSON string)
+import json
+procedure = json.dumps({
+    "task_name": "fill-form",
+    "description": "Fill and submit the expense form",
+    "steps": ["Open the form", "Fill in fields", "Click Submit"],
+    "procedure": "Navigate to the form application. Fill each required field. Submit."
+})
+await tool.execute(ctx, params(action="save", task_name="fill-form", procedure=procedure))
+
+# Replay
+result = await tool.execute(ctx, params(action="replay", task_name="fill-form"))
+print(result.output)  # step-by-step instructions for the agent
+
+# List all
+result = await tool.execute(ctx, params(action="list"))
+print(result.output)
+```
+
+See [learn.md](learn.md) for a full guide including accessibility context, storage format, and tips.
