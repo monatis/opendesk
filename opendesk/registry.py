@@ -65,6 +65,7 @@ def create_registry() -> ToolRegistry:
     - ``ui``         — accessibility-based interaction (FIRST CHOICE over mouse)
     - ``clipboard``  — read / write system clipboard
     - ``ocr``        — extract text via pytesseract / Vision / WinRT
+    - ``learn``      — record and replay computer tasks
     """
     from opendesk.tools.screenshot import ScreenshotTool
     from opendesk.tools.mouse import MouseTool
@@ -73,6 +74,7 @@ def create_registry() -> ToolRegistry:
     from opendesk.tools.ui import UITool
     from opendesk.tools.clipboard import ClipboardTool
     from opendesk.tools.ocr import OCRTool
+    from opendesk.tools.learn import LearnTool
 
     registry = ToolRegistry()
     for tool_cls in (
@@ -83,6 +85,7 @@ def create_registry() -> ToolRegistry:
         UITool,
         ClipboardTool,
         OCRTool,
+        LearnTool,
     ):
         registry.register(tool_cls())
 

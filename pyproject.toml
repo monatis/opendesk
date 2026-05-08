@@ -66,9 +66,14 @@ ocr = [
     "pytesseract",
 ]
 
+# Learn/replay — record and replay computer tasks
+learn = [
+    "pynput",
+]
+
 # Everything
 all = [
-    "opendesk[core,mcp,openai,langchain,ocr]",
+    "opendesk[core,mcp,openai,langchain,ocr,learn]",
 ]
 
 [project.scripts]
