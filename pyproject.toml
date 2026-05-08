@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opendesk"
+version = "0.1.1"
+description = "Open Computer Use Agent — framework for desktop and browser automation"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = ["computer-use", "automation", "accessibility", "ai", "agent", "mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Operating System",
+]
+
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+# Core computer use: screen capture + mouse/keyboard control
+core = [
+    "mss>=9.0",
+    "Pillow>=10.0",
+    "pyautogui>=0.9",
+]
+
+# MCP server — expose all tools as an MCP server
+mcp = [
+    "mcp>=1.0",
+]
+
+# OpenAI-compatible function calling adapter
+openai = [
+    "openai>=1.0",
+]
+
+# LangChain tool adapter
+langchain = [
+    "langchain-core>=0.2",
+]
+
+# Linux accessibility (AT-SPI2)
+linux = [
+    "pyatspi",
+]
+
+# Windows accessibility (UI Automation)
+windows = [
+    "pywinauto",
+    "pygetwindow",
+    "pyperclip",
+]
+
+# OCR — optional, native backends work without this
+ocr = [
+    "pytesseract",
+]
+
+# Learn/replay — record and replay computer tasks
+learn = [
+    "pynput",
+]
+
+# Everything
+all = [
+    "opendesk[core,mcp,openai,langchain,ocr,learn]",
+]
+
+[project.scripts]
+opendesk-mcp = "opendesk.integrations.mcp:run_stdio_server"
+opendesk = "opendesk.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/abhijithneilabraham/opendesk"
+Documentation = "https://github.com/abhijithneilabraham/opendesk/tree/main/docs"
+Issues = "https://github.com/abhijithneilabraham/opendesk/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["opendesk*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
