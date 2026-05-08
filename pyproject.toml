@@ -3,7 +3,7 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "opencua"
+name = "opendesk"
 version = "0.1.0"
 description = "Open Computer Use Agent — framework for desktop and browser automation"
 readme = "README.md"
@@ -68,20 +68,20 @@ ocr = [
 
 # Everything
 all = [
-    "opencua[core,mcp,openai,langchain,ocr]",
+    "opendesk[core,mcp,openai,langchain,ocr]",
 ]
 
 [project.scripts]
-opencua-mcp = "opencua.integrations.mcp:run_stdio_server"
+opendesk-mcp = "opendesk.integrations.mcp:run_stdio_server"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/opencua"
-Documentation = "https://github.com/yourusername/opencua/tree/main/docs"
-Issues = "https://github.com/yourusername/opencua/issues"
+Homepage = "https://github.com/yourusername/opendesk"
+Documentation = "https://github.com/yourusername/opendesk/tree/main/docs"
+Issues = "https://github.com/yourusername/opendesk/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["opencua*"]
+include = ["opendesk*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

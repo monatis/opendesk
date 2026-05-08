@@ -9,7 +9,7 @@ Backends (tried in order)
 
 Usage::
 
-    from opencua.computer.ocr import extract_text_from_region
+    from opendesk.computer.ocr import extract_text_from_region
 
     # region = (x, y, width, height) in logical pixels; None = full screen
     text = extract_text_from_region(region=(100, 200, 800, 400))
@@ -42,7 +42,7 @@ def extract_text_from_region(
     Extracted text string, or an informative error/install-hint string.
     """
     try:
-        from opencua.computer.capture import capture_screen
+        from opendesk.computer.capture import capture_screen
         png_bytes, w, h = capture_screen(region)
     except Exception as exc:
         return f"OCR error: could not capture screen: {exc}"

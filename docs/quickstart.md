@@ -3,14 +3,14 @@
 ## Installation
 
 ```bash
-pip install 'opencua[core,mcp]'
+pip install 'opendesk[core,mcp]'
 ```
 
 ## 1. Take a screenshot
 
 ```python
 import asyncio
-from opencua import create_registry, allow_all_context
+from opendesk import create_registry, allow_all_context
 
 async def main():
     registry = create_registry()
@@ -55,25 +55,25 @@ await kb.execute(ctx, kb.Params(action="press", key="enter"))
 
 ```bash
 # Run once, then connect from Claude Desktop / Continue / Cursor
-opencua-mcp
+opendesk-mcp
 ```
 
 Add to your MCP client's config:
 ```json
-{ "command": "opencua-mcp" }
+{ "command": "opendesk-mcp" }
 ```
 
 ## 5. Full agentic loop with Claude
 
 ```python
 import anthropic
-from opencua.integrations.claude_code import ClaudeCodeAdapter
-from opencua.registry import create_registry
+from opendesk.integrations.claude_code import ClaudeCodeAdapter
+from opendesk.registry import create_registry
 
 client = anthropic.Anthropic()
 adapter = ClaudeCodeAdapter(create_registry())
 
-messages = [{"role": "user", "content": "Open TextEdit, type 'Hello from opencua', and save the file."}]
+messages = [{"role": "user", "content": "Open TextEdit, type 'Hello from opendesk', and save the file."}]
 
 result = await adapter.run_loop(
     client=client,
@@ -87,7 +87,7 @@ print(result)
 ## 6. Permission modes
 
 ```python
-from opencua.tools.base import allow_all_context, interactive_context, ToolContext, PermissionDeniedError
+from opendesk.tools.base import allow_all_context, interactive_context, ToolContext, PermissionDeniedError
 
 # Fully autonomous (approve everything)
 ctx = allow_all_context()
@@ -106,7 +106,7 @@ ctx = ToolContext(session_id="safe", permission_handler=my_policy)
 ## 7. Restrict the sandbox
 
 ```python
-from opencua.computer.sandbox import configure_sandbox
+from opendesk.computer.sandbox import configure_sandbox
 
 # Only allow Safari and Terminal, only within the left half of a 2560px screen
 configure_sandbox(

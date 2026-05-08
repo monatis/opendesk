@@ -1,8 +1,8 @@
-"""opencua — Open Computer Use Agent framework.
+"""opendesk — Open Computer Use Agent framework.
 
 Quick start::
 
-    from opencua import create_registry, allow_all_context
+    from opendesk import create_registry, allow_all_context
 
     registry = create_registry()
     ctx = allow_all_context()
@@ -18,20 +18,20 @@ Quick start::
 Integrations::
 
     # MCP server (Claude Desktop, Continue, Cursor, ...)
-    from opencua.integrations.mcp import create_mcp_server
+    from opendesk.integrations.mcp import create_mcp_server
 
     # Anthropic / Claude Code
-    from opencua.integrations.claude_code import ClaudeCodeAdapter
+    from opendesk.integrations.claude_code import ClaudeCodeAdapter
 
     # OpenAI function calling
-    from opencua.integrations.openai_compat import OpenAIAdapter
+    from opendesk.integrations.openai_compat import OpenAIAdapter
 
     # LangChain
-    from opencua.integrations.langchain_compat import as_langchain_tools
+    from opendesk.integrations.langchain_compat import as_langchain_tools
 """
 
-from opencua.registry import ToolRegistry, create_registry, create_minimal_registry
-from opencua.tools.base import (
+from opendesk.registry import ToolRegistry, create_registry, create_minimal_registry
+from opendesk.tools.base import (
     Tool,
     ToolContext,
     ToolResult,

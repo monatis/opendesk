@@ -1,6 +1,6 @@
 """OpenAI-compatible function calling adapter.
 
-Converts opencua tools into OpenAI function definitions and dispatches
+Converts opendesk tools into OpenAI function definitions and dispatches
 ``tool_calls`` from the response back to the correct tool.
 
 Works with the OpenAI SDK and any API that follows the OpenAI tool-calling
@@ -9,8 +9,8 @@ format (Together AI, Groq, Ollama, LiteLLM, vLLM, etc.).
 Usage::
 
     from openai import OpenAI
-    from opencua.integrations.openai_compat import OpenAIAdapter
-    from opencua.registry import create_registry
+    from opendesk.integrations.openai_compat import OpenAIAdapter
+    from opendesk.registry import create_registry
 
     client = OpenAI()
     adapter = OpenAIAdapter(create_registry())
@@ -40,8 +40,8 @@ import asyncio
 import json
 from typing import Any
 
-from opencua.registry import ToolRegistry, create_registry
-from opencua.tools.base import ToolContext, allow_all_context
+from opendesk.registry import ToolRegistry, create_registry
+from opendesk.tools.base import ToolContext, allow_all_context
 
 
 def as_openai_tools(registry: ToolRegistry) -> list[dict[str, Any]]:

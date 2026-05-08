@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from opencua.tools.base import Attachment, Tool, ToolContext, ToolResult
+from opendesk.tools.base import Attachment, Tool, ToolContext, ToolResult
 
 
 class ScreenshotTool(Tool):
@@ -62,8 +62,8 @@ class ScreenshotTool(Tool):
         )
 
     async def execute(self, ctx: ToolContext, params: "ScreenshotTool.Params") -> ToolResult:
-        from opencua.computer.capture import capture_screen
-        from opencua.computer.sandbox import ActionType, get_sandbox
+        from opendesk.computer.capture import capture_screen
+        from opendesk.computer.sandbox import ActionType, get_sandbox
 
         await ctx.check_permission(
             tool="screenshot",
@@ -138,14 +138,14 @@ class ScreenshotTool(Tool):
                 pil_img = Image.open(_io.BytesIO(png_bytes))
 
                 if params.marks:
-                    from opencua.computer.marks import draw_som_marks, get_interactive_elements
+                    from opendesk.computer.marks import draw_som_marks, get_interactive_elements
                     elements = await loop.run_in_executor(None, get_interactive_elements, None)
                     pil_img, _mark_map, marks_summary = draw_som_marks(
                         pil_img, elements, scale_x, scale_y
                     )
 
                 if params.show_cursor:
-                    from opencua.computer.marks import overlay_cursor
+                    from opendesk.computer.marks import overlay_cursor
                     try:
                         import pyautogui  # type: ignore[import-not-found]
                         cx, cy = pyautogui.position()
@@ -165,7 +165,7 @@ class ScreenshotTool(Tool):
         diff_summary = None
         if sandbox.last_screenshot is not None and not params.zoom:
             try:
-                from opencua.computer.capture import diff_screenshots
+                from opendesk.computer.capture import diff_screenshots
                 diff = await loop.run_in_executor(
                     None, diff_screenshots, sandbox.last_screenshot, png_bytes
                 )

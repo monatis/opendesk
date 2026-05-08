@@ -7,7 +7,7 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from opencua.tools.base import Tool, ToolContext, ToolResult
+from opendesk.tools.base import Tool, ToolContext, ToolResult
 
 
 def _pyautogui():
@@ -16,7 +16,7 @@ def _pyautogui():
         return pyautogui
     except ImportError as exc:
         raise ImportError(
-            "pyautogui is required for keyboard control: pip install 'opencua[core]'"
+            "pyautogui is required for keyboard control: pip install 'opendesk[core]'"
         ) from exc
 
 
@@ -83,7 +83,7 @@ def _type_text(pag: object, text: str, interval: float) -> None:
         try:
             import pyperclip  # type: ignore[import-not-found]
         except ImportError:
-            from opencua.computer.deps import ensure_import
+            from opendesk.computer.deps import ensure_import
             pyperclip = ensure_import("pyperclip")
         pyperclip.copy(text)
         time.sleep(0.05)
@@ -124,7 +124,7 @@ class KeyboardTool(Tool):
         hold_duration: float = Field(default=1.0, description="Seconds to hold key for action='hold'.")
 
     async def execute(self, ctx: ToolContext, params: "KeyboardTool.Params") -> ToolResult:
-        from opencua.computer.sandbox import ActionType, get_sandbox
+        from opendesk.computer.sandbox import ActionType, get_sandbox
 
         if params.action == "type":
             arg_desc = f"type text: {(params.text or '')[:60]!r}"

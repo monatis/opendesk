@@ -9,7 +9,7 @@ from typing import Literal, Optional
 
 from pydantic import Field
 
-from opencua.tools.base import Tool, ToolContext, ToolResult
+from opendesk.tools.base import Tool, ToolContext, ToolResult
 
 _PLATFORM = platform.system()
 
@@ -33,7 +33,7 @@ class ClipboardTool(Tool):
         )
 
     async def execute(self, ctx: ToolContext, params: "ClipboardTool.Params") -> ToolResult:
-        from opencua.computer.sandbox import ActionType, get_sandbox
+        from opendesk.computer.sandbox import ActionType, get_sandbox
 
         arg_desc = (
             f"clipboard write: {(params.text or '')[:40]!r}"
@@ -102,7 +102,7 @@ def _read_clipboard() -> str:
         try:
             import pyperclip  # type: ignore[import-not-found]
         except ImportError:
-            from opencua.computer.deps import ensure_import
+            from opendesk.computer.deps import ensure_import
             pyperclip = ensure_import("pyperclip")
         t = pyperclip.paste()
         return t if t else "(clipboard is empty)"
@@ -130,7 +130,7 @@ def _write_clipboard(text: str) -> None:
         try:
             import pyperclip  # type: ignore[import-not-found]
         except ImportError:
-            from opencua.computer.deps import ensure_import
+            from opendesk.computer.deps import ensure_import
             pyperclip = ensure_import("pyperclip")
         pyperclip.copy(text)
         return

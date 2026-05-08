@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from opencua.tools.base import Tool, ToolContext, ToolResult
+from opendesk.tools.base import Tool, ToolContext, ToolResult
 
 
 class OCRTool(Tool):
@@ -31,7 +31,7 @@ class OCRTool(Tool):
         )
 
     async def execute(self, ctx: ToolContext, params: "OCRTool.Params") -> ToolResult:
-        from opencua.computer.sandbox import ActionType, get_sandbox
+        from opendesk.computer.sandbox import ActionType, get_sandbox
 
         region_str = str(params.region) if params.region else "full screen"
         await ctx.check_permission(
@@ -52,7 +52,7 @@ class OCRTool(Tool):
             region = (params.region[0], params.region[1], params.region[2], params.region[3])
 
         try:
-            from opencua.computer.ocr import extract_text_from_region
+            from opendesk.computer.ocr import extract_text_from_region
             loop = asyncio.get_event_loop()
             text = await loop.run_in_executor(None, extract_text_from_region, region)
         except Exception as exc:

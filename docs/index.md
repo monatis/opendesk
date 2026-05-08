@@ -1,4 +1,4 @@
-# opencua documentation
+# opendesk documentation
 
 **Open Computer Use Agent** — a framework for desktop and browser automation that plugs into Claude Code, MCP, OpenAI, and LangChain.
 
@@ -6,7 +6,7 @@
 
 | Doc | Description |
 |-----|-------------|
-| [MCP integration](mcp.md) | How to add opencua to Claude Code, Claude Desktop, Cursor, Continue |
+| [MCP integration](mcp.md) | How to add opendesk to Claude Code, Claude Desktop, Cursor, Continue |
 | [Quickstart](quickstart.md) | Installation, first screenshot, agentic loop |
 | [Tools reference](tools.md) | All parameters for every tool |
 | [Integrations](integrations.md) | Claude Code SDK, OpenAI, LangChain — with full examples |

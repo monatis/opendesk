@@ -1,20 +1,20 @@
 """MCP (Model Context Protocol) server adapter.
 
-Exposes all opencua tools as an MCP server that any MCP-compatible client
+Exposes all opendesk tools as an MCP server that any MCP-compatible client
 (Claude Desktop, Continue, Cursor, etc.) can connect to.
 
 Usage — stdio transport (most common)::
 
     # Run as standalone server:
-    python -m opencua.integrations.mcp
+    python -m opendesk.integrations.mcp
 
     # Or via the installed script:
-    opencua-mcp
+    opendesk-mcp
 
 Usage — in-process::
 
-    from opencua.integrations.mcp import create_mcp_server
-    from opencua.registry import create_registry
+    from opendesk.integrations.mcp import create_mcp_server
+    from opendesk.registry import create_registry
     from mcp.server.stdio import stdio_server
 
     registry = create_registry()
@@ -27,8 +27,8 @@ Claude Desktop config (~/Library/Application Support/Claude/claude_desktop_confi
 
     {
       "mcpServers": {
-        "opencua": {
-          "command": "opencua-mcp"
+        "opendesk": {
+          "command": "opendesk-mcp"
         }
       }
     }
@@ -42,8 +42,8 @@ import json
 import sys
 from typing import Any
 
-from opencua.registry import ToolRegistry, create_registry
-from opencua.tools.base import ToolContext, allow_all_context
+from opendesk.registry import ToolRegistry, create_registry
+from opendesk.tools.base import ToolContext, allow_all_context
 
 
 def create_mcp_server(
@@ -55,15 +55,15 @@ def create_mcp_server(
     Parameters
     ----------
     registry:
-        Tool registry to expose.  Defaults to :func:`~opencua.registry.create_registry`.
+        Tool registry to expose.  Defaults to :func:`~opendesk.registry.create_registry`.
     ctx:
         :class:`ToolContext` used for every tool call.
-        Defaults to :func:`~opencua.tools.base.allow_all_context`.
+        Defaults to :func:`~opendesk.tools.base.allow_all_context`.
 
     Raises
     ------
     ImportError
-        When the ``mcp`` package is not installed (``pip install 'opencua[mcp]'``).
+        When the ``mcp`` package is not installed (``pip install 'opendesk[mcp]'``).
     """
     try:
         from mcp.server import Server
@@ -71,7 +71,7 @@ def create_mcp_server(
     except ImportError as exc:
         raise ImportError(
             "The 'mcp' package is required for MCP integration:\n"
-            "  pip install 'opencua[mcp]'\n"
+            "  pip install 'opendesk[mcp]'\n"
             "  # or: pip install mcp"
         ) from exc
 
@@ -80,7 +80,7 @@ def create_mcp_server(
     if ctx is None:
         ctx = allow_all_context()
 
-    server = Server("opencua")
+    server = Server("opendesk")
 
     @server.list_tools()
     async def list_tools() -> list[mcp_types.Tool]:
@@ -148,7 +148,7 @@ async def _run_stdio() -> None:
     except ImportError as exc:
         print(
             "ERROR: 'mcp' package not installed.\n"
-            "Install with: pip install 'opencua[mcp]'",
+            "Install with: pip install 'opendesk[mcp]'",
             file=sys.stderr,
         )
         raise SystemExit(1) from exc
@@ -165,7 +165,7 @@ async def _run_stdio() -> None:
 
 
 def run_stdio_server() -> None:
-    """Entry point for the ``opencua-mcp`` CLI command."""
+    """Entry point for the ``opendesk-mcp`` CLI command."""
     asyncio.run(_run_stdio())
 
 

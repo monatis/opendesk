@@ -9,7 +9,7 @@ from typing import Literal, Optional
 
 from pydantic import Field
 
-from opencua.tools.base import Tool, ToolContext, ToolResult
+from opendesk.tools.base import Tool, ToolContext, ToolResult
 
 _PLATFORM = platform.system()
 
@@ -36,7 +36,7 @@ class AppTool(Tool):
         )
 
     async def execute(self, ctx: ToolContext, params: "AppTool.Params") -> ToolResult:
-        from opencua.computer.sandbox import ActionType, get_sandbox
+        from opendesk.computer.sandbox import ActionType, get_sandbox
 
         app_arg = params.name or "(list)"
         await ctx.check_permission(

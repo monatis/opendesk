@@ -43,14 +43,14 @@ def capture_screen(
         import mss  # type: ignore[import-not-found]
     except ImportError as exc:
         raise ImportError(
-            "mss is required for screen capture: pip install 'opencua[core]'"
+            "mss is required for screen capture: pip install 'opendesk[core]'"
         ) from exc
 
     try:
         from PIL import Image  # type: ignore[import-not-found]
     except ImportError as exc:
         raise ImportError(
-            "Pillow is required for screen capture: pip install 'opencua[core]'"
+            "Pillow is required for screen capture: pip install 'opendesk[core]'"
         ) from exc
 
     with mss.mss() as sct:
@@ -111,7 +111,7 @@ def screen_size() -> tuple[int, int]:
     try:
         import mss  # type: ignore[import-not-found]
     except ImportError as exc:
-        raise ImportError("mss is required: pip install 'opencua[core]'") from exc
+        raise ImportError("mss is required: pip install 'opendesk[core]'") from exc
 
     with mss.mss() as sct:
         m = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
@@ -145,7 +145,7 @@ def diff_screenshots(
         from PIL import Image, ImageChops, ImageStat  # type: ignore[import-not-found]
     except ImportError as exc:
         raise ImportError(
-            "Pillow is required for screenshot diffing: pip install 'opencua[core]'"
+            "Pillow is required for screenshot diffing: pip install 'opendesk[core]'"
         ) from exc
 
     before = Image.open(io.BytesIO(before_png)).convert("RGB")

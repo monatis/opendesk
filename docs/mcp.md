@@ -1,7 +1,7 @@
 # MCP Integration
 
 MCP (Model Context Protocol) is how AI coding tools like Claude Code, Cursor, and Continue
-connect to external capabilities. opencua ships as an MCP server — you install it once, register
+connect to external capabilities. opendesk ships as an MCP server — you install it once, register
 it with your client, and from then on any conversation can use screenshot, mouse, keyboard, ui,
 app, clipboard, and ocr without any extra setup.
 
@@ -14,7 +14,7 @@ Your AI client (Claude Code / Cursor / Continue)
        |
        | MCP over stdio
        v
-  opencua-mcp  <-- the server this package installs
+  opendesk-mcp  <-- the server this package installs
        |
        +-- screenshot tool  (captures screen, returns PNG to the LLM)
        +-- ui tool          (clicks elements by name via AX tree)
@@ -33,13 +33,13 @@ and continues. You never write tool-calling code yourself.
 ## Step 1 — Install
 
 ```bash
-pip install 'opencua[core,mcp]'
+pip install 'opendesk[core,mcp]'
 ```
 
 Verify the server command exists:
 
 ```bash
-opencua-mcp --help    # should print usage or hang (waiting for MCP handshake on stdin)
+opendesk-mcp --help    # should print usage or hang (waiting for MCP handshake on stdin)
 # Ctrl-C to exit
 ```
 
@@ -50,14 +50,14 @@ opencua-mcp --help    # should print usage or hang (waiting for MCP handshake on
 ### Claude Code
 
 ```bash
-claude mcp add opencua -- opencua-mcp
+claude mcp add opendesk -- opendesk-mcp
 ```
 
 Verify it was added:
 
 ```bash
 claude mcp list
-# opencua: opencua-mcp
+# opendesk: opendesk-mcp
 ```
 
 Now start a conversation in Claude Code and ask:
@@ -68,7 +68,7 @@ Claude will call the `screenshot` tool, receive the PNG, and describe it.
 To remove it later:
 
 ```bash
-claude mcp remove opencua
+claude mcp remove opendesk
 ```
 
 ---
@@ -80,8 +80,8 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "opencua": {
-      "command": "opencua-mcp"
+    "opendesk": {
+      "command": "opendesk-mcp"
     }
   }
 }
@@ -89,13 +89,13 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 Restart Claude Desktop. The tools appear in the toolbar.
 
-If `opencua-mcp` is not on your PATH (e.g. in a virtualenv), use the full path:
+If `opendesk-mcp` is not on your PATH (e.g. in a virtualenv), use the full path:
 
 ```json
 {
   "mcpServers": {
-    "opencua": {
-      "command": "/path/to/venv/bin/opencua-mcp"
+    "opendesk": {
+      "command": "/path/to/venv/bin/opendesk-mcp"
     }
   }
 }
@@ -110,8 +110,8 @@ Create or edit `.cursor/mcp.json` in your project root:
 ```json
 {
   "mcpServers": {
-    "opencua": {
-      "command": "opencua-mcp",
+    "opendesk": {
+      "command": "opendesk-mcp",
       "transport": "stdio"
     }
   }
@@ -128,8 +128,8 @@ Edit `.continue/config.json`:
 {
   "mcpServers": [
     {
-      "name": "opencua",
-      "command": "opencua-mcp",
+      "name": "opendesk",
+      "command": "opendesk-mcp",
       "transport": "stdio"
     }
   ]
@@ -140,8 +140,8 @@ Edit `.continue/config.json`:
 
 ### Any other MCP client
 
-The pattern is always the same — point the client at the `opencua-mcp` command with stdio transport.
-opencua follows the MCP spec exactly, so it works with any compliant client.
+The pattern is always the same — point the client at the `opendesk-mcp` command with stdio transport.
+opendesk follows the MCP spec exactly, so it works with any compliant client.
 
 ---
 
@@ -171,9 +171,9 @@ If you need to embed the server in your own process or customize permissions:
 ```python
 import asyncio
 from mcp.server.stdio import stdio_server
-from opencua.integrations.mcp import create_mcp_server
-from opencua.registry import create_registry
-from opencua.tools.base import ToolContext, PermissionDeniedError
+from opendesk.integrations.mcp import create_mcp_server
+from opendesk.registry import create_registry
+from opendesk.tools.base import ToolContext, PermissionDeniedError
 
 # Custom permission policy: block any app launch
 async def my_policy(tool: str, argument: str, description: str) -> None:
@@ -197,8 +197,8 @@ asyncio.run(main())
 You can lock down the sandbox before starting the server:
 
 ```python
-from opencua.computer.sandbox import configure_sandbox
-from opencua.tools.base import ToolContext
+from opendesk.computer.sandbox import configure_sandbox
+from opendesk.tools.base import ToolContext
 
 # Only allow Safari and Terminal; only act within the left half of the screen
 configure_sandbox(
@@ -221,7 +221,7 @@ the LLM sees, so it knows to stay in bounds.
 Every action is recorded in the session sandbox:
 
 ```python
-from opencua.computer.sandbox import get_sandbox
+from opendesk.computer.sandbox import get_sandbox
 
 sandbox = get_sandbox("my-session")
 print(sandbox.summary())
@@ -235,8 +235,8 @@ log = sandbox.export_audit_log()
 
 ## Troubleshooting
 
-**`opencua-mcp` not found**
-The command is registered as a script entry point. Make sure you installed with `pip install 'opencua[core,mcp]'`
+**`opendesk-mcp` not found**
+The command is registered as a script entry point. Make sure you installed with `pip install 'opendesk[core,mcp]'`
 and that the install's `bin/` directory is on your PATH.
 
 **Screenshot returns a permission error on macOS**
@@ -246,4 +246,4 @@ Go to System Settings -> Privacy & Security -> Screen Recording and add your ter
 Go to System Settings -> Privacy & Security -> Accessibility and add your terminal app.
 
 **Tools appear in Claude Code but calls fail with `ImportError`**
-You installed opencua but not the core extras. Run: `pip install 'opencua[core]'`
+You installed opendesk but not the core extras. Run: `pip install 'opendesk[core]'`

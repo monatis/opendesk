@@ -7,7 +7,7 @@ from typing import Literal, Optional
 
 from pydantic import Field
 
-from opencua.tools.base import Tool, ToolContext, ToolResult
+from opendesk.tools.base import Tool, ToolContext, ToolResult
 
 
 def _pyautogui():
@@ -16,7 +16,7 @@ def _pyautogui():
         return pyautogui
     except ImportError as exc:
         raise ImportError(
-            "pyautogui is required for mouse control: pip install 'opencua[core]'"
+            "pyautogui is required for mouse control: pip install 'opendesk[core]'"
         ) from exc
 
 
@@ -87,7 +87,7 @@ class MouseTool(Tool):
         )
 
     async def execute(self, ctx: ToolContext, params: "MouseTool.Params") -> ToolResult:
-        from opencua.computer.sandbox import ActionType, get_sandbox
+        from opendesk.computer.sandbox import ActionType, get_sandbox
 
         scaled_params = params
         scale_note = ""

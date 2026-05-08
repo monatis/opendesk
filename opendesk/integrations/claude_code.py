@@ -1,15 +1,15 @@
 """Claude Code / Anthropic SDK adapter.
 
-Converts opencua tools into the format expected by the Anthropic API
+Converts opendesk tools into the format expected by the Anthropic API
 (``anthropic.Anthropic().messages.create(tools=[...])``) and dispatches
 tool-use blocks back to the correct tool.
 
 Usage::
 
     import anthropic
-    from opencua.integrations.claude_code import ClaudeCodeAdapter
-    from opencua.registry import create_registry
-    from opencua.tools.base import allow_all_context
+    from opendesk.integrations.claude_code import ClaudeCodeAdapter
+    from opendesk.registry import create_registry
+    from opendesk.tools.base import allow_all_context
 
     registry = create_registry()
     adapter = ClaudeCodeAdapter(registry, ctx=allow_all_context())
@@ -46,8 +46,8 @@ import asyncio
 import base64
 from typing import Any
 
-from opencua.registry import ToolRegistry, create_registry
-from opencua.tools.base import ToolContext, allow_all_context
+from opendesk.registry import ToolRegistry, create_registry
+from opendesk.tools.base import ToolContext, allow_all_context
 
 
 def as_anthropic_tools(registry: ToolRegistry) -> list[dict[str, Any]]:

@@ -2,7 +2,7 @@
 
 Usage::
 
-    from opencua.registry import create_registry
+    from opendesk.registry import create_registry
 
     registry = create_registry()
     tool = registry.get("screenshot")
@@ -14,11 +14,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from opencua.tools.base import Tool
+    from opendesk.tools.base import Tool
 
 
 class ToolRegistry:
-    """A dict-like container of :class:`~opencua.tools.base.Tool` instances."""
+    """A dict-like container of :class:`~opendesk.tools.base.Tool` instances."""
 
     def __init__(self) -> None:
         self._tools: dict[str, "Tool"] = {}
@@ -66,13 +66,13 @@ def create_registry() -> ToolRegistry:
     - ``clipboard``  — read / write system clipboard
     - ``ocr``        — extract text via pytesseract / Vision / WinRT
     """
-    from opencua.tools.screenshot import ScreenshotTool
-    from opencua.tools.mouse import MouseTool
-    from opencua.tools.keyboard import KeyboardTool
-    from opencua.tools.app import AppTool
-    from opencua.tools.ui import UITool
-    from opencua.tools.clipboard import ClipboardTool
-    from opencua.tools.ocr import OCRTool
+    from opendesk.tools.screenshot import ScreenshotTool
+    from opendesk.tools.mouse import MouseTool
+    from opendesk.tools.keyboard import KeyboardTool
+    from opendesk.tools.app import AppTool
+    from opendesk.tools.ui import UITool
+    from opendesk.tools.clipboard import ClipboardTool
+    from opendesk.tools.ocr import OCRTool
 
     registry = ToolRegistry()
     for tool_cls in (
@@ -94,12 +94,12 @@ def create_minimal_registry() -> ToolRegistry:
 
     Suitable for environments where pytesseract / Tesseract are not installed.
     """
-    from opencua.tools.screenshot import ScreenshotTool
-    from opencua.tools.mouse import MouseTool
-    from opencua.tools.keyboard import KeyboardTool
-    from opencua.tools.app import AppTool
-    from opencua.tools.ui import UITool
-    from opencua.tools.clipboard import ClipboardTool
+    from opendesk.tools.screenshot import ScreenshotTool
+    from opendesk.tools.mouse import MouseTool
+    from opendesk.tools.keyboard import KeyboardTool
+    from opendesk.tools.app import AppTool
+    from opendesk.tools.ui import UITool
+    from opendesk.tools.clipboard import ClipboardTool
 
     registry = ToolRegistry()
     for tool_cls in (ScreenshotTool, MouseTool, KeyboardTool, AppTool, UITool, ClipboardTool):

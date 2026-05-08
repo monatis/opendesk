@@ -6,7 +6,7 @@ log that can be exported for reproducibility and compliance.
 
 Usage::
 
-    from opencua.computer.sandbox import get_sandbox, ActionType
+    from opendesk.computer.sandbox import get_sandbox, ActionType
 
     sandbox = get_sandbox("session-abc")
     await sandbox.record_action(ActionType.SCREENSHOT, params={}, result="ok")

@@ -1,21 +1,21 @@
 # Integrations
 
-opencua tools can be used with any agentic harness. This page documents each integration in detail.
+opendesk tools can be used with any agentic harness. This page documents each integration in detail.
 
 ---
 
 ## MCP (Model Context Protocol)
 
-MCP is the recommended integration. Any MCP-compatible client automatically gets all opencua tools — no custom glue code needed.
+MCP is the recommended integration. Any MCP-compatible client automatically gets all opendesk tools — no custom glue code needed.
 
 ### Quickstart
 
 ```bash
 # Install
-pip install 'opencua[core,mcp]'
+pip install 'opendesk[core,mcp]'
 
 # Run server (stdio transport)
-opencua-mcp
+opendesk-mcp
 ```
 
 ### Claude Desktop
@@ -25,14 +25,14 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "opencua": {
-      "command": "opencua-mcp"
+    "opendesk": {
+      "command": "opendesk-mcp"
     }
   }
 }
 ```
 
-Restart Claude Desktop. All opencua tools appear in the tool palette.
+Restart Claude Desktop. All opendesk tools appear in the tool palette.
 
 ### Continue (VS Code)
 
@@ -42,8 +42,8 @@ Add to `.continue/config.json`:
 {
   "mcpServers": [
     {
-      "name": "opencua",
-      "command": "opencua-mcp",
+      "name": "opendesk",
+      "command": "opendesk-mcp",
       "transport": "stdio"
     }
   ]
@@ -57,8 +57,8 @@ Add to `.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "opencua": {
-      "command": "opencua-mcp"
+    "opendesk": {
+      "command": "opendesk-mcp"
     }
   }
 }
@@ -69,9 +69,9 @@ Add to `.cursor/mcp.json`:
 ```python
 import asyncio
 from mcp.server.stdio import stdio_server
-from opencua.integrations.mcp import create_mcp_server
-from opencua.registry import create_registry
-from opencua.tools.base import interactive_context
+from opendesk.integrations.mcp import create_mcp_server
+from opendesk.registry import create_registry
+from opendesk.tools.base import interactive_context
 
 # Use interactive_context to prompt before each action
 server = create_mcp_server(
@@ -89,7 +89,7 @@ asyncio.run(main())
 ### Custom permission handler with MCP
 
 ```python
-from opencua.tools.base import ToolContext, PermissionDeniedError
+from opendesk.tools.base import ToolContext, PermissionDeniedError
 
 BLOCKED_APPS = {"System Preferences", "Keychain Access"}
 
@@ -110,9 +110,9 @@ server = create_mcp_server(ctx=ctx)
 
 ```python
 import anthropic
-from opencua.integrations.claude_code import ClaudeCodeAdapter
-from opencua.registry import create_registry
-from opencua.tools.base import allow_all_context
+from opendesk.integrations.claude_code import ClaudeCodeAdapter
+from opendesk.registry import create_registry
+from opendesk.tools.base import allow_all_context
 
 client = anthropic.Anthropic()
 adapter = ClaudeCodeAdapter(
@@ -180,8 +180,8 @@ Works with OpenAI API and any OpenAI-compatible endpoint (Groq, Together AI, Oll
 
 ```python
 from openai import OpenAI
-from opencua.integrations.openai_compat import OpenAIAdapter
-from opencua.registry import create_registry
+from opendesk.integrations.openai_compat import OpenAIAdapter
+from opendesk.registry import create_registry
 
 client = OpenAI()
 adapter = OpenAIAdapter(create_registry())
@@ -210,7 +210,7 @@ result = await adapter.run_loop(client, model="qwen2.5:72b", messages=messages)
 
 ```python
 from openai import OpenAI
-from opencua.integrations.openai_compat import OpenAIAdapter
+from opendesk.integrations.openai_compat import OpenAIAdapter
 
 client = OpenAI()
 adapter = OpenAIAdapter()
@@ -237,8 +237,8 @@ if choice.finish_reason == "tool_calls":
 from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import create_react_agent
 
-from opencua.integrations.langchain_compat import as_langchain_tools
-from opencua.registry import create_registry
+from opendesk.integrations.langchain_compat import as_langchain_tools
+from opendesk.registry import create_registry
 
 tools = as_langchain_tools(create_registry())
 llm = ChatAnthropic(model="claude-opus-4-6")
@@ -251,7 +251,7 @@ print(result["messages"][-1].content)
 ### With custom context
 
 ```python
-from opencua.tools.base import ToolContext, PermissionDeniedError
+from opendesk.tools.base import ToolContext, PermissionDeniedError
 
 async def strict_policy(tool: str, argument: str, description: str) -> None:
     if tool == "app" and "open" in argument:
@@ -269,8 +269,8 @@ If your framework isn't listed above, use the raw tool API directly:
 
 ```python
 import json
-from opencua.registry import create_registry
-from opencua.tools.base import allow_all_context
+from opendesk.registry import create_registry
+from opendesk.tools.base import allow_all_context
 
 registry = create_registry()
 ctx = allow_all_context()
@@ -305,8 +305,8 @@ for att in result.attachments:
 Restrict what the agent can do in a session:
 
 ```python
-from opencua.computer.sandbox import configure_sandbox, get_sandbox
-from opencua.tools.base import ToolContext
+from opendesk.computer.sandbox import configure_sandbox, get_sandbox
+from opendesk.tools.base import ToolContext
 
 # Only allow specific apps and a screen region
 configure_sandbox(

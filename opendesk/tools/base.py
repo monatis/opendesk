@@ -1,15 +1,15 @@
-"""Base classes for opencua tools.
+"""Base classes for opendesk tools.
 
 All tools derive from :class:`Tool` and produce :class:`ToolResult` objects.
 The system is deliberately framework-agnostic: no dependency on any LLM SDK,
 agent harness, or specific runtime.
 
 Integrations (MCP, Claude Code, OpenAI, LangChain) are in
-:mod:`opencua.integrations` and consume these base classes.
+:mod:`opendesk.integrations` and consume these base classes.
 
 Example::
 
-    from opencua.tools.base import Tool, ToolContext, ToolResult
+    from opendesk.tools.base import Tool, ToolContext, ToolResult
 
     class MyTool(Tool):
         name = "my_tool"
@@ -162,7 +162,7 @@ def interactive_context(session_id: str = "default") -> ToolContext:
         answer = await loop.run_in_executor(
             None,
             input,
-            f"\n[opencua] Allow {tool!r} — {description}? [y/N] ",
+            f"\n[opendesk] Allow {tool!r} — {description}? [y/N] ",
         )
         if answer.strip().lower() not in ("y", "yes"):
             raise PermissionDeniedError(
@@ -185,7 +185,7 @@ except ImportError as _err:
 
 
 class Tool(ABC):
-    """Abstract base class for all opencua tools.
+    """Abstract base class for all opendesk tools.
 
     Subclasses must set :attr:`name`, :attr:`description`, and define a nested
     ``Params`` class (a Pydantic model) plus implement :meth:`execute`.

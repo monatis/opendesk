@@ -11,7 +11,7 @@ All tools share the same interface: `await tool.execute(ctx, params) -> ToolResu
 The primary interaction tool. Clicks, types, and reads values using the platform's native accessibility API. No pixel coordinates needed.
 
 ```python
-from opencua.tools.ui import UITool
+from opendesk.tools.ui import UITool
 tool = UITool()
 ```
 
@@ -63,7 +63,7 @@ When the app uses custom rendering (Electron games, canvas apps), `get_tree` ret
 ## `screenshot` — Screen capture
 
 ```python
-from opencua.tools.screenshot import ScreenshotTool
+from opendesk.tools.screenshot import ScreenshotTool
 tool = ScreenshotTool()
 ```
 
@@ -109,7 +109,7 @@ The tool output always includes:
 ## `mouse` — Mouse control
 
 ```python
-from opencua.tools.mouse import MouseTool
+from opendesk.tools.mouse import MouseTool
 tool = MouseTool()
 ```
 
@@ -158,7 +158,7 @@ await tool.execute(ctx, params(action="drag", x=100, y=100, end_x=500, end_y=300
 ## `keyboard` — Keyboard input
 
 ```python
-from opencua.tools.keyboard import KeyboardTool
+from opendesk.tools.keyboard import KeyboardTool
 tool = KeyboardTool()
 ```
 
@@ -199,7 +199,7 @@ Key names follow pyautogui conventions: `enter`, `escape`, `tab`, `backspace`, `
 ## `app` — Application control
 
 ```python
-from opencua.tools.app import AppTool
+from opendesk.tools.app import AppTool
 tool = AppTool()
 ```
 
@@ -225,7 +225,7 @@ await tool.execute(ctx, params(action="close", name="TextEdit"))
 ## `clipboard` — Clipboard read/write
 
 ```python
-from opencua.tools.clipboard import ClipboardTool
+from opendesk.tools.clipboard import ClipboardTool
 tool = ClipboardTool()
 ```
 
@@ -242,7 +242,7 @@ result = await tool.execute(ctx, params(action="read"))
 print(result.output)
 
 # Write, then paste
-await tool.execute(ctx, params(action="write", text="Hello from opencua"))
+await tool.execute(ctx, params(action="write", text="Hello from opendesk"))
 # Then use keyboard tool to paste with Ctrl/Cmd+V
 ```
 
@@ -251,7 +251,7 @@ await tool.execute(ctx, params(action="write", text="Hello from opencua"))
 ## `ocr` — Text extraction
 
 ```python
-from opencua.tools.ocr import OCRTool
+from opendesk.tools.ocr import OCRTool
 tool = OCRTool()
 ```
 

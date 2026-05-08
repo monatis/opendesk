@@ -1,6 +1,6 @@
 """LangChain tool adapter.
 
-Wraps opencua tools as ``langchain_core.tools.BaseTool`` instances so they
+Wraps opendesk tools as ``langchain_core.tools.BaseTool`` instances so they
 can be used in LangChain agents, chains, and LCEL pipelines.
 
 Usage::
@@ -9,8 +9,8 @@ Usage::
     from langchain_openai import ChatOpenAI
     from langgraph.prebuilt import create_react_agent
 
-    from opencua.integrations.langchain_compat import as_langchain_tools
-    from opencua.registry import create_registry
+    from opendesk.integrations.langchain_compat import as_langchain_tools
+    from opendesk.registry import create_registry
 
     lc_tools = as_langchain_tools(create_registry())
 
@@ -27,8 +27,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Type
 
-from opencua.registry import ToolRegistry, create_registry
-from opencua.tools.base import ToolContext, allow_all_context
+from opendesk.registry import ToolRegistry, create_registry
+from opendesk.tools.base import ToolContext, allow_all_context
 
 
 def as_langchain_tools(
@@ -48,7 +48,7 @@ def as_langchain_tools(
     except ImportError as exc:
         raise ImportError(
             "langchain-core is required for LangChain integration:\n"
-            "  pip install 'opencua[langchain]'\n"
+            "  pip install 'opendesk[langchain]'\n"
             "  # or: pip install langchain-core"
         ) from exc
 
@@ -64,7 +64,7 @@ def as_langchain_tools(
 
 
 def _wrap_tool(tool: Any, ctx: ToolContext) -> Any:
-    """Wrap a single opencua :class:`~opencua.tools.base.Tool` as a LangChain tool."""
+    """Wrap a single opendesk :class:`~opendesk.tools.base.Tool` as a LangChain tool."""
     try:
         from langchain_core.tools import BaseTool
     except ImportError as exc:

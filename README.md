@@ -1,32 +1,32 @@
-# opencua
+# opendesk
 
 **Open Computer Use Agent** — gives any AI agent eyes and hands on your desktop.
 
-opencua runs as an MCP server. Install it, register it with your agent tool, and it adds screenshot, accessibility-based UI control, mouse, keyboard, clipboard, and OCR to every conversation — on macOS, Linux, and Windows.
+opendesk runs as an MCP server. Install it, register it with your agent tool, and it adds screenshot, accessibility-based UI control, mouse, keyboard, clipboard, and OCR to every conversation — on macOS, Linux, and Windows.
 
 ---
 
 ## Quickstart
 
 ```bash
-pip install 'opencua[core,mcp]'
+pip install 'opendesk[core,mcp]'
 ```
 
 **Claude Code** — one command:
 ```bash
-claude mcp add opencua -- opencua-mcp
+claude mcp add opendesk -- opendesk-mcp
 ```
 
 **Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "opencua": { "command": "opencua-mcp" }
+    "opendesk": { "command": "opendesk-mcp" }
   }
 }
 ```
 
-**Cursor / Continue** — same pattern, point `command` at `opencua-mcp`.
+**Cursor / Continue** — same pattern, point `command` at `opendesk-mcp`.
 
 That's it. Your agent can now say "take a screenshot", "click the Save button", or "type Hello World into TextEdit" and it will work.
 
@@ -55,16 +55,16 @@ Claude Code / Claude Desktop / Cursor / Continue
           |
           | MCP stdio
           v
-     opencua-mcp
+     opendesk-mcp
           |
           +-- screenshot, ui, mouse, keyboard, app, clipboard, ocr
 ```
 
-opencua starts as a child process, speaks the MCP protocol over stdin/stdout, and the LLM client handles all tool-calling automatically. You never write tool-calling code.
+opendesk starts as a child process, speaks the MCP protocol over stdin/stdout, and the LLM client handles all tool-calling automatically. You never write tool-calling code.
 
 ---
 
-## Why opencua?
+## Why opendesk?
 
 - **MCP-first** — works out of the box with any MCP client, zero glue code.
 - **Accessibility tree first** — the `ui` tool interacts with apps the same way a screen reader does, without pixel coordinates or Retina scaling headaches.
@@ -78,16 +78,16 @@ opencua starts as a child process, speaks the MCP protocol over stdin/stdout, an
 
 ```bash
 # Minimal (just the framework, no hardware deps)
-pip install opencua
+pip install opendesk
 
 # Core computer use: screen capture + mouse/keyboard
-pip install 'opencua[core]'
+pip install 'opendesk[core]'
 
 # With MCP server support
-pip install 'opencua[core,mcp]'
+pip install 'opendesk[core,mcp]'
 
 # Everything
-pip install 'opencua[all]'
+pip install 'opendesk[all]'
 ```
 
 ### System dependencies
@@ -104,7 +104,7 @@ pip install 'opencua[all]'
 
 ```python
 import asyncio
-from opencua import create_registry, allow_all_context
+from opendesk import create_registry, allow_all_context
 
 async def main():
     registry = create_registry()
@@ -136,7 +136,7 @@ asyncio.run(main())
 Run the MCP server over stdio:
 
 ```bash
-opencua-mcp
+opendesk-mcp
 ```
 
 Add to Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
@@ -144,8 +144,8 @@ Add to Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_conf
 ```json
 {
   "mcpServers": {
-    "opencua": {
-      "command": "opencua-mcp"
+    "opendesk": {
+      "command": "opendesk-mcp"
     }
   }
 }
@@ -154,8 +154,8 @@ Add to Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_conf
 Or create a server in Python:
 
 ```python
-from opencua.integrations.mcp import create_mcp_server
-from opencua.registry import create_registry
+from opendesk.integrations.mcp import create_mcp_server
+from opendesk.registry import create_registry
 from mcp.server.stdio import stdio_server
 
 server = create_mcp_server(create_registry())
@@ -169,8 +169,8 @@ async with stdio_server() as (r, w):
 
 ```python
 import anthropic
-from opencua.integrations.claude_code import ClaudeCodeAdapter
-from opencua.registry import create_registry
+from opendesk.integrations.claude_code import ClaudeCodeAdapter
+from opendesk.registry import create_registry
 
 client = anthropic.Anthropic()
 adapter = ClaudeCodeAdapter(create_registry())
@@ -211,8 +211,8 @@ Works with OpenAI, Groq, Together AI, Ollama, LiteLLM, and any OpenAI-compatible
 
 ```python
 from openai import OpenAI
-from opencua.integrations.openai_compat import OpenAIAdapter
-from opencua.registry import create_registry
+from opendesk.integrations.openai_compat import OpenAIAdapter
+from opendesk.registry import create_registry
 
 client = OpenAI()
 adapter = OpenAIAdapter(create_registry())
@@ -229,8 +229,8 @@ final_text = await adapter.run_loop(client, model="gpt-4o", messages=messages)
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
-from opencua.integrations.langchain_compat import as_langchain_tools
-from opencua.registry import create_registry
+from opendesk.integrations.langchain_compat import as_langchain_tools
+from opendesk.registry import create_registry
 
 tools = as_langchain_tools(create_registry())
 agent = create_react_agent(ChatOpenAI(model="gpt-4o"), tools)
@@ -264,7 +264,7 @@ When the agent needs to interact with a UI element:
 ## Architecture
 
 ```
-opencua/
+opendesk/
 ├── tools/          # Tool definitions (base.py + one file per tool)
 ├── computer/       # Low-level helpers: capture, marks (SoM), OCR, sandbox
 ├── integrations/   # MCP, Claude Code, OpenAI, LangChain adapters
@@ -280,7 +280,7 @@ See [docs/architecture.md](docs/architecture.md) for a deep dive.
 Every tool action goes through a `ToolContext.check_permission()` call before execution.
 
 ```python
-from opencua.tools.base import allow_all_context, interactive_context
+from opendesk.tools.base import allow_all_context, interactive_context
 
 # Headless / autonomous — approve everything automatically
 ctx = allow_all_context()
@@ -293,7 +293,7 @@ async def my_handler(tool: str, argument: str, description: str) -> None:
     if "production" in description.lower():
         raise PermissionDeniedError("Refusing to act on production.")
 
-from opencua.tools.base import ToolContext
+from opendesk.tools.base import ToolContext
 ctx = ToolContext(session_id="my-session", permission_handler=my_handler)
 ```
 

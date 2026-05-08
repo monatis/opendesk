@@ -6,7 +6,7 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from opencua.tools.base import (
+from opendesk.tools.base import (
     Attachment,
     PermissionDeniedError,
     Tool,
@@ -14,7 +14,7 @@ from opencua.tools.base import (
     ToolResult,
     allow_all_context,
 )
-from opencua.registry import ToolRegistry, create_registry, create_minimal_registry
+from opendesk.registry import ToolRegistry, create_registry, create_minimal_registry
 
 
 # ---------------------------------------------------------------------------

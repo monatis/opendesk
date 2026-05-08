@@ -2,7 +2,7 @@
 
 ## Overview
 
-opencua is structured in three layers:
+opendesk is structured in three layers:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -79,13 +79,13 @@ Each tool file contains one class inheriting from `Tool`:
 
 | File | Class | Key dependencies |
 |------|-------|-----------------|
-| `screenshot.py` | `ScreenshotTool` | `opencua.computer.capture`, `marks` |
+| `screenshot.py` | `ScreenshotTool` | `opendesk.computer.capture`, `marks` |
 | `mouse.py` | `MouseTool` | `pyautogui` |
 | `keyboard.py` | `KeyboardTool` | `pyautogui`, `pbcopy`/`xclip`/`pyperclip` |
 | `app.py` | `AppTool` | `osascript`/`xdg-open`/`start` |
 | `ui.py` | `UITool` | `osascript`/`pyatspi`/`pywinauto` |
 | `clipboard.py` | `ClipboardTool` | `pbcopy`/`xclip`/`pyperclip` |
-| `ocr.py` | `OCRTool` | `opencua.computer.ocr` |
+| `ocr.py` | `OCRTool` | `opendesk.computer.ocr` |
 
 All blocking I/O runs in `asyncio.get_event_loop().run_in_executor(None, ...)` so tools are safe to call from async code without blocking the event loop.
 
@@ -153,8 +153,8 @@ LLM response
 ## Adding a custom tool
 
 ```python
-from opencua.tools.base import Tool, ToolContext, ToolResult
-from opencua.registry import create_registry
+from opendesk.tools.base import Tool, ToolContext, ToolResult
+from opendesk.registry import create_registry
 from pydantic import Field
 
 class PingTool(Tool):

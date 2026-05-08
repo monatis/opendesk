@@ -27,7 +27,7 @@ from typing import Any, List, Literal, Optional
 
 from pydantic import Field
 
-from opencua.tools.base import Tool, ToolContext, ToolResult
+from opendesk.tools.base import Tool, ToolContext, ToolResult
 
 _PLATFORM = platform.system()
 
@@ -101,7 +101,7 @@ class UITool(Tool):
 
     async def execute(self, ctx: ToolContext, params: "UITool.Params") -> ToolResult:
         import asyncio
-        from opencua.computer.sandbox import ActionType, get_sandbox
+        from opendesk.computer.sandbox import ActionType, get_sandbox
 
         await ctx.check_permission(
             tool="ui", argument=f"{params.action} in {params.app}",
@@ -604,7 +604,7 @@ _WIN_ROLE_MAP = {
 
 
 def _win_connect(app_name: str) -> Any:
-    from opencua.computer.deps import ensure_import
+    from opendesk.computer.deps import ensure_import
     _pywinauto = ensure_import("pywinauto")
     Application = _pywinauto.Application  # type: ignore[attr-defined]
     errors: list[str] = []
@@ -677,7 +677,7 @@ def _windows_dispatch(params: "UITool.Params") -> str:
     if params.action == "type":
         if not params.text:
             raise ValueError("'text' is required for action='type'.")
-        from opencua.computer.deps import ensure_import
+        from opendesk.computer.deps import ensure_import
         pyperclip = ensure_import("pyperclip")
         pyperclip.copy(params.text)
         app = _win_connect(params.app)
