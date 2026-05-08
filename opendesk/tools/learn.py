@@ -51,26 +51,28 @@ class LearnTool(Tool):
         if params.action == "list":
             return await self._list()
 
-        return ToolResult(output=f"Unknown action: {params.action}")
+        return ToolResult(title="learn", output=f"Unknown action: {params.action}")
 
     # ------------------------------------------------------------------
 
     async def _start(self, task_name: Optional[str]) -> ToolResult:
         global _active_recorder
         if not task_name:
-            return ToolResult(output="Error: task_name is required for start")
+            return ToolResult(title="learn", output="Error: task_name is required for start")
         if _active_recorder is not None:
             return ToolResult(
-                output=f"A recording is already active. Call learn(stop) first."
+                title="learn",
+                output="A recording is already active. Call learn(stop) first."
             )
         try:
             from opendesk.learn.recorder import LearnRecorder
         except ImportError:
-            return ToolResult(output="Error: pynput is required. Run: pip install pynput")
+            return ToolResult(title="learn", output="Error: pynput is required. Run: pip install pynput")
 
         _active_recorder = LearnRecorder(task_name)
         _active_recorder.start()
         return ToolResult(
+            title="learn",
             output=f"Recording started for task '{task_name}'. "
                    f"Perform the task now, then call learn(action=stop) when done."
         )
@@ -78,7 +80,7 @@ class LearnTool(Tool):
     async def _stop(self) -> ToolResult:
         global _active_recorder
         if _active_recorder is None:
-            return ToolResult(output="No active recording. Start one with learn(action=start, task_name=...)")
+            return ToolResult(title="learn", output="No active recording. Start one with learn(action=start, task_name=...)")
 
         from opendesk.learn.trajectory import build_display_summary, build_summarization_content
 
@@ -121,27 +123,27 @@ class LearnTool(Tool):
             "Write steps an agent can replay in any environment."
         )
 
-        return ToolResult(output=output, attachments=attachments)
+        return ToolResult(title="learn", output=output, attachments=attachments)
 
     async def _save(self, task_name: Optional[str], procedure: Optional[str]) -> ToolResult:
         if not task_name:
-            return ToolResult(output="Error: task_name is required for save")
+            return ToolResult(title="learn", output="Error: task_name is required for save")
         if not procedure:
-            return ToolResult(output="Error: procedure JSON string is required for save")
+            return ToolResult(title="learn", output="Error: procedure JSON string is required for save")
 
         try:
             data = json.loads(procedure)
         except json.JSONDecodeError as e:
-            return ToolResult(output=f"Error: invalid JSON — {e}")
+            return ToolResult(title="learn", output=f"Error: invalid JSON — {e}")
 
         from opendesk.learn.storage import save_procedure
 
         path = save_procedure(Path.cwd(), task_name, data)
-        return ToolResult(output=f"Procedure '{task_name}' saved to {path}")
+        return ToolResult(title="learn", output=f"Procedure '{task_name}' saved to {path}")
 
     async def _replay(self, task_name: Optional[str]) -> ToolResult:
         if not task_name:
-            return ToolResult(output="Error: task_name is required for replay")
+            return ToolResult(title="learn", output="Error: task_name is required for replay")
 
         from opendesk.learn.storage import load_procedure
 
@@ -149,6 +151,7 @@ class LearnTool(Tool):
         if proc is None:
             procs_dir = Path.cwd() / ".opendesk" / "learned"
             return ToolResult(
+                title="learn",
                 output=f"No procedure found for '{task_name}'. "
                        f"Check {procs_dir} or run learn(list) to see available tasks."
             )
@@ -167,7 +170,7 @@ class LearnTool(Tool):
             "Use the ui tool first, screenshot(marks=True) if needed, mouse as last resort. "
             "Adapt to the current environment — do not rely on specific file paths or app versions."
         )
-        return ToolResult(output=prompt)
+        return ToolResult(title="learn", output=prompt)
 
     async def _list(self) -> ToolResult:
         from opendesk.learn.storage import list_procedures
@@ -175,6 +178,7 @@ class LearnTool(Tool):
         procs = list_procedures(Path.cwd())
         if not procs:
             return ToolResult(
+                title="learn",
                 output="No learned procedures yet. Record one with learn(action=start, task_name=...)"
             )
 
@@ -182,7 +186,7 @@ class LearnTool(Tool):
         for p in procs:
             desc = f" — {p['description']}" if p.get("description") else ""
             lines.append(f"  {p['name']}{desc}")
-        return ToolResult(output="\n".join(lines))
+        return ToolResult(title="learn", output="\n".join(lines))
 
 
 def _b64_to_bytes(b64: str) -> bytes:

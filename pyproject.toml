@@ -78,11 +78,12 @@ all = [
 
 [project.scripts]
 opendesk-mcp = "opendesk.integrations.mcp:run_stdio_server"
+opendesk = "opendesk.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/opendesk"
-Documentation = "https://github.com/yourusername/opendesk/tree/main/docs"
-Issues = "https://github.com/yourusername/opendesk/issues"
+Homepage = "https://github.com/abhijithneilabraham/opendesk"
+Documentation = "https://github.com/abhijithneilabraham/opendesk/tree/main/docs"
+Issues = "https://github.com/abhijithneilabraham/opendesk/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
