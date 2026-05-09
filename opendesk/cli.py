@@ -30,7 +30,8 @@ def _find_mcp_binary() -> str:
 
 def cmd_install(scope: str = "user") -> None:
     """Register opendesk-mcp with Claude Code."""
-    if not shutil.which("claude"):
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
         print(
             "ERROR: 'claude' command not found.\n"
             "Install Claude Code first: https://claude.ai/code",
@@ -42,12 +43,12 @@ def cmd_install(scope: str = "user") -> None:
 
     # Remove existing registration if any (ignore errors)
     subprocess.run(
-        ["claude", "mcp", "remove", "opendesk"],
+        [claude_bin, "mcp", "remove", "opendesk"],
         capture_output=True,
     )
 
     result = subprocess.run(
-        ["claude", "mcp", "add", "opendesk", f"--scope={scope}", "--", mcp_path],
+        [claude_bin, "mcp", "add", "opendesk", f"--scope={scope}", "--", mcp_path],
         capture_output=True,
         text=True,
     )
