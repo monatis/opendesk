@@ -74,8 +74,7 @@ def create_registry() -> ToolRegistry:
     from opendesk.tools.ui import UITool
     from opendesk.tools.clipboard import ClipboardTool
     from opendesk.tools.ocr import OCRTool
-    from opendesk.tools.learn import LearnTool
-    from opendesk.tools.schedule import ScheduleTool
+    from opendesk.tools.automation import LearnTool, ScheduleTool
 
     registry = ToolRegistry()
     for tool_cls in (
