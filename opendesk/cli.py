@@ -61,6 +61,26 @@ def cmd_install(scope: str = "user") -> None:
     print("Start a Claude Code conversation and say 'take a screenshot' to verify.")
 
 
+def cmd_uninstall() -> None:
+    """Remove opendesk MCP registration from Claude Code."""
+    if not shutil.which("claude"):
+        print("ERROR: 'claude' command not found.", file=sys.stderr)
+        sys.exit(1)
+
+    result = subprocess.run(
+        ["claude", "mcp", "remove", "opendesk"],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        print(f"ERROR: {result.stderr.strip()}", file=sys.stderr)
+        sys.exit(1)
+
+    print("opendesk MCP server removed from Claude Code.")
+    print("To fully uninstall the package: pip uninstall opendesk")
+
+
 def cmd_scheduler(args) -> None:
     """Run the scheduler daemon."""
     from pathlib import Path
@@ -99,6 +119,8 @@ def main() -> None:
         help="user = all projects (default), project = current project only",
     )
 
+    sub.add_parser("uninstall", help="Remove opendesk from Claude Code")
+
     sched_p = sub.add_parser("scheduler", help="Manage the background task scheduler")
     sched_p.add_argument(
         "scheduler_cmd",
@@ -115,6 +137,8 @@ def main() -> None:
 
     if args.command == "install":
         cmd_install(scope=args.scope)
+    elif args.command == "uninstall":
+        cmd_uninstall()
     elif args.command == "scheduler":
         cmd_scheduler(args)
     else:
