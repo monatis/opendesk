@@ -103,6 +103,7 @@ The agent re-executes using the current screen state — no hardcoded coordinate
 
 **Schedule**
 ```
+"Every morning at 9am, open my email in Chrome, take a screenshot, and summarize what's there"
 "Schedule expense-form every friday at 5pm"
 ```
 ```bash
@@ -202,6 +203,19 @@ asyncio.run(main())
 ```
 
 Works with Anthropic SDK, OpenAI, and LangChain — see [docs/integrations.md](docs/integrations.md)
+
+### On-device models (Ollama, LM Studio, vLLM, llama.cpp)
+
+Any OpenAI-compatible local server works out of the box:
+
+```python
+from openai import OpenAI
+from opendesk.integrations.openai_compat import OpenAIAdapter
+
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+adapter = OpenAIAdapter()
+result = await adapter.run_loop(client, model="qwen2.5:72b", messages=messages)
+```
 
 ---
 
