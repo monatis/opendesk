@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use opendesk in your research or project, please cite it as below."
+title: "opendesk: Open Desktop Automation Framework"
+version: 0.1.1
+date-released: 2025-05-10
+url: "https://github.com/abhijithneilabraham/opendesk"
+repository-code: "https://github.com/abhijithneilabraham/opendesk"
+license: MIT
+authors:
+  - family-names: Abraham
+    given-names: Abhijith Neil
+    email: abhijithneilabrahampk@gmail.com
+    orcid: ""
+keywords:
+  - computer use
+  - desktop automation
+  - MCP
+  - model context protocol
+  - AI agent
+  - screenshot
+  - set-of-marks
+abstract: >
+  opendesk is an open-source desktop automation framework that gives AI models
+  (Claude, GPT-4, and others) eyes and hands on the desktop via the Model Context
+  Protocol (MCP). It provides screenshot capture with Set-of-Marks overlays,
+  mouse and keyboard control, UI element interaction via accessibility APIs,
+  clipboard access, OCR, and learn/replay task recording.

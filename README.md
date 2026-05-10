@@ -176,6 +176,25 @@ pip install 'opendesk[all]'                  # everything
 
 ---
 
+## Citation
+
+If you use opendesk in your research or project, please cite it:
+
+```bibtex
+@software{opendesk,
+  author  = {Abraham, Abhijith Neil},
+  title   = {opendesk: Open Desktop Automation Framework},
+  year    = {2025},
+  url     = {https://github.com/abhijithneilabraham/opendesk},
+  version = {0.1.1},
+  license = {MIT}
+}
+```
+
+A `CITATION.cff` file is also included for tools like GitHub's "Cite this repository" button.
+
+---
+
 ## License
 
 MIT
