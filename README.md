@@ -4,6 +4,8 @@
 
 opendesk connects to Claude Code, Claude Desktop, Cursor, and Continue via MCP — adding screenshot, click, type, scroll, clipboard, OCR, and task recording to every conversation. Works on macOS, Linux, and Windows.
 
+![opendesk demo](docs/opendesk_demo.gif)
+
 ---
 
 ## Install in 2 steps
