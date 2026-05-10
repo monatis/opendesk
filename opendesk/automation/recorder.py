@@ -9,7 +9,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Optional
 
-from opendesk.learn.trajectory import Trajectory, TrajectoryEvent
+from opendesk.automation.trajectory import Trajectory, TrajectoryEvent
 
 _KEY_FLUSH_DELAY = 0.55
 _SS_MAX_W = 800

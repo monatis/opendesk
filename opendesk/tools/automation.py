@@ -56,7 +56,7 @@ class LearnTool(Tool):
         if _active_recorder is not None:
             return ToolResult(title="learn", output="A recording is already active. Call learn(stop) first.")
         try:
-            from opendesk.learn.recorder import LearnRecorder
+            from opendesk.automation.recorder import LearnRecorder
         except ImportError:
             return ToolResult(title="learn", output="Error: pynput is required. Run: pip install pynput")
 
@@ -72,7 +72,7 @@ class LearnTool(Tool):
         if _active_recorder is None:
             return ToolResult(title="learn", output="No active recording. Start one with learn(action=start, task_name=...)")
 
-        from opendesk.learn.trajectory import build_display_summary
+        from opendesk.automation.trajectory import build_display_summary
         from opendesk.tools.base import Attachment
 
         trajectory = _active_recorder.stop()
@@ -120,7 +120,7 @@ class LearnTool(Tool):
         except json.JSONDecodeError as e:
             return ToolResult(title="learn", output=f"Error: invalid JSON — {e}")
 
-        from opendesk.learn.storage import save_procedure
+        from opendesk.automation.storage import save_procedure
         path = save_procedure(Path.cwd(), task_name, data)
         return ToolResult(title="learn", output=f"Procedure '{task_name}' saved to {path}")
 
@@ -128,7 +128,7 @@ class LearnTool(Tool):
         if not task_name:
             return ToolResult(title="learn", output="Error: task_name is required for replay")
 
-        from opendesk.learn.storage import load_procedure
+        from opendesk.automation.storage import load_procedure
         proc = load_procedure(Path.cwd(), task_name)
         if proc is None:
             return ToolResult(
@@ -149,7 +149,7 @@ class LearnTool(Tool):
         return ToolResult(title="learn", output=prompt)
 
     async def _list(self) -> ToolResult:
-        from opendesk.learn.storage import list_procedures
+        from opendesk.automation.storage import list_procedures
         procs = list_procedures(Path.cwd())
         if not procs:
             return ToolResult(title="learn", output="No learned procedures yet. Record one with learn(action=start, task_name=...)")
@@ -203,7 +203,7 @@ class ScheduleTool(Tool):
         if not timing:
             return ToolResult(title="schedule", output="Error: timing is required")
 
-        from opendesk.schedule.store import ScheduleStore
+        from opendesk.automation.schedule_store import ScheduleStore
         try:
             store = ScheduleStore(Path.cwd())
             entry = store.add(name=name, task=task, timing=timing)
@@ -220,7 +220,7 @@ class ScheduleTool(Tool):
         if not name:
             return ToolResult(title="schedule", output="Error: name is required")
 
-        from opendesk.schedule.store import ScheduleStore
+        from opendesk.automation.schedule_store import ScheduleStore
         store = ScheduleStore(Path.cwd())
         if store.remove(name):
             return ToolResult(title="schedule", output=f"Removed schedule '{name}'")
@@ -228,7 +228,7 @@ class ScheduleTool(Tool):
 
     def _list(self) -> ToolResult:
         import time
-        from opendesk.schedule.store import ScheduleStore
+        from opendesk.automation.schedule_store import ScheduleStore
         store = ScheduleStore(Path.cwd())
         entries = store.all()
 
@@ -251,8 +251,8 @@ class ScheduleTool(Tool):
         if not name:
             return ToolResult(title="schedule", output="Error: name is required")
 
-        from opendesk.schedule.store import ScheduleStore
-        from opendesk.schedule.runner import run_task
+        from opendesk.automation.schedule_store import ScheduleStore
+        from opendesk.automation.runner import run_task
 
         store = ScheduleStore(Path.cwd())
         entry = store.get(name)

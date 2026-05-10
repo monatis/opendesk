@@ -26,8 +26,8 @@ def start_daemon(project_dir: Path) -> None:
         )
         sys.exit(1)
 
-    from opendesk.schedule.store import ScheduleStore
-    from opendesk.schedule.runner import run_task
+    from opendesk.automation.schedule_store import ScheduleStore
+    from opendesk.automation.runner import run_task
 
     store = ScheduleStore(project_dir)
     scheduler = BlockingScheduler()

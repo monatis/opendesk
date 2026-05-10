@@ -68,10 +68,10 @@ def cmd_scheduler(args) -> None:
     project_dir = Path(args.dir).resolve() if args.dir else Path.cwd()
 
     if args.scheduler_cmd == "start":
-        from opendesk.schedule.daemon import start_daemon
+        from opendesk.automation.daemon import start_daemon
         start_daemon(project_dir)
     elif args.scheduler_cmd == "list":
-        from opendesk.schedule.store import ScheduleStore
+        from opendesk.automation.schedule_store import ScheduleStore
         store = ScheduleStore(project_dir)
         entries = store.all()
         if not entries:
