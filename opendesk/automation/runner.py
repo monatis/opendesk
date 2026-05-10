@@ -30,7 +30,7 @@ async def run_task(task: str, project_dir: Path) -> str:
 
 async def _run_replay(name: str, project_dir: Path) -> str:
     """Load a learned procedure and execute it via Claude."""
-    from opendesk.learn.storage import load_procedure
+    from opendesk.automation.storage import load_procedure
 
     proc = load_procedure(project_dir, name)
     if proc is None:
