@@ -26,6 +26,30 @@ That's it. Start a Claude Code conversation and say:
 
 ---
 
+## Architecture
+
+opendesk is built in three layers:
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Integrations   MCP · Claude Code · OpenAI · LangChain│
+├──────────────────────────────────────────────────────┤
+│  Tools          screenshot · mouse · keyboard · ui   │
+│                 clipboard · ocr · learn · schedule   │
+├──────────────────────────────────────────────────────┤
+│  Computer       capture · Set-of-Marks · OCR · sandbox│
+└──────────────────────────────────────────────────────┘
+```
+
+- **Computer layer** — low-level screen capture, SoM element detection, OCR, and per-session audit log. No tool or integration dependencies.
+- **Tools layer** — one class per capability. Each tool exposes a Pydantic schema used by every integration automatically.
+- **Integrations layer** — thin adapters that convert tool schemas to MCP, Anthropic, OpenAI, or LangChain formats. Adding a new tool makes it available in all four.
+- **Automation module** — `learn` and `schedule` tools backed by `pynput` recording, JSON procedure storage, and an APScheduler daemon.
+
+Full details → [docs/architecture.md](docs/architecture.md)
+
+---
+
 ## What your agent can do
 
 | Tool | What it does |
