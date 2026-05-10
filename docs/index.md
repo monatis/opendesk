@@ -8,7 +8,7 @@
 |-----|-------------|
 | [Quickstart](quickstart.md) | Install, first screenshot, agentic loop |
 | [MCP integration](mcp.md) | Add opendesk to Claude Code, Claude Desktop, Cursor, Continue |
-| [Learn & replay](learn.md) | Record tasks once, replay them anytime |
+| [Automation](automation.md) | Record, replay, and schedule desktop tasks |
 | [Tools reference](tools.md) | Full parameter docs for every tool |
 | [Integrations](integrations.md) | Anthropic SDK, OpenAI, LangChain |
 | [Architecture](architecture.md) | How the layers fit together, how to add custom tools |

@@ -62,6 +62,27 @@ def cmd_install(scope: str = "user") -> None:
     print("Start a Claude Code conversation and say 'take a screenshot' to verify.")
 
 
+def cmd_scheduler(args) -> None:
+    """Run the scheduler daemon."""
+    from pathlib import Path
+    project_dir = Path(args.dir).resolve() if args.dir else Path.cwd()
+
+    if args.scheduler_cmd == "start":
+        from opendesk.schedule.daemon import start_daemon
+        start_daemon(project_dir)
+    elif args.scheduler_cmd == "list":
+        from opendesk.schedule.store import ScheduleStore
+        store = ScheduleStore(project_dir)
+        entries = store.all()
+        if not entries:
+            print("No schedules.")
+        for e in entries:
+            status = "on" if e.enabled else "off"
+            print(f"  [{status}] {e.name}  ({e.timing})  →  {e.task}")
+    else:
+        print("Usage: opendesk scheduler start|list")
+
+
 def main() -> None:
     import argparse
 
@@ -79,10 +100,24 @@ def main() -> None:
         help="user = all projects (default), project = current project only",
     )
 
+    sched_p = sub.add_parser("scheduler", help="Manage the background task scheduler")
+    sched_p.add_argument(
+        "scheduler_cmd",
+        choices=["start", "list"],
+        help="start: run the scheduler daemon  |  list: show scheduled tasks",
+    )
+    sched_p.add_argument(
+        "--dir",
+        default=None,
+        help="Project directory (default: current directory)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "install":
         cmd_install(scope=args.scope)
+    elif args.command == "scheduler":
+        cmd_scheduler(args)
     else:
         parser.print_help()
 

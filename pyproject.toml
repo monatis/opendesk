@@ -71,9 +71,14 @@ learn = [
     "pynput",
 ]
 
+# Scheduled tasks
+schedule = [
+    "apscheduler>=3.10",
+]
+
 # Everything
 all = [
-    "opendesk[core,mcp,openai,langchain,ocr,learn]",
+    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule]",
 ]
 
 [project.scripts]

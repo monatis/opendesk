@@ -36,31 +36,36 @@ That's it. Start a Claude Code conversation and say:
 | `clipboard` | Read and write the system clipboard |
 | `ocr` | Extract text from any part of the screen |
 | `learn` | Record a task once, replay it anytime |
+| `schedule` | Run any task or learned procedure on a timer |
 
 ---
 
-## Record and replay tasks
+## Automation — record, replay, and schedule
 
-The `learn` tool lets your agent memorize any workflow and repeat it on demand.
+**Record a task once, replay it forever, or run it on a schedule.**
 
-**1. Start recording**
+**1. Record**
 > "Start recording task expense-form"
 
-The agent begins capturing every mouse click, keystroke, and screenshot.
+Perform the workflow yourself. The agent captures every click, keystroke, and screenshot.
 
-**2. Do the task yourself**
+**2. Replay**
+> "Stop recording" → "Replay expense-form"
 
-Perform the workflow normally — fill the form, navigate the UI, click through steps.
+The agent re-executes the task using the current screen state — no hardcoded coordinates or paths.
 
-**3. Stop and save**
-> "Stop recording"
+**3. Schedule**
+> "Schedule expense-form to run every friday at 5pm"
+> "Schedule a task called hourly-check to take a screenshot every hour"
 
-The agent summarizes the recording into a reusable procedure and saves it to `.opendesk/learned/` in your project directory.
+Then start the background runner:
+```bash
+opendesk scheduler start
+```
 
-**4. Replay anytime**
-> "Replay expense-form"
+Timing formats: `every 30m`, `every 2h`, `every day at 09:00`, `every friday at 17:00`, or raw cron.
 
-The agent loads the saved procedure and re-executes it using the available tools — adapting to the current screen state automatically.
+See [docs/automation.md](docs/automation.md) for the full guide.
 
 ---
 
@@ -147,6 +152,7 @@ pip install opendesk                         # framework only
 pip install 'opendesk[core]'                 # + screen capture, mouse, keyboard
 pip install 'opendesk[core,mcp]'             # + MCP server (recommended)
 pip install 'opendesk[core,mcp,learn]'       # + task recording and replay
+pip install 'opendesk[core,mcp,learn,schedule]'  # + scheduled tasks
 pip install 'opendesk[all]'                  # everything
 ```
 
@@ -164,6 +170,7 @@ pip install 'opendesk[all]'                  # everything
 | OCR | Vision / tesseract | tesseract | WinRT / tesseract |
 | App open/close | open -a | xdg-open | start |
 | Task recording | ✓ | ✓ | ✓ |
+| Scheduled tasks | ✓ | ✓ | ✓ |
 
 ---
 
