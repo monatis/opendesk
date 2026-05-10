@@ -81,11 +81,12 @@ Each tool file contains one class inheriting from `Tool`:
 |------|-------|-----------------|
 | `screenshot.py` | `ScreenshotTool` | `opendesk.computer.capture`, `marks` |
 | `mouse.py` | `MouseTool` | `pyautogui` |
-| `keyboard.py` | `KeyboardTool` | `pyautogui`, `pbcopy`/`xclip`/`pyperclip` |
+| `keyboard.py` | `KeyboardTool` | `pyautogui` |
 | `app.py` | `AppTool` | `osascript`/`xdg-open`/`start` |
 | `ui.py` | `UITool` | `osascript`/`pyatspi`/`pywinauto` |
 | `clipboard.py` | `ClipboardTool` | `pbcopy`/`xclip`/`pyperclip` |
 | `ocr.py` | `OCRTool` | `opendesk.computer.ocr` |
+| `automation.py` | `LearnTool`, `ScheduleTool` | `opendesk.automation.*`, `pynput`, `apscheduler` |
 
 All blocking I/O runs in `asyncio.get_event_loop().run_in_executor(None, ...)` so tools are safe to call from async code without blocking the event loop.
 
@@ -98,6 +99,21 @@ The `ui` tool uses each platform's accessibility API to find elements by their v
 - Provides descriptive errors: `"button 'Save' not found in TextEdit"`.
 
 Mouse coordinates are only needed for elements with no accessible label (canvas games, video players, drawing apps).
+
+---
+
+## automation/
+
+Supporting module for the `learn` and `schedule` tools. Not a layer — it sits alongside `computer/` as a shared utility package.
+
+| File | Purpose |
+|------|---------|
+| `trajectory.py` | `TrajectoryEvent`, `Trajectory` dataclasses; summary builders for LLM replay context |
+| `recorder.py` | `LearnRecorder` — global input capture via `pynput` (mouse moves, clicks, keystrokes, screenshots) |
+| `storage.py` | `save_procedure()`, `load_procedure()`, `list_procedures()` — persists to `.opendesk/learned/` |
+| `schedule_store.py` | `ScheduleStore`, `ScheduleEntry`, `parse_timing()` — human-readable timing strings (`"every day at 9am"`) |
+| `runner.py` | `run_task()` — executes a replay or natural-language task via Claude API |
+| `daemon.py` | `start_daemon()` — APScheduler `BlockingScheduler` that polls `ScheduleStore` and calls `run_task()` |
 
 ---
 
