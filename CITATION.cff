@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use opendesk in your research or project, please cite it as below."
 title: "opendesk: Open Desktop Automation Framework"
-version: 0.1.1
+version: 0.1.2
 date-released: 2025-05-10
 url: "https://github.com/abhijithneilabraham/opendesk"
 repository-code: "https://github.com/abhijithneilabraham/opendesk"

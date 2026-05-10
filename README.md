@@ -40,6 +40,8 @@ That's it. Start a Claude Code conversation and say:
 | `learn` | Record a task once, replay it anytime |
 | `schedule` | Run any task or learned procedure on a timer |
 
+Full tool reference → [docs/tools.md](docs/tools.md)
+
 ---
 
 ## Automation — record, replay, and schedule
@@ -76,6 +78,8 @@ See [docs/automation.md](docs/automation.md) for the full guide.
 ### macOS
 - **System Settings → Privacy & Security → Screen Recording** — enable for your terminal app
 - **System Settings → Privacy & Security → Accessibility** — enable for mouse and keyboard control
+
+See [docs/permissions.md](docs/permissions.md) for detailed setup on all platforms.
 
 ### Linux
 ```bash
@@ -143,7 +147,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Works with Anthropic SDK, OpenAI, and LangChain — see [docs/integrations.md](docs/integrations.md).
+Works with Anthropic SDK, OpenAI, and LangChain — see [docs/integrations.md](docs/integrations.md). For architecture details, see [docs/architecture.md](docs/architecture.md).
 
 ---
 
@@ -186,7 +190,7 @@ If you use opendesk in your research or project, please cite it:
   title   = {opendesk: Open Desktop Automation Framework},
   year    = {2025},
   url     = {https://github.com/abhijithneilabraham/opendesk},
-  version = {0.1.1},
+  version = {0.1.2},
   license = {MIT}
 }
 ```
