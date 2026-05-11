@@ -64,12 +64,13 @@ def cmd_install(scope: str = "user") -> None:
 
 def cmd_uninstall() -> None:
     """Remove opendesk MCP registration from Claude Code."""
-    if not shutil.which("claude"):
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
         print("ERROR: 'claude' command not found.", file=sys.stderr)
         sys.exit(1)
 
     result = subprocess.run(
-        ["claude", "mcp", "remove", "opendesk"],
+        [claude_bin, "mcp", "remove", "opendesk"],
         capture_output=True,
         text=True,
     )
