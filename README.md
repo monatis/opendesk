@@ -4,7 +4,7 @@
 
 **Give any AI agent eyes and hands on your desktop.**
 
-opendesk connects to Claude Code, Claude Desktop, Cursor, and Continue via MCP —
+Opendesk is a computer use tool to navigate your computer just like a human would.  Opendesk can be integrated with  Claude Code, Claude Desktop, Cursor, and Continue via MCP —
 adding screenshot, click, type, scroll, clipboard, OCR, and task recording to every conversation.
 
 **macOS · Linux · Windows**
