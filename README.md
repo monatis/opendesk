@@ -24,7 +24,7 @@ Opendesk is a computer use framework that lets AI agents navigate your computer 
 | Language | Location | Package | Install |
 |----------|----------|---------|---------|
 | Python | [`python/`](python/) | `opendesk` (PyPI) | `pip install 'opendesk[core,mcp]'` |
-| JavaScript / TypeScript | [`js/`](js/) | `@opendesk/sdk` (npm) | `npm install @opendesk/sdk` |
+| JavaScript / TypeScript | [`js/`](js/) | `@vitalops/opendesk-sdk` (npm) | `npm install @vitalops/opendesk-sdk` |
 
 More SDKs can be added to this repo following the same pattern.
 
@@ -50,19 +50,17 @@ Open Spotify and play lo-fi beats
 ### JavaScript / TypeScript
 
 ```bash
-pip install 'opendesk[core,mcp]'   # Python backend (required)
-npm install @opendesk/sdk
+cd js
+npm install @vitalops/opendesk-sdk
 npx opendesk-js install
 ```
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 
 const client = new OpenDeskClient();
-await client.connect();
 await client.screenshot({ marks: true });
 await client.ui({ action: "click", app: "Safari", title: "Go" });
-await client.disconnect();
 ```
 
 ---

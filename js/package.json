@@ -1,5 +1,5 @@
 {
-  "name": "@opendesk/sdk",
+  "name": "@vitalops/opendesk-sdk",
   "version": "0.1.0",
   "description": "JavaScript/TypeScript SDK for opendesk — give any AI agent eyes and hands on your desktop",
   "type": "module",
@@ -12,7 +12,8 @@
     }
   },
   "bin": {
-    "opendesk-js": "./bin/opendesk.js"
+    "opendesk-js": "bin/opendesk.js",
+    "opendesk-js-mcp": "bin/opendesk-mcp.js"
   },
   "scripts": {
     "build": "tsc",
@@ -33,10 +34,17 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@nut-tree-fork/nut-js": "^4.2.0",
+    "@vitalops/opendesk-sdk": "^0.1.0",
+    "clipboardy": "^4.0.0",
+    "node-cron": "^3.0.0",
+    "screenshot-desktop": "^1.15.0",
+    "tesseract.js": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/node-cron": "^3.0.0",
     "typescript": "^5.4.0"
   },
   "engines": {
@@ -44,7 +52,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/vitalops/opendesk",
-    "directory": "packages/js"
+    "url": "git+https://github.com/vitalops/opendesk.git",
+    "directory": "js"
   }
 }
