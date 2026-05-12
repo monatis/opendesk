@@ -329,7 +329,7 @@ log = sandbox.export_audit_log()  # list of dicts
 
 ## JavaScript / TypeScript SDK
 
-The `@opendesk/sdk` npm package provides a fully native Node.js SDK — no Python required.
+The `@vitalops/opendesk-sdk` npm package provides a fully native Node.js SDK — no Python required.
 All desktop automation runs directly in Node.js using native platform APIs.
 
 Full JS documentation: [../js/README.md](../js/README.md)
@@ -337,7 +337,7 @@ Full JS documentation: [../js/README.md](../js/README.md)
 ### Install
 
 ```bash
-npm install @opendesk/sdk
+npm install @vitalops/opendesk-sdk
 ```
 
 ### Claude Code / Claude Desktop
@@ -354,7 +354,7 @@ Claude Desktop config:
   "mcpServers": {
     "opendesk": {
       "command": "node",
-      "args": ["/path/to/node_modules/@opendesk/sdk/bin/opendesk-mcp.js"]
+      "args": ["/path/to/node_modules/@vitalops/opendesk-sdk/bin/opendesk-mcp.js"]
     }
   }
 }
@@ -363,7 +363,7 @@ Claude Desktop config:
 ### Programmatic usage
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 
 const client = new OpenDeskClient();
 
@@ -375,7 +375,7 @@ await client.keyboard({ action: "type", text: "Hello" });
 ### Native MCP server
 
 ```typescript
-import { createMcpServer } from "@opendesk/sdk";
+import { createMcpServer } from "@vitalops/opendesk-sdk";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 const server = createMcpServer();
@@ -385,7 +385,7 @@ await server.connect(new StdioServerTransport());
 ### With Vercel AI SDK
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 
@@ -407,7 +407,7 @@ await generateText({
 ### With LangChain.js
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 
 const client = new OpenDeskClient();
 

@@ -4,8 +4,8 @@ Pick your language:
 
 | | Python | JavaScript / TypeScript |
 |---|---|---|
-| Package | `opendesk` (PyPI) | `@opendesk/sdk` (npm) |
-| Install | `pip install 'opendesk[core,mcp]'` | `npm install @opendesk/sdk` |
+| Package | `opendesk` (PyPI) | `@vitalops/opendesk-sdk` (npm) |
+| Install | `pip install 'opendesk[core,mcp]'` | `npm install @vitalops/opendesk-sdk` |
 | MCP register | `opendesk install` | `npx opendesk-js install` |
 | Requires | Python 3.10+ | Node.js 18+ |
 
@@ -119,7 +119,7 @@ No Python required. All desktop automation runs natively in Node.js.
 ### Install
 
 ```bash
-npm install @opendesk/sdk
+npm install @vitalops/opendesk-sdk
 ```
 
 Register with Claude Code:
@@ -132,7 +132,7 @@ npx opendesk-js uninstall   # to remove
 ### 1. Take a screenshot
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 
 const client = new OpenDeskClient();
 const result = await client.screenshot({ marks: true });
@@ -155,7 +155,7 @@ await client.keyboard({ action: "press", key: "enter" });
 ### 4. Full agentic loop (Vercel AI SDK)
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 
@@ -179,7 +179,7 @@ const { text } = await generateText({
 ### 5. Native MCP server (Node.js)
 
 ```typescript
-import { createMcpServer } from "@opendesk/sdk";
+import { createMcpServer } from "@vitalops/opendesk-sdk";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 const server = createMcpServer();

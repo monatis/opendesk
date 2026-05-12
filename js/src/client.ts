@@ -4,7 +4,7 @@
  *
  * Usage:
  *
- *   import { OpenDeskClient } from "@opendesk/sdk";
+ *   import { OpenDeskClient } from "@vitalops/opendesk-sdk";
  *
  *   const client = new OpenDeskClient();
  *   const result = await client.screenshot({ marks: true });

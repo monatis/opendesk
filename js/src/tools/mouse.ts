@@ -38,7 +38,7 @@ export class MouseTool extends Tool {
     }
 
     try {
-      const { mouse, straightTo, Point, Button, scrollDown, scrollUp } = await import("@nut-tree-fork/nut-js");
+      const { mouse, straightTo, Point, Button } = await import("@nut-tree-fork/nut-js");
 
       switch (action) {
         case "move":
@@ -57,8 +57,10 @@ export class MouseTool extends Tool {
           await mouse.click(Button.RIGHT);
           break;
         case "scroll":
-          if (direction === "down") await scrollDown(amount as number);
-          else await scrollUp(amount as number);
+          if (direction === "down") await mouse.scrollDown(amount as number);
+          else if (direction === "up") await mouse.scrollUp(amount as number);
+          else if (direction === "left") await mouse.scrollLeft(amount as number);
+          else await mouse.scrollRight(amount as number);
           break;
         case "drag":
           await mouse.drag(straightTo(new Point(endX!, endY!)));

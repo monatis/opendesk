@@ -1,4 +1,4 @@
-# @opendesk/sdk — JavaScript/TypeScript SDK
+# @vitalops/opendesk-sdk — JavaScript/TypeScript SDK
 
 Give any JavaScript or TypeScript AI agent eyes and hands on your desktop.
 
@@ -15,7 +15,7 @@ No Python required. All desktop automation runs natively in Node.js — screensh
 ## Install
 
 ```bash
-npm install @opendesk/sdk
+npm install @vitalops/opendesk-sdk
 ```
 
 ### Claude Code / Claude Desktop
@@ -41,7 +41,7 @@ Add to your config file (`~/Library/Application Support/Claude/claude_desktop_co
   "mcpServers": {
     "opendesk": {
       "command": "node",
-      "args": ["/path/to/node_modules/@opendesk/sdk/bin/opendesk-mcp.js"]
+      "args": ["/path/to/node_modules/@vitalops/opendesk-sdk/bin/opendesk-mcp.js"]
     }
   }
 }
@@ -54,7 +54,7 @@ Add to your config file (`~/Library/Application Support/Claude/claude_desktop_co
 ### Programmatic (agent loop)
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 
 const client = new OpenDeskClient();
 
@@ -85,7 +85,7 @@ const log = await client.audit({ format: "summary" });
 ### With Vercel AI SDK
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 
@@ -109,7 +109,7 @@ const response = await generateText({
 ### Expose as MCP server
 
 ```typescript
-import { createMcpServer } from "@opendesk/sdk";
+import { createMcpServer } from "@vitalops/opendesk-sdk";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 const server = createMcpServer();
@@ -120,7 +120,7 @@ await server.connect(transport);
 ### Custom session ID or permission handler
 
 ```typescript
-import { OpenDeskClient } from "@opendesk/sdk";
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 
 const client = new OpenDeskClient({
   sessionId: "my-agent-session",
@@ -157,7 +157,7 @@ Full reference: [docs/tools.md](../docs/tools.md)
 Your JS/TS code
       │
       ▼
-@opendesk/sdk (Node.js)
+@vitalops/opendesk-sdk (Node.js)
       │
       ├── screenshot  (screenshot-desktop)
       ├── mouse/keyboard  (@nut-tree-fork/nut-js)

@@ -6,7 +6,7 @@
  *   npx opendesk-js mcp          — run over stdio (for Claude Code / Claude Desktop)
  *
  * Or programmatically:
- *   import { createMcpServer, runMcpStdio } from "@opendesk/sdk";
+ *   import { createMcpServer, runMcpStdio } from "@vitalops/opendesk-sdk";
  *   const server = createMcpServer();
  *   // connect your own transport
  */

@@ -1,5 +1,5 @@
 /**
- * @opendesk/sdk — public API surface
+ * @vitalops/opendesk-sdk — public API surface
  */
 
 export { OpenDeskClient, type OpenDeskClientOptions } from "./client.js";
