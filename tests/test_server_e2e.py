@@ -43,6 +43,8 @@ async def _start_server(tmp_path: Path) -> tuple[OpendeskServer, FakeComputer]:
         fake, identity, trusted,
         host="127.0.0.1", port=0,
         advertise_mdns=False,
+        home=tmp_path,  # critical: without this, audit / admin-socket land
+                        # in the real ~/.opendesk and pollute the user's data
     )
     await server.start()
     return server, fake

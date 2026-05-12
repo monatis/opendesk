@@ -142,43 +142,54 @@ async def discover(timeout: float = 2.0) -> list[DiscoveredPeer]:
 
     ``timeout`` is how long to wait for responses.  2 s is enough on a quiet
     LAN; bump it on saturated networks.
+
+    Implementation note: we can't use the synchronous
+    ``ServiceListener.add_service`` pattern because the callback fires on
+    the asyncio loop and modern ``zeroconf`` refuses sync I/O there.
+    Instead we collect just the service *names* via the lightweight
+    handlers callback and resolve each one with
+    :class:`AsyncServiceInfo` after the browse window closes.
     """
     _, AsyncServiceInfo, AsyncZeroconf = _require_zeroconf()
-    from zeroconf import ServiceListener  # type: ignore
+    from zeroconf import ServiceStateChange  # type: ignore
 
-    found: dict[str, DiscoveredPeer] = {}
+    seen: set[str] = set()
 
-    class _Listener(ServiceListener):
-        def __init__(self, zc):
-            self._zc = zc
-
-        def add_service(self, zc, type_, name):  # noqa: D401
-            info = zc.get_service_info(type_, name, timeout=1000)
-            if info is None:
-                return
-            try:
-                peer = _info_to_peer(info)
-            except Exception:
-                return
-            if peer is not None:
-                found[name] = peer
-
-        def update_service(self, zc, type_, name):
-            self.add_service(zc, type_, name)
-
-        def remove_service(self, zc, type_, name):
-            found.pop(name, None)
+    def _on_state_change(zeroconf, service_type, name, state_change) -> None:
+        if state_change in (ServiceStateChange.Added, ServiceStateChange.Updated):
+            seen.add(name)
+        elif state_change is ServiceStateChange.Removed:
+            seen.discard(name)
 
     async with AsyncZeroconf() as azc:
         from zeroconf.asyncio import AsyncServiceBrowser
-        listener = _Listener(azc.zeroconf)
-        browser = AsyncServiceBrowser(azc.zeroconf, SERVICE_TYPE, listener)
+        browser = AsyncServiceBrowser(
+            azc.zeroconf, SERVICE_TYPE, handlers=[_on_state_change],
+        )
         try:
             await asyncio.sleep(timeout)
         finally:
-            await browser.async_cancel()
+            with contextlib.suppress(Exception):
+                await browser.async_cancel()
 
-    return list(found.values())
+        # Resolve each name we saw.  async_request returns True when the
+        # info arrived within the timeout.
+        results: list[DiscoveredPeer] = []
+        for name in sorted(seen):
+            info = AsyncServiceInfo(SERVICE_TYPE, name)
+            try:
+                ok = await info.async_request(azc.zeroconf, 2000)
+            except Exception:
+                continue
+            if not ok:
+                continue
+            try:
+                peer = _info_to_peer(info)
+            except Exception:
+                continue
+            if peer is not None:
+                results.append(peer)
+    return results
 
 
 # ---------------------------------------------------------------------------

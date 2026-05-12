@@ -153,6 +153,7 @@ def cmd_pair(args) -> None:
             computer, identity, trusted,
             host=args.host, port=args.port,
             advertise_mdns=not args.no_mdns,
+            home=home,
         )
         await server.start()
         print()
