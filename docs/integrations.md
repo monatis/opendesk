@@ -14,7 +14,7 @@ MCP is the recommended integration. Any MCP-compatible client automatically gets
 # Install
 pip install 'opendesk[core,mcp]'
 
-# Run server (stdio transport)
+# Register with Claude Code\nopendesk install\n\n# Remove from Claude Code\nopendesk uninstall\n\n# Run server manually (stdio transport)
 opendesk-mcp
 ```
 

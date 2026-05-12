@@ -20,7 +20,11 @@ pip install 'opendesk[core,mcp]'
 opendesk install
 ```
 
-`opendesk install` registers the MCP server with Claude Code globally.
+`opendesk install` registers the MCP server with Claude Code globally. To remove:
+
+```bash
+opendesk uninstall
+```
 
 ### 1. Take a screenshot
 
@@ -124,6 +128,7 @@ Register with Claude Code:
 
 ```bash
 npx opendesk-js install
+npx opendesk-js uninstall   # to remove
 ```
 
 ### 1. Take a screenshot
