@@ -18,6 +18,7 @@ session takes effect without restarting :command:`opendesk serve`.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from dataclasses import asdict, dataclass, field
@@ -28,6 +29,7 @@ from opendesk.protocol.auth.identity import DEFAULT_HOME
 
 
 TRUSTED_PEERS_FILE = "trusted-peers.json"
+DEFAULT_PEER_FILE = "default-peer"
 
 
 def fingerprint(public_key: bytes) -> str:
@@ -42,11 +44,19 @@ def fingerprint(public_key: bytes) -> str:
 
 @dataclass
 class TrustedPeer:
-    """One trusted peer entry."""
+    """One trusted peer entry.
+
+    ``description`` holds the peer's own self-description as cached from the
+    most recent successful HELLO.  ``description_override`` is the
+    controller-side label the local user has set explicitly.  When non-empty,
+    the override wins (see :meth:`TrustedPeers.effective_description`).
+    """
 
     public_key: str  # hex
     name: str = ""
     paired_at: float = field(default_factory=time.time)
+    description: str = ""
+    description_override: str = ""
 
     @property
     def public_bytes(self) -> bytes:
@@ -55,6 +65,10 @@ class TrustedPeer:
     @property
     def fingerprint(self) -> str:
         return fingerprint(self.public_bytes)
+
+    @property
+    def effective_description(self) -> str:
+        return self.description_override or self.description
 
 
 class TrustedPeers:
@@ -82,6 +96,8 @@ class TrustedPeers:
                     public_key=item["public_key"],
                     name=item.get("name", ""),
                     paired_at=float(item.get("paired_at") or 0.0),
+                    description=item.get("description", "") or "",
+                    description_override=item.get("description_override", "") or "",
                 ))
             except (KeyError, ValueError, TypeError):
                 continue
@@ -121,7 +137,11 @@ class TrustedPeers:
         for i, p in enumerate(peers):
             if p.public_key == hex_key:
                 if name and p.name != name:
-                    peers[i] = TrustedPeer(public_key=hex_key, name=name, paired_at=p.paired_at)
+                    peers[i] = TrustedPeer(
+                        public_key=hex_key, name=name, paired_at=p.paired_at,
+                        description=p.description,
+                        description_override=p.description_override,
+                    )
                     self._save(peers)
                 return peers[i]
         peer = TrustedPeer(public_key=hex_key, name=name)
@@ -129,18 +149,49 @@ class TrustedPeers:
         self._save(peers)
         return peer
 
-    def remove(self, public_key_or_name: str) -> bool:
-        """Remove by hex key or by friendly name.  Returns True on hit."""
+    # ------------------------------------------------------------------
+    # Descriptions
+    # ------------------------------------------------------------------
+
+    def cache_description(self, public_key: bytes, description: str) -> bool:
+        """Update the cached description (from the most recent HELLO).
+
+        Called by :func:`opendesk.remote.client.connect` after every
+        successful handshake.  Returns ``True`` if anything changed.
+        """
         peers = self._load()
-        before = len(peers)
-        peers = [
-            p for p in peers
-            if p.public_key != public_key_or_name and p.name != public_key_or_name
-        ]
-        if len(peers) == before:
-            return False
-        self._save(peers)
-        return True
+        hex_key = public_key.hex()
+        for i, p in enumerate(peers):
+            if p.public_key == hex_key and p.description != description:
+                peers[i] = TrustedPeer(
+                    public_key=p.public_key, name=p.name, paired_at=p.paired_at,
+                    description=description,
+                    description_override=p.description_override,
+                )
+                self._save(peers)
+                return True
+        return False
+
+    def set_description_override(self, name: str, text: str) -> bool:
+        """Set the controller-side description override for a trusted peer."""
+        peers = self._load()
+        for i, p in enumerate(peers):
+            if p.name == name:
+                peers[i] = TrustedPeer(
+                    public_key=p.public_key, name=p.name, paired_at=p.paired_at,
+                    description=p.description, description_override=text,
+                )
+                self._save(peers)
+                return True
+        return False
+
+    def clear_description_override(self, name: str) -> bool:
+        return self.set_description_override(name, "")
+
+    def effective_description(self, name: str) -> str:
+        """Return the override if set, else the cached HELLO description."""
+        p = self.find_by_name(name)
+        return p.effective_description if p else ""
 
     def rename(self, public_key_or_name: str, new_name: str) -> bool:
         peers = self._load()
@@ -150,3 +201,82 @@ class TrustedPeers:
                 self._save(peers)
                 return True
         return False
+
+    # ------------------------------------------------------------------
+    # Persistent default peer
+    # ------------------------------------------------------------------
+    #
+    # Kept as a one-line text file at ``<home>/default-peer`` (instead of a
+    # field on the trusted-peers JSON) so it's trivial to inspect / edit
+    # with a text editor or shell pipeline.
+
+    def _default_file(self) -> Path:
+        return self._home / DEFAULT_PEER_FILE
+
+    def get_default(self) -> Optional[str]:
+        """Return the persistently-stored default peer name, or ``None``.
+
+        The name is validated against the current trusted-peers — if the
+        stored default has been deleted from trusted-peers, this returns
+        ``None`` rather than a dangling reference.
+        """
+        path = self._default_file()
+        if not path.exists():
+            return None
+        try:
+            name = path.read_text().strip()
+        except OSError:
+            return None
+        if not name:
+            return None
+        if self.find_by_name(name) is None:
+            return None
+        return name
+
+    def set_default(self, name: str) -> bool:
+        """Persist ``name`` as the default peer.  Must already be trusted."""
+        if self.find_by_name(name) is None:
+            return False
+        self._home.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self._default_file().write_text(name + "\n")
+        return True
+
+    def clear_default(self) -> bool:
+        """Remove the persistent default peer.  Returns ``True`` if one was set."""
+        path = self._default_file()
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
+
+    def remove(self, public_key_or_name: str) -> bool:
+        """Remove a peer by hex key or friendly name.
+
+        Also clears the persistent default if it was pointing at this peer,
+        so future `effective_peer` calls don't see a dangling reference.
+        Returns ``True`` if anything was removed.
+        """
+        peers = self._load()
+        before = len(peers)
+        target_names = {
+            p.name for p in peers
+            if p.public_key == public_key_or_name or p.name == public_key_or_name
+        }
+        peers = [
+            p for p in peers
+            if p.public_key != public_key_or_name and p.name != public_key_or_name
+        ]
+        if len(peers) == before:
+            return False
+        self._save(peers)
+        current_default = None
+        path = self._default_file()
+        if path.exists():
+            try:
+                current_default = path.read_text().strip() or None
+            except OSError:
+                current_default = None
+        if current_default and current_default in target_names:
+            with contextlib.suppress(FileNotFoundError):
+                path.unlink()
+        return True

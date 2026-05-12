@@ -73,9 +73,11 @@ class MCPSession:
 
         ``name`` is ``None`` for local *or* ambiguous.  ``source`` is one of:
 
-        * ``"explicit"`` — set via :meth:`use_peer`.
-        * ``"implicit"`` — exactly one trusted peer exists, no explicit
-          default set, so it's used automatically.
+        * ``"explicit"`` — set via :meth:`use_peer` for this session.
+        * ``"persistent"`` — set via the CLI ``opendesk peers default <name>``
+          and stored on disk.
+        * ``"implicit"`` — exactly one trusted peer exists, no default set,
+          so it's used automatically.
         * ``"ambiguous"`` — multiple trusted peers and no default set;
           :meth:`resolve` will raise unless a ``peer`` argument is supplied.
         * ``"local"`` — no peers paired; falls through to the local computer.
@@ -85,9 +87,13 @@ class MCPSession:
         return self._default_state()
 
     def _default_state(self) -> tuple[Optional[str], str]:
-        """Classify what implicit default applies given the trusted-peers file."""
+        """Classify the resolution given the trusted-peers file + persistent default."""
         from opendesk.protocol.auth import TrustedPeers
-        peers = TrustedPeers(self._home).list()
+        store = TrustedPeers(self._home)
+        persisted = store.get_default()
+        if persisted is not None:
+            return persisted, "persistent"
+        peers = store.list()
         if len(peers) == 1:
             return peers[0].name, "implicit"
         if len(peers) > 1:

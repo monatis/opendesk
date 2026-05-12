@@ -333,6 +333,28 @@ def _admin_tool_definitions() -> list[_AdminTool]:
             schema={"type": "object", "properties": {}, "additionalProperties": False},
         ),
         _AdminTool(
+            name="opendesk_describe",
+            description=(
+                "Return the full description of a paired peer — what that "
+                "machine is for, what apps / data it has access to.  Set "
+                "by the controlled-machine operator via `opendesk describe` "
+                "and (optionally) overridden locally via "
+                "`opendesk peers describe`.  Use this to decide which peer "
+                "is right for a given task."
+            ),
+            schema={
+                "type": "object",
+                "properties": {
+                    "peer": {
+                        "type": "string",
+                        "description": "Peer name (from `opendesk_peers`).",
+                    },
+                },
+                "required": ["peer"],
+                "additionalProperties": False,
+            },
+        ),
+        _AdminTool(
             name="opendesk_capabilities",
             description=(
                 "Show what the given peer's backend can do (input devices, "
@@ -392,8 +414,19 @@ async def _admin_peers(session: MCPSession, args: dict[str, Any]) -> str:
         if p.name in active:
             tags.append("active")
         lines.append(f"  {p.name}{_tags(tags)}  ({p.fingerprint})")
+        if p.effective_description:
+            # Show only the first line, truncated; agents wanting more use
+            # `opendesk_describe <peer>`.
+            head = p.effective_description.splitlines()[0]
+            head = head[:160] + "…" if len(head) > 160 else head
+            lines.append(f"      {head}")
     if not trusted:
         lines.append("  (no trusted remote peers — pair via `opendesk pair-with` on the CLI)")
+    lines.append("")
+    lines.append(
+        "Use `opendesk_describe <peer>` for a peer's full description "
+        "(what the machine is for, what tools / apps live there)."
+    )
     return "\n".join(lines)
 
 
@@ -415,6 +448,10 @@ async def _admin_discover(session: MCPSession, args: dict[str, Any]) -> str:
         paired = trusted.get(p.public_key)
         tag = f"  [paired as {paired}]" if paired else "  [NOT paired]"
         lines.append(f"  {p.name}  {p.host}:{p.port}  {p.fingerprint}{tag}")
+        if p.description:
+            head = p.description.splitlines()[0]
+            head = head[:160] + "…" if len(head) > 160 else head
+            lines.append(f"      {head}")
     return "\n".join(lines)
 
 
@@ -455,13 +492,55 @@ async def _admin_capabilities(session: MCPSession, args: dict[str, Any]) -> str:
         f"Peer: {resolved}",
         f"Backend: {manifest.backend}",
         f"Protocol: {manifest.protocol_version}",
-        "Capabilities:",
     ]
+    desc = _resolve_description(session, resolved, manifest)
+    if desc:
+        lines.append("Description:")
+        for ln in desc.splitlines():
+            lines.append(f"  {ln}")
+    lines.append("Capabilities:")
     lines.extend(f"  - {c}" for c in caps)
     if manifest.limits:
         lines.append("Limits:")
         lines.append("  " + json.dumps(manifest.limits))
     return "\n".join(lines)
+
+
+async def _admin_describe(session: MCPSession, args: dict[str, Any]) -> str:
+    """Return the full description for a peer (no manifest noise)."""
+    name = args.get("peer")
+    if name in (None, "", LOCAL):
+        resolved = LOCAL
+        return "local — this machine (the controller). No remote description."
+    from opendesk.protocol.auth import TrustedPeers
+    store = TrustedPeers(session.home)
+    peer = store.find_by_name(str(name))
+    if peer is None:
+        raise MCPSessionError(f"unknown peer: {name!r}")
+    parts = [f"Peer: {peer.name}", f"Fingerprint: {peer.fingerprint}"]
+    if peer.description_override:
+        parts.append("Description (override):")
+        parts.append(peer.description_override)
+    elif peer.description:
+        parts.append("Description (broadcast):")
+        parts.append(peer.description)
+    else:
+        parts.append("(no description — the peer hasn't broadcast one and no override is set)")
+    return "\n".join(parts)
+
+
+def _resolve_description(session: MCPSession, name: str, manifest) -> str:
+    """Effective description for a peer at this moment.
+
+    Priority: trusted-peers override → trusted-peers cached → manifest broadcast.
+    """
+    if name == LOCAL:
+        return ""
+    from opendesk.protocol.auth import TrustedPeers
+    peer = TrustedPeers(session.home).find_by_name(name)
+    if peer is not None and peer.effective_description:
+        return peer.effective_description
+    return getattr(manifest, "description", "") or ""
 
 
 async def _admin_disconnect(session: MCPSession, args: dict[str, Any]) -> str:
@@ -478,6 +557,7 @@ _ADMIN_HANDLERS = {
     "opendesk_use": _admin_use,
     "opendesk_status": _admin_status,
     "opendesk_capabilities": _admin_capabilities,
+    "opendesk_describe": _admin_describe,
     "opendesk_disconnect": _admin_disconnect,
 }
 

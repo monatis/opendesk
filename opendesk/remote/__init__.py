@@ -13,11 +13,18 @@ Public API
 * :func:`discover` — list opendesk peers on the LAN via mDNS.
 """
 
+from opendesk.remote.audit import AuditLog
 from opendesk.remote.client import connect
 from opendesk.remote.discovery import (
     DiscoveredPeer,
     advertise,
     discover,
+)
+from opendesk.remote.policy import (
+    AllowAllPolicy,
+    ConsolePolicy,
+    OBSERVATION_METHODS,
+    Policy,
 )
 from opendesk.remote.server import (
     OpendeskServer,
@@ -35,4 +42,9 @@ __all__ = [
     "discover",
     "advertise",
     "DiscoveredPeer",
+    "Policy",
+    "AllowAllPolicy",
+    "ConsolePolicy",
+    "OBSERVATION_METHODS",
+    "AuditLog",
 ]

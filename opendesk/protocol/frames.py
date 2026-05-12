@@ -43,6 +43,7 @@ class ErrorCode(str, enum.Enum):
     CANCELLED = "cancelled"
     INTERNAL = "internal"
     PROTOCOL = "protocol"
+    BUSY = "busy"
 
 
 class ErrorInfo(BaseModel):
@@ -69,6 +70,11 @@ class HelloFrame(_FrameBase):
     Carries the protocol version, the peer's role, its principal, the auth
     proof for the current handshake, and the full capability manifest.  The
     receiving peer stores the manifest and uses it to gate subsequent calls.
+
+    A server can short-circuit a connection by sending HELLO with ``error``
+    set — e.g. when another controller already holds the single allowed
+    session (:attr:`ErrorCode.BUSY`).  The client's :meth:`Peer.hello` will
+    raise :class:`~opendesk.protocol.peer.ProtocolError` carrying that code.
     """
 
     type: Literal["hello"] = "hello"
@@ -76,6 +82,7 @@ class HelloFrame(_FrameBase):
     principal: str = ""
     auth: dict[str, Any] = Field(default_factory=dict)
     capabilities: dict[str, Any] = Field(default_factory=dict)
+    error: Optional[ErrorInfo] = None
 
 
 class ReqFrame(_FrameBase):

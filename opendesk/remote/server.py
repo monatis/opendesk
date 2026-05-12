@@ -39,7 +39,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from opendesk.computer import (
     Computer,
@@ -61,12 +61,55 @@ from opendesk.protocol.transports.websocket import (
     WebSocketServer,
     serve_websocket,
 )
+from opendesk.remote.audit import AuditLog
+from opendesk.remote.policy import AllowAllPolicy, Policy
 
 
 log = logging.getLogger("opendesk.remote.server")
 
 
 DEFAULT_PORT = 8423
+DESCRIPTION_FILE = "description.txt"
+
+
+def read_description(home: Optional[Path]) -> str:
+    """Read the controlled-machine description from ``<home>/description.txt``.
+
+    Re-read on every handshake (so ``opendesk describe ...`` edits land in
+    the next session's HELLO without a daemon restart).  Returns ``""`` if
+    the file doesn't exist or is empty.
+    """
+    base = Path(home) if home else _default_home()
+    path = base / DESCRIPTION_FILE
+    if not path.exists():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def write_description(home: Optional[Path], text: str) -> Path:
+    """Persist the description (``opendesk describe ...`` writes this)."""
+    base = Path(home) if home else _default_home()
+    base.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path = base / DESCRIPTION_FILE
+    path.write_text(text + "\n" if text else "", encoding="utf-8")
+    return path
+
+
+def clear_description(home: Optional[Path]) -> bool:
+    base = Path(home) if home else _default_home()
+    path = base / DESCRIPTION_FILE
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+
+def _default_home() -> Path:
+    from opendesk.protocol.auth.identity import DEFAULT_HOME
+    return DEFAULT_HOME
 
 
 class ServerMode(str, enum.Enum):
@@ -116,17 +159,35 @@ class SessionRegistry:
         async with self._lock:
             return list(self._sessions.values())
 
-    async def kill(self, session_id: str) -> bool:
-        info = self._sessions.get(session_id)
+    async def kill(self, session_id: str, *, reason: str = "admin_disconnect") -> bool:
+        """Remove and close one session.
+
+        Sends a ``session.evicted`` PUSH frame just before closing so a
+        cooperative client (the in-tree :class:`RemoteComputer`) suppresses
+        its auto-reconnect.  A hostile client could ignore the hint — for
+        enforced eviction, ``unpair`` the peer instead.
+
+        Synchronous wrt the registry — after this returns, ``session_id``
+        is gone, even if the underlying ``peer.aclose()`` is still finishing
+        in the background.
+        """
+        async with self._lock:
+            info = self._sessions.pop(session_id, None)
         if info is None or info.peer is None:
             return False
-        await info.peer.aclose()
+        with contextlib.suppress(Exception):
+            await info.peer.push("session.evicted", {"reason": reason})
+        with contextlib.suppress(Exception):
+            await info.peer.aclose()
         return True
 
-    async def kill_all(self) -> int:
+    async def kill_all(self, *, reason: str = "admin_disconnect") -> int:
         async with self._lock:
             peers = [s.peer for s in self._sessions.values() if s.peer is not None]
+            self._sessions.clear()
         for p in peers:
+            with contextlib.suppress(Exception):
+                await p.push("session.evicted", {"reason": reason})
             with contextlib.suppress(Exception):
                 await p.aclose()
         return len(peers)
@@ -169,6 +230,9 @@ class OpendeskServer:
         advertise_mdns: bool = True,
         service_name: Optional[str] = None,
         home: Optional[Path] = None,
+        policy: Optional[Policy] = None,
+        audit: Optional[AuditLog] = None,
+        enable_audit: bool = True,
     ) -> None:
         self._computer = computer
         self._identity = identity
@@ -178,11 +242,22 @@ class OpendeskServer:
         self._advertise_mdns = advertise_mdns
         self._service_name = service_name
         self._home = home
+        self._policy: Policy = policy or AllowAllPolicy()
+        if audit is not None:
+            self._audit: Optional[AuditLog] = audit
+            self._owns_audit = False
+        elif enable_audit:
+            self._audit = AuditLog(home=home)
+            self._owns_audit = True
+        else:
+            self._audit = None
+            self._owns_audit = False
 
         self._sessions = SessionRegistry()
         self._ws_server: Optional[WebSocketServer] = None
         self._mdns_handle = None
         self._admin_server = None
+        self._accept_lock = asyncio.Lock()
 
         # Pairing state.
         self._pairing_lock = asyncio.Lock()
@@ -224,6 +299,7 @@ class OpendeskServer:
                     name=self._service_name or _default_service_name(self._identity),
                     port=self._ws_server.port,
                     public_key=self._identity.public_bytes,
+                    description=read_description(self._home),
                 )
             except ImportError:
                 log.warning("zeroconf not installed; mDNS advertisement disabled")
@@ -238,7 +314,7 @@ class OpendeskServer:
             self._admin_server = None
 
     async def aclose(self) -> None:
-        """Stop accepting new connections, kill all sessions, release mDNS + admin."""
+        """Stop accepting new connections, kill all sessions, release mDNS + admin + audit."""
         if self._admin_server is not None:
             with contextlib.suppress(Exception):
                 await self._admin_server.aclose()
@@ -251,6 +327,9 @@ class OpendeskServer:
             await self._ws_server.aclose()
             self._ws_server = None
         await self._sessions.kill_all()
+        if self._audit is not None and self._owns_audit:
+            with contextlib.suppress(Exception):
+                await self._audit.aclose()
 
     async def serve_forever(self) -> None:
         if self._ws_server is None:
@@ -317,36 +396,129 @@ class OpendeskServer:
             session, mode = await self._handshake(raw)
         except AuthFailure as exc:
             log.info("auth failed from %s: %s", addr, exc)
+            if self._audit is not None:
+                with contextlib.suppress(Exception):
+                    await self._audit.record_session_rejected(
+                        peer_public=b"", peer_name="",
+                        remote_addr=addr, reason=f"auth_failed: {exc.reason}",
+                    )
             return
         except Exception as exc:
             log.warning("handshake error from %s: %s", addr, exc)
+            if self._audit is not None:
+                with contextlib.suppress(Exception):
+                    await self._audit.record_session_rejected(
+                        peer_public=b"", peer_name="",
+                        remote_addr=addr, reason=f"handshake_error: {exc}",
+                    )
             return
 
-        info = SessionInfo(
-            id=uuid.uuid4().hex[:8],
-            peer_public=session.peer_public,
-            peer_name=self._trusted.find(session.peer_public).name if self._trusted.find(session.peer_public) else "",
-            remote_addr=addr,
-            mode=mode,
-        )
+        # Single-controller enforcement.  At most one session is active at
+        # a time; a same-peer reconnect (common after a controller crash or
+        # network roam) replaces the previous session, a different peer is
+        # rejected outright.  The lock makes "kick + check + add" atomic
+        # against concurrent incoming connections.
+        info: Optional[SessionInfo] = None
+        async with self._accept_lock:
+            for existing in await self._sessions.list():
+                if existing.peer_public == session.peer_public:
+                    log.info(
+                        "same peer (%s) reconnecting; bumping previous session %s",
+                        existing.peer_name or "?", existing.id,
+                    )
+                    await self._sessions.kill(existing.id)
+                    break
 
-        peer = Peer(
-            session.connection, role="server",
-            dispatcher=ComputerDispatcher(self._computer),
-        )
-        info.peer = peer
-        await self._sessions.add(info)
+            active = await self._sessions.list()
+            if active:
+                names = ", ".join(s.peer_name or "?" for s in active)
+                log.info(
+                    "rejecting %s — another controller is active: %s",
+                    addr, names,
+                )
+                if self._audit is not None:
+                    with contextlib.suppress(Exception):
+                        await self._audit.record_session_rejected(
+                            peer_public=session.peer_public,
+                            peer_name=self._trusted.find(session.peer_public).name
+                                if self._trusted.find(session.peer_public) else "",
+                            remote_addr=addr,
+                            reason=f"busy: {names}",
+                        )
+                await _send_rejection(
+                    session.connection,
+                    code="busy",
+                    message=(
+                        f"server is busy: {names} is the active controller. "
+                        "Disconnect them to take over."
+                    ),
+                )
+                return
 
+            peer_entry = self._trusted.find(session.peer_public)
+            peer_name = peer_entry.name if peer_entry else ""
+            info = SessionInfo(
+                id=uuid.uuid4().hex[:8],
+                peer_public=session.peer_public,
+                peer_name=peer_name,
+                remote_addr=addr,
+                mode=mode,
+            )
+            peer = Peer(
+                session.connection, role="server",
+                dispatcher=ComputerDispatcher(
+                    self._computer,
+                    policy=self._policy,
+                    audit=self._audit,
+                    peer_public=session.peer_public,
+                    peer_name=peer_name,
+                    session_id=info.id,
+                ),
+            )
+            info.peer = peer
+            await self._sessions.add(info)
+
+        if self._audit is not None:
+            with contextlib.suppress(Exception):
+                await self._audit.record_session_opened(
+                    peer_public=info.peer_public, peer_name=info.peer_name,
+                    session_id=info.id, remote_addr=info.remote_addr,
+                    mode=info.mode.value,
+                )
+
+        close_reason = ""
         try:
-            await peer.hello(self._computer.capabilities().model_dump())
+            await peer.hello(self._build_hello_payload())
             peer.start()
             await peer.wait_closed()
         except Exception as exc:
+            close_reason = f"error: {exc}"
             log.warning("session %s error: %s", info.id, exc)
         finally:
             await self._sessions.remove(info.id)
             with contextlib.suppress(Exception):
                 await peer.aclose()
+            if self._audit is not None:
+                with contextlib.suppress(Exception):
+                    await self._audit.record_session_closed(
+                        peer_public=info.peer_public, peer_name=info.peer_name,
+                        session_id=info.id,
+                        duration=info.age_seconds(),
+                        reason=close_reason,
+                    )
+
+    def _build_hello_payload(self) -> dict[str, Any]:
+        """Compose the capabilities dict sent on every HELLO.
+
+        The description is re-read from disk every time so
+        ``opendesk describe …`` edits show up in the next session without
+        restarting the daemon.
+        """
+        payload = self._computer.capabilities().model_dump()
+        desc = read_description(self._home)
+        if desc:
+            payload["description"] = desc
+        return payload
 
     async def _handshake(self, raw: Connection) -> tuple[Session, ServerMode]:
         """Negotiate auth.
@@ -392,6 +564,8 @@ async def serve(
     advertise_mdns: bool = True,
     pairing_code: Optional[str] = None,
     pairing_timeout: Optional[float] = None,
+    policy: Optional[Policy] = None,
+    enable_audit: bool = True,
 ) -> None:
     """Run opendesk serve until the process is interrupted.
 
@@ -407,6 +581,7 @@ async def serve(
     server = OpendeskServer(
         computer, identity, trusted,
         host=host, port=port, advertise_mdns=advertise_mdns, home=home,
+        policy=policy, enable_audit=enable_audit,
     )
     await server.start()
     try:
@@ -432,3 +607,31 @@ def _default_service_name(identity: Identity) -> str:
 
 def _default_peer_name(public_key: bytes) -> str:
     return f"peer-{public_key.hex()[:6]}"
+
+
+async def _send_rejection(connection, *, code: str, message: str) -> None:
+    """Send a HELLO frame carrying an error and close the connection.
+
+    The client's :meth:`Peer.hello` sees the error and raises
+    :class:`ProtocolError` with the code, so the rejection reason flows
+    cleanly through the protocol instead of looking like an opaque
+    disconnect.
+
+    After sending, drain one frame (the client's HELLO send) before
+    closing — otherwise the WebSocket close handshake races against the
+    client's write and the client sees a generic ``ConnectionClosed``
+    instead of our nicely-coded rejection.
+    """
+    from opendesk.protocol.codec import encode
+    from opendesk.protocol.frames import ErrorInfo, HelloFrame
+    frame = HelloFrame(
+        role="server",
+        capabilities={},
+        error=ErrorInfo(code=code, message=message),
+    )
+    with contextlib.suppress(Exception):
+        await connection.send(encode(frame))
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(connection.recv(), timeout=2.0)
+    with contextlib.suppress(Exception):
+        await connection.aclose()

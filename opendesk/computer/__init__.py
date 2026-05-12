@@ -15,7 +15,7 @@ Public surface
 from opendesk.computer.base import CapabilityUnsupported, Computer, InputEvent
 from opendesk.computer.dispatcher import ComputerDispatcher
 from opendesk.computer.local import LocalComputer
-from opendesk.computer.remote import RemoteComputer
+from opendesk.computer.remote import RemoteComputer, SessionEvicted
 from opendesk.computer.types import (
     Capability,
     CapabilityManifest,
@@ -51,6 +51,7 @@ __all__ = [
     "ComputerDispatcher",
     "InputEvent",
     "CapabilityUnsupported",
+    "SessionEvicted",
     # Types — geometry
     "Point",
     "Rect",

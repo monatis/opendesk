@@ -8,12 +8,25 @@ async iterators backed by ``peer.stream(...)``.
 
 ``capabilities()`` is synchronous (per the ABC) and is served from the cached
 manifest exchanged during HELLO — no round-trip.
+
+Reconnect resilience
+--------------------
+:meth:`connect_with_reconnect` takes a ``connector`` callable that produces a
+fresh ``(Peer, manifest)`` on demand.  On a transient connection failure
+(``ConnectionClosed`` or protocol-fault :class:`ProtocolError`), the
+RemoteComputer:
+
+1. Reconnects with exponential backoff (capped by ``reconnect_budget``).
+2. If the call is in :data:`_IDEMPOTENT_METHODS`, replays it once.
+3. Otherwise, raises the original error — but the connection is now healthy,
+   so the next call succeeds immediately.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator, Optional
+import contextlib
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from opendesk.computer.base import (
     CapabilityUnsupported,
@@ -46,6 +59,52 @@ from opendesk.protocol import (
     Peer,
     ProtocolError,
 )
+from opendesk.protocol.connection import ConnectionClosed
+
+
+# Protocol methods that have no side effects and can safely be replayed
+# after a transient disconnect.  Anything that injects input, mutates
+# state, or runs a command is intentionally excluded.
+_IDEMPOTENT_METHODS: frozenset[str] = frozenset({
+    "system.environment",
+    "display.capture", "display.cursor_position", "display.displays",
+    "windows.list", "windows.focused",
+    "ui.tree",
+    "clipboard.read",
+    "fs.read", "fs.list", "fs.stat",
+    "process.list",
+    "apps.list",
+    "notifications.list",
+})
+
+# Exponential backoff between reconnect attempts.  Total wall-clock time is
+# capped separately by ``reconnect_budget``.
+_RECONNECT_DELAYS: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0, 5.0, 5.0, 5.0, 5.0)
+
+
+Connector = Callable[[], Awaitable[tuple[Peer, CapabilityManifest]]]
+"""Async factory that opens a fresh authed session and returns
+``(running_peer, capability_manifest)`` for it."""
+
+
+class SessionEvicted(RuntimeError):
+    """Raised when the server has explicitly evicted this controller.
+
+    The wire signal is a ``session.evicted`` PUSH frame.  A cooperative
+    :class:`RemoteComputer` (this one) honours it by suppressing the
+    auto-reconnect: the controller is *meant* to stop driving the host
+    until the operator explicitly opens a new connection.
+
+    Distinct from :class:`~opendesk.protocol.connection.ConnectionClosed`
+    so agents can tell the difference between a transient network drop
+    (probably worth retrying) and an intentional eviction (do not retry —
+    the operator wants you gone).
+    """
+
+    def __init__(self, reason: str = "") -> None:
+        suffix = f": {reason}" if reason else ""
+        super().__init__(f"session evicted by server{suffix}")
+        self.reason = reason
 
 
 def _translate(exc: BaseException) -> BaseException:
@@ -74,9 +133,41 @@ class RemoteComputer(Computer):
 
     BACKEND = "remote"
 
-    def __init__(self, peer: Peer, manifest: CapabilityManifest) -> None:
+    def __init__(
+        self,
+        peer: Peer,
+        manifest: CapabilityManifest,
+        *,
+        connector: Optional[Connector] = None,
+        reconnect_budget: float = 30.0,
+    ) -> None:
         self._peer = peer
         self._manifest = manifest
+        self._connector = connector
+        self._reconnect_budget = reconnect_budget
+        self._reconnect_lock = asyncio.Lock()
+        self._closed = False
+        self._evicted = False
+        self._eviction_reason = ""
+        self._peer.on_push(self._on_push)
+
+    # ------------------------------------------------------------------
+    # Eviction (cooperative — server PUSH "session.evicted")
+    # ------------------------------------------------------------------
+
+    @property
+    def evicted(self) -> bool:
+        """True if the server has signalled an eviction on this connection."""
+        return self._evicted
+
+    @property
+    def eviction_reason(self) -> str:
+        return self._eviction_reason
+
+    async def _on_push(self, topic: str, payload: dict) -> None:
+        if topic == "session.evicted":
+            self._evicted = True
+            self._eviction_reason = (payload or {}).get("reason", "") or ""
 
     # ------------------------------------------------------------------
     # Construction / lifecycle
@@ -96,6 +187,10 @@ class RemoteComputer(Computer):
         ``connection`` must already be open.  After this returns the peer's
         recv loop is running and any method on the returned RemoteComputer
         translates to protocol traffic.
+
+        This flavor has **no auto-reconnect**.  Use
+        :meth:`connect_with_reconnect` to get a RemoteComputer that survives
+        transient drops.
         """
         peer = Peer(connection, role="client")
         try:
@@ -110,18 +205,50 @@ class RemoteComputer(Computer):
         peer.start()
         return cls(peer, manifest)
 
+    @classmethod
+    async def connect_with_reconnect(
+        cls,
+        connector: Connector,
+        *,
+        reconnect_budget: float = 30.0,
+    ) -> "RemoteComputer":
+        """Create a RemoteComputer with auto-reconnect on transient drops.
+
+        ``connector`` is invoked once now to open the initial session, and
+        again on each reconnect attempt.  ``reconnect_budget`` is the total
+        wall-clock seconds spent retrying before surfacing the disconnect.
+        """
+        peer, manifest = await connector()
+        return cls(peer, manifest, connector=connector, reconnect_budget=reconnect_budget)
+
     async def aclose(self) -> None:
+        self._closed = True
         await self._peer.aclose()
 
     # ------------------------------------------------------------------
-    # call helper
+    # call helpers — handle reconnect + replay
     # ------------------------------------------------------------------
 
     async def _call(self, method: str, params: Optional[dict[str, Any]] = None) -> Any:
+        if self._evicted:
+            raise SessionEvicted(self._eviction_reason)
         try:
             return await self._peer.call(method, params or {})
-        except ProtocolError as exc:
-            raise _translate(exc) from exc
+        except (ConnectionClosed, ProtocolError) as exc:
+            if self._evicted:
+                raise SessionEvicted(self._eviction_reason) from exc
+            translated = _translate(exc) if isinstance(exc, ProtocolError) else exc
+            if not self._is_transient(exc) or self._connector is None or self._closed:
+                raise translated from exc
+            reconnected = await self._reconnect()
+            if not reconnected or method not in _IDEMPOTENT_METHODS:
+                if self._evicted:
+                    raise SessionEvicted(self._eviction_reason) from exc
+                raise translated from exc
+            try:
+                return await self._peer.call(method, params or {})
+            except ProtocolError as exc2:
+                raise _translate(exc2) from exc2
 
     def _stream(self, method: str, params: Optional[dict[str, Any]] = None) -> AsyncIterator[Any]:
         async def _wrap():
@@ -131,6 +258,53 @@ class RemoteComputer(Computer):
             except ProtocolError as exc:
                 raise _translate(exc) from exc
         return _wrap()
+
+    def _is_transient(self, exc: BaseException) -> bool:
+        """Was this error caused by the connection breaking?"""
+        if isinstance(exc, ConnectionClosed):
+            return True
+        if isinstance(exc, ProtocolError):
+            return exc.code == ErrorCode.PROTOCOL.value
+        return False
+
+    async def _reconnect(self) -> bool:
+        """Try to swap the dead peer with a fresh one.  Returns success.
+
+        Refuses immediately when:
+
+        * No connector is registered (caller used :meth:`connect`, not
+          :meth:`connect_with_reconnect`).
+        * :meth:`aclose` has been called.
+        * The server sent a ``session.evicted`` PUSH — the eviction is a
+          *cooperative* signal that the controller is meant to stop trying.
+        """
+        if self._connector is None or self._closed or self._evicted:
+            return False
+        async with self._reconnect_lock:
+            # Another concurrent caller may have already reconnected for us.
+            if not self._peer.closed and not getattr(self._peer, "_closed", False):
+                return True
+            with contextlib.suppress(Exception):
+                await self._peer.aclose()
+
+            loop = asyncio.get_event_loop()
+            start = loop.time()
+            for delay in _RECONNECT_DELAYS:
+                if loop.time() - start > self._reconnect_budget:
+                    break
+                try:
+                    new_peer, new_manifest = await self._connector()
+                except Exception:
+                    if self._closed or self._evicted:
+                        return False
+                    await asyncio.sleep(delay)
+                    continue
+                # Carry the eviction push handler onto the fresh peer too.
+                new_peer.on_push(self._on_push)
+                self._peer = new_peer
+                self._manifest = new_manifest
+                return True
+            return False
 
     # ------------------------------------------------------------------
     # Introspection

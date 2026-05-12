@@ -226,17 +226,24 @@ so an online attacker has one shot per `opendesk pair` invocation.
 ### Controlled machine
 
 ```
-opendesk pair      [--port N] [--code XXXXXX] [--timeout S] [--no-mdns]
-opendesk serve     [--port N] [--host H]                    [--no-mdns]
+opendesk pair         [--port N] [--code XXXXXX] [--timeout S] [--no-mdns]
+opendesk serve        [--port N] [--host H] [--no-mdns]
+                      [--approve {auto,console}] [--no-audit] [--log-file PATH]
+opendesk sessions                    # show the active controller (0 or 1)
+opendesk disconnect                  # kick the active controller
+opendesk unpair NAME                 # revoke trust + disconnect if active
+opendesk check        [--open]       # macOS Accessibility / Screen Recording probe
+opendesk audit        [--date Y-M-D] [--peer NAME] [--limit N] [--follow]
+opendesk install-service / uninstall-service
 ```
 
 ### Controller
 
 ```
-opendesk discover  [--timeout S]
-opendesk pair-with HOST CODE [--port N] [--name NAME]
-opendesk connect   PEER      [--screenshot PATH]
-opendesk peers     [list | remove TARGET | rename TARGET NEW]
+opendesk discover     [--timeout S]
+opendesk pair-with    HOST CODE [--port N] [--name NAME]
+opendesk connect      [PEER]         # PEER optional if a default is set
+opendesk peers        [list | default [NAME|--clear] | rename NAME NEW | remove NAME]
 ```
 
 All commands accept `--home DIR` to override the identity / trusted-peers
@@ -258,19 +265,56 @@ The service runs as your user, against `~/.opendesk`, on the default port.
 
 ---
 
-## Sessions
+## Concurrency: one controller at a time
 
-While `opendesk serve` is running, inspect or kick active connections from
-the controlled machine:
+`opendesk serve` enforces **single-controller** by design — at most one
+controller machine drives the desktop at a time.  Multiple controllers
+fighting over a single mouse / keyboard / focused window is the failure
+mode this policy prevents.
+
+* **Different peer trying to connect while one is active** → rejected
+  with a clean `BUSY` error.  The client sees a `ProtocolError`
+  ("server is busy: laptop is the active controller…") so the agent
+  knows to back off or ask the operator.
+* **Same peer reconnecting** (Wi-Fi blip, controller crash, network
+  roam) → bumps the previous session cleanly.  No need to wait out the
+  stale TCP connection.
+
+You can still pair as many controllers as you like — they just take
+turns.  To free the slot:
 
 ```
-opendesk sessions             # list — id, peer name, address, age
-opendesk sessions kill ID     # disconnect one
-opendesk sessions kill --all  # disconnect everyone
+opendesk sessions             # show who's active (0 or 1)
+opendesk disconnect           # ask the active controller to leave (cooperative)
+opendesk unpair NAME          # revoke trust entirely (enforced)
 ```
 
-Uses a local IPC socket (`~/.opendesk/admin.sock` / Windows named pipe), not
-the network — only the user running `serve` can talk to it.
+### Disconnect vs unpair — the trust model
+
+Both commands talk to the running daemon over a local Unix socket /
+named pipe (`~/.opendesk/admin.sock`), not the network — only the user
+running `serve` can use them.  They differ in *who has the last word*:
+
+* **`opendesk disconnect`** is **cooperative**.  The server sends a
+  ``session.evicted`` PUSH frame and closes the connection.  A
+  cooperative client (the in-tree :class:`RemoteComputer`) sees the
+  frame, suppresses its auto-reconnect, and raises
+  :class:`SessionEvicted` on subsequent calls.  Trust is preserved —
+  the same controller can come back when *it* decides to reconnect (by
+  building a new RemoteComputer).  A hostile client could in principle
+  ignore the PUSH and reconnect immediately; for that case, use
+  ``unpair``.
+* **`opendesk unpair NAME`** is **enforced**.  The peer is removed
+  from the trusted-peers store, then disconnected (via the same admin
+  IPC channel as `disconnect`).  Their next reconnect attempt fails
+  authentication outright.
+
+In short: `disconnect` says *"please leave, you can come back later"*;
+`unpair` says *"you are not welcome here anymore."*
+
+Read-only / observer-mode sessions where multiple controllers *could*
+coexist (one driving, one watching) are a phase-2 design item; they'll
+get a dedicated session kind, not a numeric knob.
 
 ---
 

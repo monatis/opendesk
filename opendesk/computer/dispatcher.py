@@ -12,12 +12,21 @@ calling the Computer, and serialises the Computer's return value back into a
 dict before handing it to the peer to encode.  Wire-method name → Computer
 method routing is implemented as plain ``if`` chains for readability; there
 are 35-ish methods total.
+
+Policy
+------
+A :class:`~opendesk.remote.policy.Policy` can be attached to a dispatcher.
+Every unary call and every stream-start passes through :meth:`Policy.check`
+before the underlying Computer is touched; a raised
+:class:`PermissionDeniedError` propagates back to the client as
+``permission_denied``.  The dispatcher carries the peer's static public key
+and friendly name so policies can decide per-peer.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from opendesk.computer.base import CapabilityUnsupported, Computer
 from opendesk.computer.types import (
@@ -30,25 +39,87 @@ from opendesk.computer.types import (
     UIElement,
 )
 
+if TYPE_CHECKING:
+    from opendesk.remote.audit import AuditLog
+    from opendesk.remote.policy import Policy
+
+
+def _classify_exception(exc: BaseException) -> str:
+    """Map a server-side exception to a stable audit/wire error code."""
+    try:
+        from opendesk.tools.base import PermissionDeniedError
+        if isinstance(exc, PermissionDeniedError):
+            return "permission_denied"
+    except ImportError:
+        pass
+    if isinstance(exc, CapabilityUnsupported):
+        return "capability_unsupported"
+    if isinstance(exc, FileNotFoundError):
+        return "not_found"
+    if isinstance(exc, ValueError):
+        return "invalid_argument"
+    if isinstance(exc, asyncio.TimeoutError):
+        return "timeout"
+    if isinstance(exc, asyncio.CancelledError):
+        return "cancelled"
+    return "internal"
+
 
 class ComputerDispatcher:
     """Routes protocol method calls to a wrapped :class:`Computer`."""
 
-    def __init__(self, computer: Computer) -> None:
+    def __init__(
+        self,
+        computer: Computer,
+        *,
+        policy: Optional["Policy"] = None,
+        audit: Optional["AuditLog"] = None,
+        peer_public: bytes = b"",
+        peer_name: str = "",
+        session_id: str = "",
+    ) -> None:
         self._computer = computer
+        self._policy = policy
+        self._audit = audit
+        self._peer_public = peer_public
+        self._peer_name = peer_name
+        self._session_id = session_id
 
     # ------------------------------------------------------------------
     # Dispatcher protocol
     # ------------------------------------------------------------------
 
     async def call(self, method: str, params: dict[str, Any]) -> Optional[dict[str, Any]]:
-        handler = _UNARY_DISPATCH.get(method)
-        if handler is None:
-            raise CapabilityUnsupported(
-                Capability.UI_TREE if method.startswith("ui.") else Capability.DISPLAY_CAPTURE,
-                backend=f"server (unknown method {method!r})",
+        try:
+            if self._policy is not None:
+                await self._policy.check(
+                    peer_public=self._peer_public, peer_name=self._peer_name,
+                    method=method, params=params,
+                )
+            handler = _UNARY_DISPATCH.get(method)
+            if handler is None:
+                raise CapabilityUnsupported(
+                    Capability.UI_TREE if method.startswith("ui.") else Capability.DISPLAY_CAPTURE,
+                    backend=f"server (unknown method {method!r})",
+                )
+            result = await handler(self._computer, params)
+        except BaseException as exc:
+            if self._audit is not None:
+                await self._audit.record_call(
+                    peer_public=self._peer_public, peer_name=self._peer_name,
+                    session_id=self._session_id, method=method, params=params,
+                    outcome="error",
+                    error_code=_classify_exception(exc),
+                    error_message=str(exc) or type(exc).__name__,
+                )
+            raise
+        if self._audit is not None:
+            await self._audit.record_call(
+                peer_public=self._peer_public, peer_name=self._peer_name,
+                session_id=self._session_id, method=method, params=params,
+                outcome="ok",
             )
-        return await handler(self._computer, params)
+        return result
 
     def stream(
         self, method: str, params: dict[str, Any],
@@ -56,7 +127,30 @@ class ComputerDispatcher:
         handler = _STREAM_DISPATCH.get(method)
         if handler is None:
             return _unsupported_stream(method)
-        return handler(self._computer, params)
+        if self._policy is None:
+            return handler(self._computer, params)
+        return _gated_stream(
+            self._policy, self._peer_public, self._peer_name,
+            method, params, handler, self._computer,
+        )
+
+
+async def _gated_stream(
+    policy: "Policy",
+    peer_public: bytes,
+    peer_name: str,
+    method: str,
+    params: dict[str, Any],
+    handler,
+    computer: Computer,
+) -> AsyncIterator[dict[str, Any]]:
+    """Check policy once at subscribe time, then yield from the real handler."""
+    await policy.check(
+        peer_public=peer_public, peer_name=peer_name,
+        method=method, params=params,
+    )
+    async for item in handler(computer, params):
+        yield item
 
 
 # ---------------------------------------------------------------------------

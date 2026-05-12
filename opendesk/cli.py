@@ -10,6 +10,35 @@ import sys
 from pathlib import Path
 
 
+def _configure_logging(log_file: str | None = None) -> None:
+    """Set up root logging for `opendesk serve`.
+
+    Default: ``stderr`` only (good for systemd-journald and launchd).  When
+    ``--log-file`` is given, also attach a :class:`RotatingFileHandler`
+    (10 MB × 5 backups).
+    """
+    from logging.handlers import RotatingFileHandler
+
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+    if log_file:
+        path = Path(log_file).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fh = RotatingFileHandler(
+            path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8",
+        )
+        handlers.append(fh)
+
+    root = logging.getLogger()
+    # Clear any pre-existing handlers — keeps repeated invocations idempotent.
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    for h in handlers:
+        h.setFormatter(fmt)
+        root.addHandler(h)
+    root.setLevel(logging.INFO)
+
+
 def _find_mcp_binary() -> str:
     """Return the absolute path to opendesk-mcp in the current Python environment."""
     # Prefer the binary next to the current Python executable (same venv/conda env)
@@ -189,7 +218,7 @@ def cmd_serve(args) -> None:
     from opendesk.protocol.auth import Identity
     from opendesk.computer import LocalComputer
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    _configure_logging(getattr(args, "log_file", None))
     home = Path(args.home).expanduser() if args.home else None
     identity = Identity.load_or_create(home)
     trusted = TrustedPeers(home)
@@ -202,14 +231,39 @@ def cmd_serve(args) -> None:
         sys.exit(2)
 
     async def _run() -> None:
+        from opendesk.computer.permissions import check_all, report as report_perms
+        statuses = check_all()
+        if statuses and not all(s.granted for s in statuses):
+            print(
+                "WARNING: some platform permissions appear to be missing.  "
+                "Affected operations will fail until granted.",
+                file=sys.stderr,
+            )
+            report_perms(statuses, file=sys.stderr)
+            print(
+                "Run `opendesk check --open` to jump to the right "
+                "System Settings pane.",
+                file=sys.stderr,
+            )
+
+        from opendesk.remote.policy import AllowAllPolicy, ConsolePolicy
+        policy = AllowAllPolicy() if args.approve == "auto" else ConsolePolicy()
+
         server = OpendeskServer(
             LocalComputer(), identity, trusted,
             host=args.host, port=args.port,
             advertise_mdns=not args.no_mdns,
+            home=home,
+            policy=policy,
+            enable_audit=not args.no_audit,
         )
         await server.start()
         fp = ":".join(identity.public_bytes.hex()[i : i + 4] for i in range(0, 16, 4))
-        print(f"opendesk serve listening on {args.host}:{server.port}  fp={fp}")
+        approve_suffix = "" if args.approve == "auto" else f"  approve={args.approve}"
+        print(
+            f"opendesk serve listening on {args.host}:{server.port}  "
+            f"fp={fp}{approve_suffix}"
+        )
         try:
             await server.serve_forever()
         finally:
@@ -235,9 +289,13 @@ def cmd_discover(args) -> None:
         if not peers:
             print("No opendesk peers found on the LAN.")
             return
-        print(f"{'NAME':<32}  {'ADDR':<22}  FINGERPRINT")
+        print(f"{'NAME':<24}  {'ADDR':<22}  {'FINGERPRINT':<22}  DESCRIPTION")
         for p in peers:
-            print(f"{p.name:<32}  {p.host + ':' + str(p.port):<22}  {p.fingerprint}")
+            desc = (p.description or "")[:80]
+            print(
+                f"{p.name:<24}  {p.host + ':' + str(p.port):<22}  "
+                f"{p.fingerprint:<22}  {desc}"
+            )
 
     asyncio.run(_run())
 
@@ -253,9 +311,10 @@ def cmd_connect(args) -> None:
     async def _run():
         home = Path(args.home).expanduser() if args.home else None
         remote = await connect(args.peer, home=home)
+        peer_label = args.peer or "default"
         try:
             caps = remote.capabilities()
-            print(f"Connected to {args.peer}  backend={caps.backend}")
+            print(f"Connected to {peer_label}  backend={caps.backend}")
             print(f"Capabilities: {sorted(c.value for c in caps.capabilities)}")
             if args.screenshot:
                 pixmap = await remote.capture()
@@ -272,8 +331,122 @@ def cmd_connect(args) -> None:
         sys.exit(1)
 
 
+def cmd_check(args) -> None:
+    """Check platform permissions required for opendesk to work."""
+    from opendesk.computer.permissions import check_all, open_settings, report
+
+    statuses = check_all()
+    if not statuses:
+        print("No platform permissions to check on this OS.")
+        return
+    print("opendesk permission check:")
+    ok = report(statuses, file=sys.stdout)
+    if ok:
+        print("\nAll required permissions are granted.")
+        return
+    print()
+    if args.open and not args.no_open:
+        for s in statuses:
+            if not s.granted and s.settings_url:
+                open_settings(s.settings_url)
+                break
+        print("Opened the relevant System Settings pane.  Re-run `opendesk check` after granting.")
+    sys.exit(1)
+
+
+def cmd_audit(args) -> None:
+    """Print server-side audit log entries (or follow them live)."""
+    try:
+        from opendesk.remote.audit import AuditLog
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+    home = Path(args.home).expanduser() if args.home else None
+    log = AuditLog(home=home)
+    date = args.date  # may be None → today
+
+    def _matches(entry: dict) -> bool:
+        if args.peer:
+            peer = (entry.get("peer") or {}).get("name") or ""
+            fp = (entry.get("peer") or {}).get("fp") or ""
+            if args.peer not in peer and args.peer not in fp:
+                return False
+        return True
+
+    def _format(entry: dict) -> str:
+        import datetime as _dt
+        ts = entry.get("ts") or 0
+        when = _dt.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+        peer = (entry.get("peer") or {}).get("name") or (entry.get("peer") or {}).get("fp") or "?"
+        kind = entry.get("type", "?")
+        if kind == "call":
+            outcome = entry.get("outcome", "?")
+            if outcome == "error":
+                outcome = f"error/{entry.get('error_code', '?')}"
+            method = entry.get("method", "?")
+            summary = entry.get("summary") or method
+            return f"{when}  {peer:<16}  {kind:<14}  {outcome:<22}  {summary}"
+        if kind == "session.opened":
+            return (
+                f"{when}  {peer:<16}  {kind:<14}                          "
+                f"id={entry.get('session_id', '?')} from {entry.get('remote_addr', '?')}"
+            )
+        if kind == "session.closed":
+            return (
+                f"{when}  {peer:<16}  {kind:<14}                          "
+                f"id={entry.get('session_id', '?')}  "
+                f"duration={entry.get('duration', 0)}s  reason={entry.get('reason', '')!r}"
+            )
+        if kind == "session.rejected":
+            return (
+                f"{when}  {peer:<16}  {kind:<14}                          "
+                f"reason={entry.get('reason', '?')}  from {entry.get('remote_addr', '?')}"
+            )
+        return f"{when}  {peer:<16}  {kind}  {entry}"
+
+    def _print_filtered(entries):
+        if args.limit:
+            entries = entries[-args.limit :]
+        for e in entries:
+            if _matches(e):
+                print(_format(e))
+
+    if not args.follow:
+        _print_filtered(log.iter_entries(date=date))
+        return
+
+    # --follow: poll the day's file for new lines.
+    import time
+    path = log.directory / f"{date or _today_iso_local()}.jsonl"
+    seen = 0
+    if path.exists():
+        existing = log.iter_entries(date=date)
+        _print_filtered(existing)
+        seen = len(existing)
+    try:
+        while True:
+            time.sleep(0.5)
+            current = log.iter_entries(date=date)
+            if len(current) > seen:
+                for e in current[seen:]:
+                    if _matches(e):
+                        print(_format(e))
+                seen = len(current)
+    except KeyboardInterrupt:
+        sys.exit(0)
+
+
+def _today_iso_local() -> str:
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def cmd_sessions(args) -> None:
-    """Inspect / kill active opendesk-serve sessions via local IPC."""
+    """List active opendesk-serve sessions via local IPC.
+
+    With single-controller enforcement, this is always 0 or 1 entry.
+    """
     try:
         from opendesk.remote.admin import AdminClient, AdminError
     except ImportError as exc:
@@ -289,40 +462,105 @@ def cmd_sessions(args) -> None:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
         try:
-            action = args.sessions_cmd or "list"
-            if action == "list":
-                sessions = await client.list_sessions()
-                if not sessions:
-                    print("No active sessions.")
-                    return 0
-                print(f"{'ID':<10}  {'PEER':<22}  {'FROM':<22}  {'AGE':<8}  MODE")
-                for s in sessions:
-                    age = _format_age(s.get("age_seconds", 0))
-                    print(
-                        f"{s['id']:<10}  {s['peer_name']:<22}  "
-                        f"{s['remote_addr']:<22}  {age:<8}  {s['mode']}"
-                    )
+            sessions = await client.list_sessions()
+            if not sessions:
+                print("No active session.")
                 return 0
-            if action == "kill":
-                if args.all:
-                    n = await client.kill_all()
-                    print(f"Killed {n} session(s).")
-                    return 0
-                if not args.id:
-                    print("ERROR: provide an ID or --all", file=sys.stderr)
-                    return 2
-                ok = await client.kill(args.id)
-                if ok:
-                    print(f"Killed session {args.id}.")
-                    return 0
-                print(f"No session matched {args.id!r}.", file=sys.stderr)
-                return 1
-            print(f"ERROR: unknown sessions command {action!r}", file=sys.stderr)
-            return 2
+            print(f"{'PEER':<22}  {'FROM':<22}  {'AGE':<8}  ID")
+            for s in sessions:
+                age = _format_age(s.get("age_seconds", 0))
+                print(
+                    f"{s['peer_name']:<22}  {s['remote_addr']:<22}  "
+                    f"{age:<8}  {s['id']}"
+                )
+            return 0
         finally:
             await client.aclose()
 
     sys.exit(asyncio.run(_run()))
+
+
+def cmd_disconnect(args) -> None:
+    """Kick the active controller off this machine.
+
+    With single-controller enforcement there's at most one session; that
+    one is closed.  The peer remains paired and can reconnect.
+    """
+    try:
+        from opendesk.remote.admin import AdminClient, AdminError
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+    home = Path(args.home).expanduser() if args.home else None
+
+    async def _run() -> int:
+        try:
+            client = await AdminClient.connect(home=home)
+        except AdminError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        try:
+            n = await client.kill_all()
+            if n == 0:
+                print("No active session to disconnect.")
+                return 0
+            print(f"Disconnected the active controller.")
+            return 0
+        finally:
+            await client.aclose()
+
+    sys.exit(asyncio.run(_run()))
+
+
+async def _disconnect_if_active(home, peer_name: str) -> bool:
+    """Best-effort kick of any active session belonging to *peer_name*.
+
+    Used by `peers remove` / `unpair` so revoking trust also drops the
+    in-flight connection.  Returns ``True`` if a session was actually
+    closed.  No-op (returns False) if the admin IPC is unreachable —
+    revocation of trust still succeeded, the peer just won't be kicked
+    until they next try to call something (which will then fail).
+
+    The admin IPC server is one-shot per connection, so list and kill
+    happen over two separate connect cycles.
+    """
+    try:
+        from opendesk.remote.admin import AdminClient
+    except ImportError:
+        return False
+
+    # 1. List sessions to find the right id.
+    try:
+        client = await AdminClient.connect(home=home)
+    except Exception:
+        return False
+    try:
+        sessions = await client.list_sessions()
+    except Exception:
+        sessions = []
+    finally:
+        await client.aclose()
+
+    target_id = None
+    for s in sessions:
+        if s.get("peer_name") == peer_name:
+            target_id = s.get("id")
+            break
+    if target_id is None:
+        return False
+
+    # 2. Fresh connection for the kill op.
+    try:
+        client = await AdminClient.connect(home=home)
+    except Exception:
+        return False
+    try:
+        return await client.kill(target_id)
+    except Exception:
+        return False
+    finally:
+        await client.aclose()
 
 
 def _format_age(seconds: float) -> str:
@@ -379,8 +617,113 @@ def cmd_uninstall_service(args) -> None:
     print("✓ Service uninstalled." if removed else "No opendesk service was installed.")
 
 
+def _do_unpair(store, target: str, home) -> None:
+    """Revoke trust for ``target`` and disconnect any active session.
+
+    Shared between `opendesk unpair <name>` and `opendesk peers remove <name>`.
+    """
+    # Try to look up the friendly name before we mutate trusted-peers, so we
+    # can match it against an active session.
+    entry = store.find_by_name(target)
+    peer_name_for_kick = entry.name if entry else target
+
+    if not store.remove(target):
+        print(f"No peer matched {target!r}.", file=sys.stderr)
+        sys.exit(1)
+
+    kicked = asyncio.run(_disconnect_if_active(home, peer_name_for_kick))
+    if kicked:
+        print(f"Unpaired {target} and disconnected the active session.")
+    else:
+        print(f"Unpaired {target}.")
+
+
+def cmd_app(args) -> None:
+    """Launch the local opendesk app UI (FastAPI + uvicorn)."""
+    try:
+        from opendesk.app.app import run as run_app
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(2)
+    home = Path(args.home).expanduser() if args.home else None
+    try:
+        run_app(
+            home=home, host=args.host, port=args.port,
+            open_browser=not args.no_browser,
+        )
+    except KeyboardInterrupt:
+        sys.exit(0)
+
+
+def cmd_describe(args) -> None:
+    """Read / set / clear the controlled-machine's broadcast description."""
+    try:
+        from opendesk.remote.server import (
+            clear_description, read_description, write_description,
+        )
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+    home = Path(args.home).expanduser() if args.home else None
+    if args.clear:
+        cleared = clear_description(home)
+        print("Description cleared." if cleared else "No description was set.")
+        return
+    if args.text is None:
+        current = read_description(home)
+        if current:
+            print(current)
+        else:
+            print("(no description set)")
+        return
+    write_description(home, args.text)
+    print("Description saved.  Next session will broadcast it.")
+
+
+def cmd_peers_describe(args) -> None:
+    """Set / clear / show the controller's local description-override for a peer."""
+    _, TrustedPeers, _, _, _ = _remote_imports()
+    home = Path(args.home).expanduser() if args.home else None
+    store = TrustedPeers(home)
+
+    if args.clear:
+        if store.clear_description_override(args.name):
+            print(f"Description override for {args.name} cleared.")
+        else:
+            print(f"No peer named {args.name!r}.", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    if args.text is None:
+        peer = store.find_by_name(args.name)
+        if peer is None:
+            print(f"No peer named {args.name!r}.", file=sys.stderr)
+            sys.exit(1)
+        if peer.description_override:
+            print(f"override: {peer.description_override}")
+        if peer.description:
+            print(f"broadcast: {peer.description}")
+        if not (peer.description_override or peer.description):
+            print("(no description yet — the peer hasn't broadcast one and no override is set)")
+        return
+
+    if not store.set_description_override(args.name, args.text):
+        print(f"No peer named {args.name!r}.", file=sys.stderr)
+        sys.exit(1)
+    print(f"Description override saved for {args.name}.")
+
+
+def cmd_unpair(args) -> None:
+    """Revoke a paired peer (and disconnect them if currently active)."""
+    _, TrustedPeers, _, _, _ = _remote_imports()
+    home = Path(args.home).expanduser() if args.home else None
+    store = TrustedPeers(home)
+    _do_unpair(store, args.name, home)
+
+
 def cmd_peers(args) -> None:
-    """List, remove, or rename trusted peers."""
+    """List, remove, rename, or set the default trusted peer."""
     _, TrustedPeers, _, _, _ = _remote_imports()
     home = Path(args.home).expanduser() if args.home else None
     store = TrustedPeers(home)
@@ -391,21 +734,40 @@ def cmd_peers(args) -> None:
         if not peers:
             print("No trusted peers.")
             return
-        print(f"{'NAME':<32}  FINGERPRINT")
+        default = store.get_default()
+        print(f"{'NAME':<24}  {'FINGERPRINT':<22}  DESCRIPTION")
         for p in peers:
-            print(f"{p.name:<32}  {p.fingerprint}")
+            marker = "  [default]" if p.name == default else ""
+            desc = p.effective_description.splitlines()[0] if p.effective_description else ""
+            desc = desc[:80] + "…" if len(desc) > 80 else desc
+            print(f"{p.name:<24}  {p.fingerprint:<22}  {desc}{marker}")
     elif action == "remove":
-        if store.remove(args.target):
-            print(f"Removed {args.target}.")
-        else:
-            print(f"No peer matched {args.target!r}.", file=sys.stderr)
-            sys.exit(1)
+        _do_unpair(store, args.target, home)
     elif action == "rename":
         if store.rename(args.target, args.new_name):
             print(f"Renamed {args.target} → {args.new_name}.")
         else:
             print(f"No peer matched {args.target!r}.", file=sys.stderr)
             sys.exit(1)
+    elif action == "describe":
+        cmd_peers_describe(args)
+        return
+    elif action == "default":
+        if args.clear:
+            cleared = store.clear_default()
+            print("Default peer cleared." if cleared else "No default peer was set.")
+            return
+        if args.name is None:
+            current = store.get_default()
+            if current is None:
+                print("No default peer set.")
+            else:
+                print(current)
+            return
+        if not store.set_default(args.name):
+            print(f"No trusted peer named {args.name!r}.", file=sys.stderr)
+            sys.exit(1)
+        print(f"Default peer is now: {args.name}")
 
 
 def cmd_scheduler(args) -> None:
@@ -474,12 +836,42 @@ def main() -> None:
     pair_p.add_argument("--no-mdns", action="store_true", help="Disable mDNS advertisement")
 
     serve_p = sub.add_parser(
-        "serve", help="Run the long-lived opendesk server (paired peers only)",
+        "serve",
+        help=(
+            "Run the long-lived opendesk server (paired peers only). "
+            "One controller at a time; a different peer trying to connect "
+            "while one is active is rejected with BUSY."
+        ),
     )
     serve_p.add_argument("--port", type=int, default=8423)
     serve_p.add_argument("--host", default="0.0.0.0")
     serve_p.add_argument("--home", default=None)
     serve_p.add_argument("--no-mdns", action="store_true")
+    serve_p.add_argument(
+        "--approve",
+        choices=["auto", "console"],
+        default="auto",
+        help=(
+            "How to gate inbound calls.  auto = allow everything (default, "
+            "safe for paired single-user setups).  console = prompt on stdin "
+            "for non-observation methods (input, fs.write, process.shell, "
+            "etc.).  Console mode requires a TTY; under systemd/launchd "
+            "gated calls are denied."
+        ),
+    )
+    serve_p.add_argument(
+        "--no-audit", action="store_true",
+        help="Don't write audit-log entries to ~/.opendesk/audit/",
+    )
+    serve_p.add_argument(
+        "--log-file", default=None,
+        help=(
+            "Path to a rotating log file (10 MB × 5 backups).  Without this, "
+            "Python logs go to stderr — fine under systemd (journald captures "
+            "them) or launchd (StandardErrorPath is set in the plist), but "
+            "Windows Task Scheduler users may want this."
+        ),
+    )
 
     # --- Remote (controller machine) ----------------------------------
 
@@ -497,20 +889,90 @@ def main() -> None:
     disc_p.add_argument("--timeout", type=float, default=2.0)
 
     conn_p = sub.add_parser("connect", help="Open a paired peer and confirm it works")
-    conn_p.add_argument("peer", help="Friendly name from `opendesk peers list`")
+    conn_p.add_argument(
+        "peer", nargs="?",
+        help="Friendly name from `opendesk peers list`.  Omit to use the persistent default.",
+    )
     conn_p.add_argument("--screenshot", default=None, help="Path to save a captured screenshot")
     conn_p.add_argument("--home", default=None)
 
+    app_p = sub.add_parser(
+        "app",
+        help=(
+            "Launch the local opendesk UI on http://127.0.0.1:8424.  "
+            "Starts an OpendeskServer in the background so this machine "
+            "can be controlled, and lets you control paired hosts from "
+            "the browser."
+        ),
+    )
+    app_p.add_argument("--port", type=int, default=8424)
+    app_p.add_argument("--host", default="127.0.0.1")
+    app_p.add_argument("--home", default=None)
+    app_p.add_argument(
+        "--no-browser", action="store_true",
+        help="Don't auto-open a browser tab.",
+    )
+
+    desc_p = sub.add_parser(
+        "describe",
+        help=(
+            "Read / set / clear the broadcast description of this machine. "
+            "Agents on paired controllers see this on each connect and use "
+            "it to route work (e.g. 'billing machine', 'ERP terminal')."
+        ),
+    )
+    desc_p.add_argument("text", nargs="?", help="New description; omit to show current.")
+    desc_p.add_argument("--clear", action="store_true", help="Remove the description.")
+    desc_p.add_argument("--home", default=None)
+
+    chk_p = sub.add_parser(
+        "check",
+        help="Verify platform permissions (macOS Accessibility / Screen Recording)",
+    )
+    chk_p.add_argument(
+        "--open", action="store_true",
+        help="Open the System Settings pane for the first missing permission.",
+    )
+    chk_p.add_argument(
+        "--no-open", action="store_true",
+        help="Override --open; only print the report.",
+    )
+
+    aud_p = sub.add_parser(
+        "audit",
+        help="Print the server-side audit log (controlled machine)",
+    )
+    aud_p.add_argument("--date", default=None, help="YYYY-MM-DD (default: today)")
+    aud_p.add_argument("--peer", default=None, help="Filter by peer name or fingerprint substring")
+    aud_p.add_argument("--limit", type=int, default=None, help="Show only the most recent N entries")
+    aud_p.add_argument(
+        "--follow", "-f", action="store_true",
+        help="Stream new entries as they're written (like tail -f)",
+    )
+    aud_p.add_argument("--home", default=None)
+
     sess_p = sub.add_parser(
         "sessions",
-        help="Inspect or kill active opendesk-serve sessions (controlled machine)",
+        help="Show the active controller session (controlled machine)",
     )
-    sess_sub = sess_p.add_subparsers(dest="sessions_cmd")
-    sess_sub.add_parser("list", help="List active sessions (default action)")
-    kill_p = sess_sub.add_parser("kill", help="Disconnect one or all sessions")
-    kill_p.add_argument("id", nargs="?", help="Session ID from `sessions list`")
-    kill_p.add_argument("--all", action="store_true", help="Disconnect every session")
     sess_p.add_argument("--home", default=None)
+
+    disc_p = sub.add_parser(
+        "disconnect",
+        help=(
+            "Ask the active controller to leave (cooperative; sends "
+            "session.evicted PUSH and closes).  Peer stays paired.  For "
+            "enforced kicks of misbehaving peers use `opendesk unpair`."
+        ),
+    )
+    disc_p.add_argument("--home", default=None)
+
+    unp_p = sub.add_parser(
+        "unpair",
+        help="Revoke a paired controller (and disconnect them if active)",
+    )
+    unp_p.add_argument("name", help="Friendly name from `opendesk peers list`")
+    unp_p.add_argument("--home", default=None)
 
     inst_p = sub.add_parser(
         "install-service",
@@ -528,15 +990,41 @@ def main() -> None:
         help="Remove the opendesk serve system service",
     )
 
-    peers_p = sub.add_parser("peers", help="List, remove, or rename trusted peers")
+    peers_p = sub.add_parser("peers", help="List, remove, rename, or set default trusted peer")
+    peers_p.add_argument("--home", default=None)
     peers_sub = peers_p.add_subparsers(dest="peers_cmd")
-    peers_sub.add_parser("list", help="List trusted peers (default action)")
+    list_p = peers_sub.add_parser("list", help="List trusted peers (default action)")
+    list_p.add_argument("--home", default=None)
     rm_p = peers_sub.add_parser("remove", help="Forget a trusted peer")
     rm_p.add_argument("target", help="Peer name or fingerprint")
+    rm_p.add_argument("--home", default=None)
     ren_p = peers_sub.add_parser("rename", help="Rename a trusted peer")
     ren_p.add_argument("target")
     ren_p.add_argument("new_name")
-    peers_p.add_argument("--home", default=None)
+    ren_p.add_argument("--home", default=None)
+    def_p = peers_sub.add_parser(
+        "default",
+        help=(
+            "Get / set / clear the persistent default peer.  When set, "
+            "`opendesk connect` without an argument and the MCP server's "
+            "implicit default both resolve to this peer."
+        ),
+    )
+    def_p.add_argument("name", nargs="?", help="Peer name to set as default; omit to show current.")
+    def_p.add_argument("--clear", action="store_true", help="Remove the default-peer setting.")
+    def_p.add_argument("--home", default=None)
+    pdesc_p = peers_sub.add_parser(
+        "describe",
+        help=(
+            "Set / clear / show a controller-side description override for a "
+            "trusted peer.  When set, this overrides whatever the peer "
+            "broadcasts on connect."
+        ),
+    )
+    pdesc_p.add_argument("name", help="Peer name from `opendesk peers list`")
+    pdesc_p.add_argument("text", nargs="?", help="New override; omit to show current.")
+    pdesc_p.add_argument("--clear", action="store_true", help="Remove the override.")
+    pdesc_p.add_argument("--home", default=None)
 
     args = parser.parse_args()
 
@@ -560,6 +1048,18 @@ def main() -> None:
         cmd_peers(args)
     elif args.command == "sessions":
         cmd_sessions(args)
+    elif args.command == "disconnect":
+        cmd_disconnect(args)
+    elif args.command == "unpair":
+        cmd_unpair(args)
+    elif args.command == "audit":
+        cmd_audit(args)
+    elif args.command == "check":
+        cmd_check(args)
+    elif args.command == "describe":
+        cmd_describe(args)
+    elif args.command == "app":
+        cmd_app(args)
     elif args.command == "install-service":
         cmd_install_service(args)
     elif args.command == "uninstall-service":

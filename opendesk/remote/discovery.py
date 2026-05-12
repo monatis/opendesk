@@ -39,13 +39,20 @@ def _require_zeroconf():
 
 @dataclass
 class DiscoveredPeer:
-    """One peer advertising itself on the LAN."""
+    """One peer advertising itself on the LAN.
+
+    ``description`` carries whatever short label the controlled machine
+    broadcasts via the ``desc`` TXT record — typically a truncated copy of
+    its full ``opendesk describe …`` text.  Empty if the peer hasn't set
+    one.
+    """
 
     name: str
     host: str
     port: int
     public_key: bytes
     fingerprint: str = ""
+    description: str = ""
 
     @property
     def url(self) -> str:
@@ -75,16 +82,25 @@ class Advertisement:
             await self._azc.async_close()
 
 
+_DESC_TXT_MAX = 120  # bytes; mDNS TXT records have a hard ~255-byte cap per entry
+
+
 async def advertise(
     *,
     name: str,
     port: int,
     public_key: bytes,
     host_ips: Optional[list[str]] = None,
+    description: str = "",
 ) -> Advertisement:
     """Register an opendesk service on the LAN via mDNS.
 
     Returns an :class:`Advertisement` whose ``aclose()`` retracts the record.
+
+    The ``description`` is published as a ``desc`` TXT record, truncated to
+    :data:`_DESC_TXT_MAX` bytes (UTF-8) so it stays within mDNS limits.  The
+    full description still flows over the HELLO frame after pairing — the
+    TXT record's job is to surface a short tag at discovery time.
     """
     _, AsyncServiceInfo, AsyncZeroconf = _require_zeroconf()
 
@@ -94,6 +110,14 @@ async def advertise(
 
     fp = ":".join(public_key.hex()[i : i + 4] for i in range(0, 16, 4))
     properties = {b"v": b"1", b"pk": public_key, b"fp": fp.encode("ascii")}
+    if description:
+        encoded = description.encode("utf-8")[:_DESC_TXT_MAX]
+        # Avoid leaving a half-character at the boundary.
+        try:
+            encoded = encoded.decode("utf-8").encode("utf-8")
+        except UnicodeDecodeError:
+            encoded = encoded[:-1].decode("utf-8", errors="ignore").encode("utf-8")
+        properties[b"desc"] = encoded
 
     azc = AsyncZeroconf()
     info = AsyncServiceInfo(
@@ -168,6 +192,7 @@ def _info_to_peer(info) -> Optional[DiscoveredPeer]:
     if not pk or len(pk) != 32:
         return None
     fp = (props.get(b"fp") or b"").decode("ascii", errors="replace")
+    desc = (props.get(b"desc") or b"").decode("utf-8", errors="replace")
     # Prefer IPv4 for v1.
     host = None
     for addr in info.parsed_addresses() if hasattr(info, "parsed_addresses") else []:
@@ -183,7 +208,7 @@ def _info_to_peer(info) -> Optional[DiscoveredPeer]:
         name = name[: -len("." + SERVICE_TYPE)]
     return DiscoveredPeer(
         name=name, host=host, port=info.port or 0,
-        public_key=bytes(pk), fingerprint=fp,
+        public_key=bytes(pk), fingerprint=fp, description=desc,
     )
 
 

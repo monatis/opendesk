@@ -460,10 +460,16 @@ class Capability(str, enum.Enum):
 
 
 class CapabilityManifest(BaseModel):
-    """What a Computer can do, plus any quantitative limits.
+    """What a Computer can do, plus any quantitative limits, plus a free-text
+    description of *what this machine is for*.
 
     ``limits`` is an open-ended dict keyed by capability name — backends use it
     to advertise things like ``{"display.stream": {"max_fps": 30}}``.
+
+    ``description`` is a free-text label set by the controlled-machine operator
+    (``opendesk describe …``) and broadcast on every HELLO frame.  Agents on
+    the controller use it to route work to the right peer ("billing machine",
+    "ERP terminal", "render box").  May be empty.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -472,6 +478,7 @@ class CapabilityManifest(BaseModel):
     limits: dict[str, dict[str, Any]] = Field(default_factory=dict)
     protocol_version: str = "0.1"
     backend: str = "unknown"
+    description: str = ""
 
     def has(self, cap: Capability) -> bool:
         return cap in self.capabilities

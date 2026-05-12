@@ -165,6 +165,19 @@ With exactly one paired peer the agent doesn't have to specify anything —
 it becomes the implicit default. With multiple, the agent must pick
 explicitly (no silent fallback).
 
+**One controller at a time.** Pair as many machines as you like, but only
+one drives the desktop at a time — a second peer trying to connect while
+one is active gets a clean `BUSY` error. Same peer reconnecting bumps
+the previous session (no waiting out a stale TCP). Two ways to free the
+slot from the controlled machine:
+
+- `opendesk disconnect` — **cooperative**. Server asks the controller to
+  leave via a `session.evicted` PUSH; a cooperative client (the in-tree
+  `RemoteComputer`) suppresses its auto-reconnect and raises
+  `SessionEvicted`. Trust is preserved.
+- `opendesk unpair <name>` — **enforced**. Revokes trust + closes the
+  session; next reconnect fails authentication.
+
 **Security model:** pairing exchanges long-lived X25519 keypairs via a 6-digit
 code-authenticated handshake (PBKDF2-stretched, ~CPU-month to brute force).
 Subsequent connections use mutual static-key authentication. Every frame is

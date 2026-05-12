@@ -243,13 +243,24 @@ class Peer:
         *,
         principal: str = "",
         auth: Optional[dict[str, Any]] = None,
+        error: Optional[ErrorInfo] = None,
     ) -> HelloFrame:
-        """Exchange HELLO frames.  Must be called before :meth:`start`."""
+        """Exchange HELLO frames.  Must be called before :meth:`start`.
+
+        Pass ``error`` (e.g. ``ErrorInfo(code=ErrorCode.BUSY.value, ...)``)
+        when the server has accepted the connection at the protocol level
+        but is rejecting it at the application level — the client's
+        :meth:`hello` will raise the corresponding :class:`ProtocolError`.
+
+        Raises :class:`ProtocolError` if the *peer's* HELLO carries an error
+        field, so callers don't have to inspect it manually.
+        """
         await self._send_frame(HelloFrame(
             role=self._role,  # type: ignore[arg-type]
             principal=principal,
             auth=auth or {},
             capabilities=capabilities or {},
+            error=error,
         ))
         try:
             data = await self._conn.recv()
@@ -262,6 +273,10 @@ class Peer:
                 f"expected HELLO, got {frame.type!r}",
             )
         self._peer_hello = frame
+        if frame.error is not None:
+            raise ProtocolError(
+                frame.error.code, frame.error.message, frame.error.details,
+            )
         return frame
 
     def start(self) -> None:

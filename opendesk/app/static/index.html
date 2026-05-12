@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>opendesk</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<header class="top">
+    <div class="brand" id="brand" title="Back to start">
+        <span class="logo">◐</span> opendesk
+    </div>
+    <div class="mode-switcher" id="mode-switcher" style="display: none;">
+        <button data-mode="hosting">Hosting</button>
+        <button data-mode="controlling">Controlling</button>
+    </div>
+    <div class="identity" id="identity">
+        <span class="muted">loading…</span>
+    </div>
+</header>
+
+<main id="root" class="container">
+    <!-- View switches based on state.  Templates rendered by app.js. -->
+    <div class="loader">loading…</div>
+</main>
+
+<!-- Templates --------------------------------------------------------- -->
+
+<template id="tpl-welcome">
+    <section class="welcome">
+        <h1>Welcome to opendesk</h1>
+        <p class="muted">
+            This machine isn't paired with anyone yet.  Pick a side to start.
+        </p>
+        <div class="cards">
+            <div class="card big" data-action="begin-pair">
+                <h2>Let another machine control this one</h2>
+                <p>Generates a 6-digit code to share with the controller.</p>
+                <button class="primary">Generate code</button>
+            </div>
+            <div class="card big" data-action="go-controlling">
+                <h2>Control another machine</h2>
+                <p>Discover peers on the LAN, or type a 6-digit code to pair.</p>
+                <button class="primary">Go to controlling</button>
+            </div>
+        </div>
+    </section>
+</template>
+
+<template id="tpl-pairing">
+    <section class="pairing-active">
+        <h1>Pairing</h1>
+        <p class="muted">On the controller, run:</p>
+        <pre class="code-hint"><code>opendesk pair-with &lt;this-host&gt; <span class="code-strong" id="code-cmd"></span></code></pre>
+        <div class="bigcode" id="bigcode">000000</div>
+        <p class="muted">…or just enter the code below in the controller's UI.</p>
+        <button class="ghost" data-action="cancel-pair">Cancel pairing</button>
+    </section>
+</template>
+
+<template id="tpl-main">
+    <div class="grid">
+        <!-- ====================================================== -->
+        <!-- HOSTING panel -->
+        <!-- ====================================================== -->
+        <section class="panel" id="panel-hosting">
+            <header>
+                <h2>Hosting</h2>
+                <span class="muted">this machine being controlled</span>
+            </header>
+
+            <div class="block" id="active-session-block">
+                <h3>Active controller</h3>
+                <div id="active-session">
+                    <p class="muted">No one is connected.</p>
+                </div>
+            </div>
+
+            <div class="block">
+                <h3>Description</h3>
+                <p class="muted small">
+                    A short label agents see when they look at this machine.
+                </p>
+                <textarea id="self-description" placeholder="e.g. ERP terminal — SAP installed"></textarea>
+                <div class="row gap">
+                    <button class="primary" data-action="save-description">Save</button>
+                    <button class="ghost" data-action="clear-description">Clear</button>
+                </div>
+            </div>
+
+            <div class="block">
+                <h3>Trusted controllers</h3>
+                <div id="trusted-peers">
+                    <p class="muted">None paired.</p>
+                </div>
+                <div class="row gap">
+                    <button class="primary" data-action="begin-pair">Allow new pairing</button>
+                    <button id="btn-unpair-all" class="danger ghost" data-action="unpair-all" style="display: none;">Unpair all</button>
+                </div>
+            </div>
+
+            <div class="block">
+                <h3>Recent activity</h3>
+                <div id="audit-table">
+                    <p class="muted small">loading…</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ====================================================== -->
+        <!-- CONTROLLING panel -->
+        <!-- ====================================================== -->
+        <section class="panel" id="panel-controlling">
+            <header>
+                <h2>Controlling</h2>
+                <span class="muted">drive another machine</span>
+            </header>
+
+            <div class="block">
+                <h3>Paired hosts</h3>
+                <div id="paired-hosts">
+                    <p class="muted">No hosts paired.</p>
+                </div>
+            </div>
+
+            <div class="block">
+                <h3>Pair with a new host</h3>
+                <div class="row gap">
+                    <input type="text" id="pair-host" placeholder="hostname or IP">
+                    <input type="text" id="pair-code" maxlength="6" placeholder="6-digit code">
+                    <input type="text" id="pair-name" placeholder="local name (optional)">
+                    <button class="primary" data-action="pair-with">Pair</button>
+                </div>
+            </div>
+
+            <div class="block">
+                <h3>Discovered on LAN</h3>
+                <div id="discovered">
+                    <p class="muted">Click "Refresh" to scan.</p>
+                </div>
+                <button class="ghost" data-action="discover">Refresh</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Control panel when an outbound is active -->
+    <!-- ============================================================ -->
+    <section class="panel wide" id="panel-control" style="display: none;">
+        <header>
+            <h2>Controlling <span id="control-peer" class="peer-name"></span></h2>
+            <div class="row gap">
+                <button class="ghost" data-action="stop-controlling">Disconnect</button>
+            </div>
+        </header>
+        <div class="screen-wrapper">
+            <img id="screen" alt="remote screen" />
+            <div id="screen-status" class="muted small"></div>
+        </div>
+        <div class="control-extras">
+            <input type="text" id="type-input" placeholder="type text and press Enter to send"/>
+            <div class="row gap">
+                <button class="ghost" data-key="return">Enter</button>
+                <button class="ghost" data-key="escape">Esc</button>
+                <button class="ghost" data-key="tab">Tab</button>
+                <button class="ghost" data-key="backspace">⌫</button>
+            </div>
+        </div>
+    </section>
+
+</template>
+
+<template id="tpl-peer-row">
+    <div class="peer-row">
+        <div class="peer-main">
+            <div class="peer-name"></div>
+            <div class="peer-meta muted small"></div>
+            <div class="peer-desc muted small"></div>
+        </div>
+        <div class="peer-actions row gap"></div>
+    </div>
+</template>
+
+<script src="/static/app.js" type="module"></script>
+</body>
+</html>

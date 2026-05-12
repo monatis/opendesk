@@ -85,9 +85,16 @@ remote = [
     "zeroconf>=0.140",
 ]
 
+# Local UI — `opendesk app` (FastAPI + uvicorn).
+app = [
+    "opendesk[remote]",
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+]
+
 # Everything
 all = [
-    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule,remote]",
+    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule,remote,app]",
 ]
 
 [project.scripts]
