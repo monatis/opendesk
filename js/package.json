@@ -12,39 +12,34 @@
     }
   },
   "bin": {
-    "opendesk-js": "./bin/opendesk.js"
+    "opendesk-js": "./bin/opendesk.js",
+    "opendesk-js-mcp": "./bin/opendesk-mcp.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit"
   },
-  "files": [
-    "dist",
-    "bin",
-    "README.md"
-  ],
-  "keywords": [
-    "opendesk",
-    "computer-use",
-    "desktop-automation",
-    "mcp",
-    "ai-agent"
-  ],
+  "files": ["dist", "bin", "README.md"],
+  "keywords": ["opendesk", "computer-use", "desktop-automation", "mcp", "ai-agent"],
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@nut-tree-fork/nut-js": "^4.2.0",
+    "clipboardy": "^4.0.0",
+    "node-cron": "^3.0.0",
+    "screenshot-desktop": "^1.15.0",
+    "tesseract.js": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/node-cron": "^3.0.0",
     "typescript": "^5.4.0"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "engines": { "node": ">=18.0.0" },
   "repository": {
     "type": "git",
     "url": "https://github.com/vitalops/opendesk",
-    "directory": "packages/js"
+    "directory": "js"
   }
 }

@@ -7,7 +7,7 @@ Pick your language:
 | Package | `opendesk` (PyPI) | `@opendesk/sdk` (npm) |
 | Install | `pip install 'opendesk[core,mcp]'` | `npm install @opendesk/sdk` |
 | MCP register | `opendesk install` | `npx opendesk-js install` |
-| Requires | Python 3.10+ | Node.js 18+ + Python opendesk |
+| Requires | Python 3.10+ | Node.js 18+ |
 
 ---
 
@@ -114,13 +114,11 @@ ctx = ToolContext(session_id="restricted")
 
 ## JavaScript / TypeScript
 
-> Requires the Python `opendesk-mcp` server to be installed and on PATH.
-> The JS SDK spawns it automatically.
+No Python required. All desktop automation runs natively in Node.js.
 
 ### Install
 
 ```bash
-pip install 'opendesk[core,mcp]'   # Python backend (required)
 npm install @opendesk/sdk
 ```
 
@@ -137,12 +135,8 @@ npx opendesk-js uninstall   # to remove
 import { OpenDeskClient } from "@opendesk/sdk";
 
 const client = new OpenDeskClient();
-await client.connect();
-
 const result = await client.screenshot({ marks: true });
 console.log(result.output);
-
-await client.disconnect();
 ```
 
 ### 2. Click a button by name
@@ -154,7 +148,7 @@ await client.ui({ action: "click", app: "TextEdit", title: "File" });
 ### 3. Type text
 
 ```typescript
-await client.keyboard({ action: "type", text: "Hello from JS 🌍" });
+await client.keyboard({ action: "type", text: "Hello from JS" });
 await client.keyboard({ action: "press", key: "enter" });
 ```
 
@@ -166,8 +160,6 @@ import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 
 const client = new OpenDeskClient();
-await client.connect();
-
 const shot = await client.screenshot({ marks: true });
 
 const { text } = await generateText({
@@ -177,30 +169,31 @@ const { text } = await generateText({
       role: "user",
       content: [
         { type: "text", text: "Click the most prominent button on screen." },
-        { type: "image", image: Buffer.from(shot.attachments[0].contentBase64, "base64") },
+        { type: "image", image: shot.attachments[0].content },
       ],
     },
   ],
 });
-
-await client.disconnect();
 ```
 
-### 5. MCP bridge server (Node.js)
+### 5. Native MCP server (Node.js)
 
 ```typescript
-import { createMcpBridge } from "@opendesk/sdk";
+import { createMcpServer } from "@opendesk/sdk";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-const server = await createMcpBridge();
+const server = createMcpServer();
 await server.connect(new StdioServerTransport());
 ```
 
-### 6. Custom Python path
+### 6. Custom session or permission handler
 
 ```typescript
 const client = new OpenDeskClient({
-  command: "/path/to/venv/bin/opendesk-mcp",
+  sessionId: "my-session",
+  permissionHandler: async (tool, action, description) => {
+    console.log(`Allow: ${description}`);
+  },
 });
 ```
 

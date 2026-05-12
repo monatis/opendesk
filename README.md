@@ -50,7 +50,6 @@ Open Spotify and play lo-fi beats
 ### JavaScript / TypeScript
 
 ```bash
-pip install 'opendesk[core,mcp]'   # Python backend (required)
 npm install @opendesk/sdk
 npx opendesk-js install
 ```
@@ -59,10 +58,8 @@ npx opendesk-js install
 import { OpenDeskClient } from "@opendesk/sdk";
 
 const client = new OpenDeskClient();
-await client.connect();
 await client.screenshot({ marks: true });
 await client.ui({ action: "click", app: "Safari", title: "Go" });
-await client.disconnect();
 ```
 
 ---

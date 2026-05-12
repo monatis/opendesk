@@ -2,14 +2,13 @@
 
 Give any JavaScript or TypeScript AI agent eyes and hands on your desktop.
 
-The JS SDK is a typed bridge to the Python `opendesk-mcp` server. All desktop automation runs in the Python layer — the JS SDK gives you full type safety and a clean API for use in Node.js agent loops.
+No Python required. All desktop automation runs natively in Node.js — screenshot capture, mouse/keyboard control, accessibility APIs, OCR, clipboard, and audit logging.
 
 ---
 
 ## Requirements
 
 - Node.js 18+
-- Python `opendesk` installed: `pip install 'opendesk[core,mcp]'`
 
 ---
 
@@ -25,7 +24,7 @@ npm install @opendesk/sdk
 npx opendesk-js install
 ```
 
-This registers the JS MCP bridge with Claude Code. From that point the same tools (`screenshot`, `mouse`, `keyboard`, `ui`, etc.) are available in every Claude Code conversation.
+This registers the native MCP server with Claude Code. The tools (`screenshot`, `mouse`, `keyboard`, `ui`, etc.) are then available in every Claude Code conversation.
 
 To remove:
 
@@ -35,14 +34,14 @@ npx opendesk-js uninstall
 
 ### Claude Desktop
 
-Add to your config file:
+Add to your config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
   "mcpServers": {
     "opendesk": {
       "command": "node",
-      "args": ["/path/to/node_modules/@opendesk/sdk/bin/opendesk-mcp-bridge.js"]
+      "args": ["/path/to/node_modules/@opendesk/sdk/bin/opendesk-mcp.js"]
     }
   }
 }
@@ -58,7 +57,6 @@ Add to your config file:
 import { OpenDeskClient } from "@opendesk/sdk";
 
 const client = new OpenDeskClient();
-await client.connect();
 
 // Take a screenshot with Set-of-Marks
 const shot = await client.screenshot({ marks: true });
@@ -82,8 +80,6 @@ const text = await client.ocr({ region: [0, 0, 800, 400] });
 
 // Show audit log
 const log = await client.audit({ format: "summary" });
-
-await client.disconnect();
 ```
 
 ### With Vercel AI SDK
@@ -94,9 +90,7 @@ import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 
 const client = new OpenDeskClient();
-await client.connect();
 
-// Use opendesk tools inside your agent loop
 const shot = await client.screenshot({ marks: true });
 const response = await generateText({
   model: anthropic("claude-opus-4-6"),
@@ -105,33 +99,36 @@ const response = await generateText({
       role: "user",
       content: [
         { type: "text", text: "What do you see on screen? Click the most prominent button." },
-        { type: "image", image: Buffer.from(shot.attachments[0].contentBase64, "base64") },
+        { type: "image", image: shot.attachments[0].content },
       ],
     },
   ],
 });
-
-await client.disconnect();
 ```
 
-### MCP bridge server
-
-If you want to serve opendesk tools from a Node.js process:
+### Expose as MCP server
 
 ```typescript
-import { createMcpBridge } from "@opendesk/sdk";
+import { createMcpServer } from "@opendesk/sdk";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-const server = await createMcpBridge();
+const server = createMcpServer();
 const transport = new StdioServerTransport();
 await server.connect(transport);
 ```
 
-### Custom Python server path
+### Custom session ID or permission handler
 
 ```typescript
+import { OpenDeskClient } from "@opendesk/sdk";
+
 const client = new OpenDeskClient({
-  command: "/path/to/venv/bin/opendesk-mcp",
+  sessionId: "my-agent-session",
+  permissionHandler: async (tool, action, description) => {
+    console.log(`Allow ${description}? [y/n]`);
+    // return true to allow, false to deny
+    return true;
+  },
 });
 ```
 
@@ -139,7 +136,7 @@ const client = new OpenDeskClient({
 
 ## Tools
 
-All tools mirror the Python SDK exactly. Full reference: [docs/tools.md](../docs/tools.md)
+Full reference: [docs/tools.md](../docs/tools.md)
 
 | Tool | Method | Description |
 |------|--------|-------------|
@@ -150,8 +147,6 @@ All tools mirror the Python SDK exactly. Full reference: [docs/tools.md](../docs
 | `app` | `client.app(params)` | Open, close, focus applications |
 | `clipboard` | `client.clipboard(params)` | Read/write system clipboard |
 | `ocr` | `client.ocr(params?)` | Extract text from screen |
-| `learn` | `client.learn(params)` | Record and replay workflows |
-| `schedule` | `client.schedule(params)` | Schedule computer-use tasks |
 | `audit` | `client.audit(params?)` | Show session audit log |
 
 ---
@@ -161,21 +156,18 @@ All tools mirror the Python SDK exactly. Full reference: [docs/tools.md](../docs
 ```
 Your JS/TS code
       │
-      │  MCP protocol over stdio
       ▼
 @opendesk/sdk (Node.js)
       │
-      │  spawns + communicates via stdio
-      ▼
-opendesk-mcp (Python process)
-      │
-      ├── screenshot, OCR, SoM marks
-      ├── mouse, keyboard (pyautogui)
-      ├── accessibility API (AppleScript / AT-SPI2 / UI Automation)
-      └── learn, schedule, audit
+      ├── screenshot  (screenshot-desktop)
+      ├── mouse/keyboard  (@nut-tree-fork/nut-js)
+      ├── ui  (osascript / PowerShell UI Automation / xdotool)
+      ├── ocr  (tesseract.js)
+      ├── clipboard  (clipboardy)
+      └── audit  (in-process session log)
 ```
 
-The Python process owns all platform-specific desktop automation. The JS SDK is a typed MCP client — no platform code lives in JS.
+All platform-specific automation runs directly in Node.js. No external process is required.
 
 ---
 

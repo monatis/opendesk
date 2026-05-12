@@ -23,14 +23,15 @@ function findClaude(): string {
     "Install Claude Code first: https://claude.ai/code"
   );
 }
-function findBridgeBin(): string {
+function findMcpBin(): string {
   const thisFile = fileURLToPath(import.meta.url);
   const pkgRoot = path.resolve(path.dirname(thisFile), "..");
-  return path.join(pkgRoot, "bin", "opendesk-mcp-bridge.js");
+  return path.join(pkgRoot, "bin", "opendesk-mcp.js");
 }
+
 export function install(scope: "user" | "project" = "user"): void {
   const claude = findClaude();
-  const bridgeBin = findBridgeBin();
+  const mcpBin = findMcpBin();
 
   // Remove existing entry if any
   try {
@@ -39,19 +40,19 @@ export function install(scope: "user" | "project" = "user"): void {
     // Not registered yet — fine
   }
 
-execFileSync(
+  execFileSync(
     claude,
-    ["mcp", "add", "opendesk-js", `--scope=${scope}`, "--", "node", bridgeBin],
+    ["mcp", "add", "opendesk-js", `--scope=${scope}`, "--", "node", mcpBin],
     { stdio: "inherit", shell: process.platform === "win32" }
-);
+  );
 
-  console.log(`opendesk JS MCP bridge registered (${scope}).`);
-  console.log(`  Bridge: ${bridgeBin}`);
+  console.log(`opendesk JS MCP server registered (${scope}).`);
+  console.log(`  Server: ${mcpBin}`);
   console.log("Start a Claude Code conversation and say 'take a screenshot' to verify.");
 }
 
 export function uninstall(): void {
   const claude = findClaude();
   execFileSync(claude, ["mcp", "remove", "opendesk-js"], { stdio: "inherit", shell: process.platform === "win32" });
-  console.log("opendesk JS MCP bridge removed from Claude Code.");
+  console.log("opendesk JS MCP server removed from Claude Code.");
 }
