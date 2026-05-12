@@ -127,17 +127,17 @@ export class OpenDeskClient {
 
   /** Control the mouse — click, scroll, drag, move, etc. */
   mouse(params: MouseParams): Promise<ToolResult> {
-    return this.call("mouse", params as Record<string, unknown>);
+    return this.call("mouse", params as unknown as Record<string, unknown>);
   }
 
   /** Simulate keyboard input — type, press, hotkey, hold. */
   keyboard(params: KeyboardParams): Promise<ToolResult> {
-    return this.call("keyboard", params as Record<string, unknown>);
+    return this.call("keyboard", params as unknown as Record<string, unknown>);
   }
 
   /** Open, close, focus, or list applications. */
   app(params: AppParams): Promise<ToolResult> {
-    return this.call("app", params as Record<string, unknown>);
+    return this.call("app", params as unknown as Record<string, unknown>);
   }
 
   /**
@@ -145,32 +145,32 @@ export class OpenDeskClient {
    * Prefer this over mouse coordinates wherever possible.
    */
   ui(params: UIParams): Promise<ToolResult> {
-    return this.call("ui", params as Record<string, unknown>);
+    return this.call("ui", params as unknown as Record<string, unknown>);
   }
 
   /** Read or write the system clipboard. */
   clipboard(params: ClipboardParams): Promise<ToolResult> {
-    return this.call("clipboard", params as Record<string, unknown>);
+    return this.call("clipboard", params as unknown as Record<string, unknown>);
   }
 
   /** Extract text from the screen or a screen region via OCR. */
   ocr(params: OcrParams = {}): Promise<ToolResult> {
-    return this.call("ocr", params as Record<string, unknown>);
+    return this.call("ocr", params as unknown as Record<string, unknown>);
   }
 
   /** Record a workflow once, then replay it on demand. */
   learn(params: LearnParams): Promise<ToolResult> {
-    return this.call("learn", params as Record<string, unknown>);
+    return this.call("learn", params as unknown as Record<string, unknown>);
   }
 
   /** Schedule a computer-use task to run at a specific time. */
   schedule(params: ScheduleParams): Promise<ToolResult> {
-    return this.call("schedule", params as Record<string, unknown>);
+    return this.call("schedule", params as unknown as Record<string, unknown>);
   }
 
   /** Show the session audit log. */
   audit(params: AuditParams = {}): Promise<ToolResult> {
-    return this.call("audit", params as Record<string, unknown>);
+    return this.call("audit", params as unknown as Record<string, unknown>);
   }
 
   // ---------------------------------------------------------------------------

@@ -8,8 +8,13 @@
  *   mcp                              — run the MCP bridge server over stdio
  */
 
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { install, uninstall } from "../dist/install.js";
 import { runBridgeStdio } from "../dist/mcp.js";
+
+const binDir = path.dirname(fileURLToPath(import.meta.url));
+const bridgeBin = path.join(binDir, "opendesk-mcp-bridge.js");
 
 const [, , command, ...rest] = process.argv;
 
@@ -17,7 +22,7 @@ switch (command) {
   case "install": {
     const scopeArg = rest.find((a) => a.startsWith("--scope="));
     const scope = scopeArg ? scopeArg.split("=")[1] : "user";
-    install(scope);
+    install(scope, bridgeBin);
     break;
   }
   case "uninstall":
