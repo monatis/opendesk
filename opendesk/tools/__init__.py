@@ -1,6 +1,7 @@
 """opendesk.tools — all built-in computer use tools."""
 
 from opendesk.tools.app import AppTool
+from opendesk.tools.audit import AuditTool
 from opendesk.tools.clipboard import ClipboardTool
 from opendesk.tools.keyboard import KeyboardTool
 from opendesk.tools.mouse import MouseTool
@@ -10,6 +11,7 @@ from opendesk.tools.ui import UITool
 
 __all__ = [
     "AppTool",
+    "AuditTool",
     "ClipboardTool",
     "KeyboardTool",
     "MouseTool",

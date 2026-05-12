@@ -66,6 +66,7 @@ def create_registry() -> ToolRegistry:
     - ``clipboard``  — read / write system clipboard
     - ``ocr``        — extract text via pytesseract / Vision / WinRT
     - ``learn``      — record and replay computer tasks
+    - ``audit``      — show the session audit log inside any MCP/agent session
     """
     from opendesk.tools.screenshot import ScreenshotTool
     from opendesk.tools.mouse import MouseTool
@@ -75,6 +76,7 @@ def create_registry() -> ToolRegistry:
     from opendesk.tools.clipboard import ClipboardTool
     from opendesk.tools.ocr import OCRTool
     from opendesk.tools.automation import LearnTool, ScheduleTool
+    from opendesk.tools.audit import AuditTool
 
     registry = ToolRegistry()
     for tool_cls in (
@@ -87,6 +89,7 @@ def create_registry() -> ToolRegistry:
         OCRTool,
         LearnTool,
         ScheduleTool,
+        AuditTool,
     ):
         registry.register(tool_cls())
 
