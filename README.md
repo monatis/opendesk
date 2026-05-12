@@ -8,7 +8,8 @@ Opendesk is a computer use framework that lets AI agents navigate your computer 
 
 **macOS · Linux · Windows**
 
-[![PyPI](https://img.shields.io/pypi/v/opendesk)](https://pypi.org/project/opendesk/)
+[![PyPI](https://img.shields.io/pypi/v/opendesk?label=pypi%20opendesk)](https://pypi.org/project/opendesk/)
+[![npm](https://img.shields.io/npm/v/@abhijithneilabraham/opendesk-sdk?label=npm%20opendesk-sdk)](https://www.npmjs.com/package/@abhijithneilabraham/opendesk-sdk)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
