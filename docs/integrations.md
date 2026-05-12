@@ -324,3 +324,108 @@ sandbox = get_sandbox("restricted")
 print(sandbox.summary())
 log = sandbox.export_audit_log()  # list of dicts
 ```
+
+---
+
+## JavaScript / TypeScript SDK
+
+The `@opendesk/sdk` npm package provides a typed Node.js bridge to the Python `opendesk-mcp` server.
+All desktop automation runs in Python — the JS SDK is a typed MCP client.
+
+Full JS documentation: [../js/README.md](../../js/README.md)
+
+### Install
+
+```bash
+npm install @opendesk/sdk
+```
+
+### Claude Code / Claude Desktop
+
+```bash
+npx opendesk-js install        # register JS MCP bridge
+npx opendesk-js uninstall      # remove
+```
+
+Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "opendesk": {
+      "command": "node",
+      "args": ["/path/to/node_modules/@opendesk/sdk/bin/opendesk-mcp-bridge.js"]
+    }
+  }
+}
+```
+
+### Programmatic usage
+
+```typescript
+import { OpenDeskClient } from "@opendesk/sdk";
+
+const client = new OpenDeskClient();
+await client.connect();
+
+await client.screenshot({ marks: true });
+await client.ui({ action: "click", app: "Safari", title: "Go" });
+await client.keyboard({ action: "type", text: "Hello" });
+
+await client.disconnect();
+```
+
+### MCP bridge server
+
+```typescript
+import { createMcpBridge } from "@opendesk/sdk";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+const server = await createMcpBridge();
+await server.connect(new StdioServerTransport());
+```
+
+### With Vercel AI SDK
+
+```typescript
+import { OpenDeskClient } from "@opendesk/sdk";
+import { generateText } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
+
+const client = new OpenDeskClient();
+await client.connect();
+
+const shot = await client.screenshot({ marks: true });
+await generateText({
+  model: anthropic("claude-opus-4-6"),
+  messages: [{
+    role: "user",
+    content: [
+      { type: "text", text: "What do you see? Click the most important button." },
+      { type: "image", image: Buffer.from(shot.attachments[0].contentBase64, "base64") },
+    ],
+  }],
+});
+
+await client.disconnect();
+```
+
+### With LangChain.js
+
+```typescript
+import { OpenDeskClient } from "@opendesk/sdk";
+
+const client = new OpenDeskClient();
+await client.connect();
+
+// Use client methods directly inside your LangChain agent's tool implementations
+const shot = await client.screenshot({ marks: true });
+```
+
+### Custom Python server path
+
+```typescript
+const client = new OpenDeskClient({
+  command: "/path/to/venv/bin/opendesk-mcp",
+});
+```

@@ -4,13 +4,11 @@
 
 **Give any AI agent eyes and hands on your desktop.**
 
-Opendesk is a computer use tool to navigate your computer just like a human would.  Opendesk can be integrated with  Claude Code, Claude Desktop, Cursor, and Continue via MCP —
-adding screenshot, click, type, scroll, clipboard, OCR, and task recording to every conversation.
+Opendesk is a computer use framework that lets AI agents navigate your computer just like a human would — screenshots, mouse, keyboard, UI interaction, OCR, workflow recording, and scheduling.
 
 **macOS · Linux · Windows**
 
 [![PyPI](https://img.shields.io/pypi/v/opendesk)](https://pypi.org/project/opendesk/)
-[![Python](https://img.shields.io/pypi/pyversions/opendesk)](https://pypi.org/project/opendesk/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -21,7 +19,20 @@ adding screenshot, click, type, scroll, clipboard, OCR, and task recording to ev
 
 ---
 
+## SDKs
+
+| Language | Location | Package | Install |
+|----------|----------|---------|---------|
+| Python | [`python/`](python/) | `opendesk` (PyPI) | `pip install 'opendesk[core,mcp]'` |
+| JavaScript / TypeScript | [`js/`](js/) | `@opendesk/sdk` (npm) | `npm install @opendesk/sdk` |
+
+More SDKs can be added to this repo following the same pattern.
+
+---
+
 ## Quick start
+
+### Python
 
 ```bash
 pip install 'opendesk[core,mcp]'
@@ -36,7 +47,23 @@ Click the Chrome icon
 Open Spotify and play lo-fi beats
 ```
 
-> Requires Python 3.10+
+### JavaScript / TypeScript
+
+```bash
+pip install 'opendesk[core,mcp]'   # Python backend (required)
+npm install @opendesk/sdk
+npx opendesk-js install
+```
+
+```typescript
+import { OpenDeskClient } from "@opendesk/sdk";
+
+const client = new OpenDeskClient();
+await client.connect();
+await client.screenshot({ marks: true });
+await client.ui({ action: "click", app: "Safari", title: "Go" });
+await client.disconnect();
+```
 
 ---
 
@@ -46,12 +73,12 @@ opendesk is built in three layers — each independently importable:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Integrations    MCP  ·  Claude Code  ·  OpenAI  ·  LangChain  │
+│  Integrations  (MCP, Anthropic, OpenAI, LangChain)      │
 ├─────────────────────────────────────────────────────────┤
-│  Tools      screenshot · mouse · keyboard · ui          │
-│             clipboard · ocr · learn · schedule          │
+│  Tools   (screenshot · mouse · keyboard · ui            │
+│           clipboard · ocr · learn · schedule · audit)   │
 ├─────────────────────────────────────────────────────────┤
-│  Computer        capture  ·  Set-of-Marks  ·  OCR  ·  sandbox  │
+│  Computer  (capture · Set-of-Marks · OCR · sandbox)     │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -116,18 +143,6 @@ Full guide → [docs/automation.md](docs/automation.md)
 
 ---
 
-## Installation options
-
-```bash
-pip install opendesk                              # core framework only
-pip install 'opendesk[core,mcp]'                  # + screen capture + MCP server (recommended)
-pip install 'opendesk[core,mcp,learn]'            # + task recording and replay
-pip install 'opendesk[core,mcp,learn,schedule]'   # + scheduled tasks
-pip install 'opendesk[all]'                       # everything
-```
-
----
-
 ## Platform support
 
 | Feature | macOS | Linux | Windows |
@@ -157,84 +172,29 @@ sudo apt install xclip xdotool python3-atspi
 ### Windows
 No extra permissions needed — opendesk uses Win32 APIs by default.
 
-See [docs/permissions.md](docs/permissions.md) for full setup guide.
-
 ---
 
-## Integrations
+## Docs
 
-### Claude Code
-```bash
-opendesk install        # registers opendesk-mcp globally
-opendesk uninstall      # removes the registration
-```
-
-### Claude Desktop
-
-Add to your config file:
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "opendesk": { "command": "opendesk-mcp" }
-  }
-}
-```
-
-### Python API
-
-```python
-import asyncio
-from opendesk import create_registry, allow_all_context
-
-async def main():
-    registry = create_registry()
-    ctx = allow_all_context()
-
-    result = await registry.get("screenshot").execute(
-        ctx, registry.get("screenshot").Params(marks=True)
-    )
-    print(result.output)
-
-asyncio.run(main())
-```
-
-Works with Anthropic SDK, OpenAI, and LangChain — see [docs/integrations.md](docs/integrations.md)
-
-### On-device models (Ollama, LM Studio, vLLM, llama.cpp)
-
-Any OpenAI-compatible local server works out of the box:
-
-```python
-from openai import OpenAI
-from opendesk.integrations.openai_compat import OpenAIAdapter
-
-client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
-adapter = OpenAIAdapter()
-result = await adapter.run_loop(client, model="qwen2.5:72b", messages=messages)
-```
+- [Quickstart](docs/quickstart.md)
+- [Tools reference](docs/tools.md)
+- [Integrations](docs/integrations.md)
+- [Architecture](docs/architecture.md)
 
 ---
 
 ## Citation
-
-If you use opendesk in your research or project, please cite it:
 
 ```bibtex
 @software{opendesk,
   author  = {Abraham, Abhijith Neil},
   title   = {opendesk: Open Desktop Automation Framework},
   year    = {2025},
-  url     = {https://github.com/abhijithneilabraham/opendesk},
+  url     = {https://github.com/vitalops/opendesk},
   version = {0.1.2},
   license = {MIT}
 }
 ```
-
-A `CITATION.cff` is included — GitHub's "Cite this repository" button will pick it up automatically.
 
 ---
 

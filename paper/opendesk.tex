@@ -1,0 +1,253 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{times}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{abstract}
+\usepackage{titlesec}
+\usepackage{authblk}
+\usepackage{cite}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!10}
+}
+
+\title{\textbf{Opendesk: Grounding Desktop Computer-Use Agents via Native Accessibility APIs and Set-of-Marks Visual Prompting}}
+
+\author[1]{Abhijith Neil Abraham}
+\author[1]{Fariz Rahman}
+\affil[1]{Vitalops, \texttt{\{abhijith, fariz\}@vitalops.ai}}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Most computer-use systems that deploy vision-language models (VLMs) for desktop automation ask the model to predict pixel coordinates directly from screenshots. This approach is brittle: coordinate predictions break under Retina/HiDPI scaling, window repositioning, zoom changes, and minor layout shifts. We present \textbf{Opendesk}, a desktop automation framework that addresses this by querying the platform's native accessibility API before the screenshot reaches the model. Interactive elements are retrieved with their labels, roles, and bounding boxes, then rendered as numbered chips directly on the screenshot using the Set-of-Marks (SoM) visual prompting technique. The model selects elements by mark number rather than predicting coordinates, decoupling action selection from pixel-level localization. A secondary contribution is an adaptive replay mechanism: rather than replaying recorded coordinates, Opendesk stores trajectories as sequences of events and screenshots, then re-executes them by feeding the trajectory as context to the model, which re-grounds actions against the current screen state. Opendesk is released as an open-source Python library with a Model Context Protocol (MCP) server, supporting Anthropic, OpenAI-compatible, and LangChain agent harnesses.
+\end{abstract}
+
+\section{Introduction}
+
+Automating desktop tasks using language models has become an active area of research following the introduction of multimodal models capable of interpreting screenshots \cite{yang2023som, agentS, openai2023gpt4v}. The dominant approach is to present a screenshot to the model and ask it to output the $(x, y)$ coordinates of the element to interact with. While this works in controlled settings, it introduces several failure modes in practice:
+
+\begin{itemize}
+    \item \textbf{Retina and HiDPI scaling}: Physical pixel coordinates differ from logical coordinates by a scale factor (typically 2x on macOS Retina displays). Models trained on screenshots from mixed display environments may produce coordinates in the wrong space.
+    \item \textbf{Window repositioning}: A coordinate that pointed to a button in the recorded state may point to empty space after the window is moved or resized.
+    \item \textbf{UI density and overlap}: On dense UIs, nearby elements share similar visual neighborhoods, causing the model to select the wrong target.
+    \item \textbf{Layout changes}: Application updates, dynamic content, or responsive layouts can shift elements by enough pixels to cause misclicks.
+\end{itemize}
+
+These failure modes share a common cause: the model is responsible for both \emph{identifying} the target element and \emph{localizing} it in pixel space. Separating these two responsibilities improves reliability considerably.
+
+Opendesk addresses this by inserting a localization step before the screenshot reaches the model. The platform's native accessibility API is queried to enumerate all interactive elements in the current window, returning their labels, roles, and bounding boxes in logical screen coordinates. These elements are rendered as numbered chips on the screenshot using the SoM technique \cite{yang2023som}. The model now only needs to identify the correct mark number. Coordinate translation, Retina scaling, and window-relative offsets are handled deterministically by the framework.
+
+This paper makes the following contributions:
+
+\begin{enumerate}
+    \item A grounding architecture that combines native accessibility APIs with SoM visual prompting for reliable element targeting.
+    \item A \texttt{UITool} abstraction that targets elements by accessible label, promoting mouse coordinate control to a fallback.
+    \item An adaptive trajectory replay mechanism that re-grounds recorded workflows against the current screen state at replay time.
+    \item A three-layer open-source framework with a single Pydantic schema serving MCP, Anthropic SDK, OpenAI-compatible, and LangChain integrations simultaneously.
+\end{enumerate}
+
+\section{Related Work}
+
+\textbf{Set-of-Marks (SoM) prompting.} Yang et al. \cite{yang2023som} introduced SoM as a technique for improving grounded visual reasoning in VLMs by overlaying alphanumeric labels on image regions. Subsequent work including OmniParser \cite{omniparser} and AgentS \cite{agentS} applied SoM to UI screenshots. Opendesk extends this line by sourcing mark positions from the accessibility tree rather than a general-purpose vision detector, which gives exact bounding boxes for interactive elements rather than heuristic proposals.
+
+\textbf{Web and desktop automation.} WebArena \cite{webarena} and Mind2Web \cite{mind2web} established benchmarks for web agent evaluation. OSWorld \cite{osworld} extended this to multi-application desktop tasks. These systems typically rely on HTML DOM structure (for web) or screenshot-only coordinate prediction (for desktop). Opendesk uses the OS-native equivalent of the DOM, the accessibility tree, for desktop targeting.
+
+\textbf{Accessibility-tree grounding.} Concurrent work including WebVoyager \cite{webvoyager} and SeeAct \cite{seeact} has explored using the browser accessibility tree for web navigation. Opendesk applies the same principle to the full desktop across macOS, Linux, and Windows, and integrates it with SoM rendering.
+
+\textbf{RPA systems.} Traditional robotic process automation tools such as UiPath and Automation Anywhere record workflows as sequences of selector-matched actions. Selectors are constructed from XPath or CSS patterns in the accessibility tree and break when the tree structure changes. Opendesk's replay mechanism avoids selector brittleness by using the VLM to re-interpret the current screen state at replay time.
+
+\section{System Architecture}
+
+Opendesk is organized in three independent layers as shown in Figure \ref{fig:arch}.
+
+\begin{figure}[h]
+\centering
+\begin{verbatim}
++-------------------------------------------------------+
+|  Integrations  (MCP, Anthropic, OpenAI, LangChain)   |
++-------------------------------------------------------+
+|  Tools         (screenshot, mouse, keyboard, ui, ...) |
++-------------------------------------------------------+
+|  Computer      (capture, marks/SoM, OCR, sandbox)    |
++-------------------------------------------------------+
+\end{verbatim}
+\caption{Three-layer architecture of Opendesk. Each layer is independently importable.}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Layer 1: Computer}
+
+The computer layer provides low-level screen access with no dependency on the tools or integrations above it.
+
+\subsubsection{Screen Capture}
+
+Screen capture uses \texttt{mss} for cross-platform pixel access. \texttt{mss} returns pixels in BGRA order; PIL's \texttt{"BGRX"} raw decoder reorders them to RGB. Screens wider than 1920 pixels are downscaled before the image is sent to the model to stay within LLM image size limits. A \texttt{diff\_screenshots()} utility computes per-pixel differences using \texttt{ImageChops.difference()} and reports a change fraction and bounding box, useful for detecting whether an action had a visible effect.
+
+\subsubsection{Set-of-Marks Rendering}
+
+The \texttt{marks.py} module implements the SoM pipeline in two stages.
+
+\textbf{Stage 1: Element enumeration.} \texttt{get\_interactive\_elements()} queries the native accessibility API:
+\begin{itemize}
+    \item \textbf{macOS}: \texttt{osascript} / AppleScript queries \texttt{System Events} for AX roles including \texttt{AXButton}, \texttt{AXTextField}, \texttt{AXCheckBox}, and \texttt{AXMenuItem}.
+    \item \textbf{Linux}: \texttt{pyatspi} walks the AT-SPI2 tree filtering by interactive roles.
+    \item \textbf{Windows}: \texttt{pywinauto} UI Automation enumerates \texttt{descendants()} filtered by friendly class name.
+\end{itemize}
+Each element is returned as a record \texttt{\{mark, role, label, x, y, w, h\}} in logical screen coordinates.
+
+\textbf{Stage 2: Chip rendering.} \texttt{draw\_som\_marks()} overlays numbered, color-coded chips on a PIL Image. Scale factors $s_x = W_{\text{screenshot}} / W_{\text{logical}}$ and $s_y = H_{\text{screenshot}} / H_{\text{logical}}$ translate logical coordinates to screenshot pixels, correctly handling Retina displays where $s_x = s_y = 2$.
+
+\subsubsection{OCR}
+
+Text extraction from screen regions uses three backends tried in priority order: (1) \texttt{pytesseract} for best cross-platform quality, (2) macOS Vision via a Swift subprocess requiring no additional dependencies on macOS 11+, and (3) Windows WinRT OCR via PowerShell requiring no additional dependencies on Windows 10+.
+
+\subsubsection{Sandbox and Audit}
+
+The \texttt{ComputerSandbox} class provides per-session policy enforcement and audit logging. Each action is recorded with a UUID, timestamp, parameters, and result. Optional constraints include an \texttt{allowed\_apps} list and a \texttt{screen\_region} bounding box; coordinates outside the bounding box are rejected before tool execution.
+
+\subsection{Layer 2: Tools}
+
+\subsubsection{Core Abstractions}
+
+The \texttt{base.py} module defines four abstractions:
+
+\begin{itemize}
+    \item \texttt{ToolResult}: title, output string, error flag, binary attachments, metadata dict.
+    \item \texttt{Attachment}: filename, bytes content, MIME type.
+    \item \texttt{ToolContext}: session identifier and an optional async permission handler called before every action.
+    \item \texttt{Tool}: abstract base class with \texttt{name}, \texttt{description}, a Pydantic \texttt{Params} inner class, and an \texttt{execute()} coroutine.
+\end{itemize}
+
+\texttt{Tool.get\_schema()} returns the JSON Schema for \texttt{Params} via Pydantic's \texttt{model\_json\_schema()}. This is the single source of truth consumed by all integration adapters, ensuring that tool definitions are never duplicated or allowed to diverge.
+
+All blocking I/O runs in \texttt{asyncio.get\_event\_loop().run\_in\_executor(None, ...)} so tools are safe to call from async code without blocking the event loop.
+
+\subsubsection{UITool as Primary Interaction Path}
+
+A key design decision in Opendesk is that \texttt{UITool}, not \texttt{MouseTool}, is the primary interaction path. \texttt{UITool} finds elements by their accessible label using the platform's accessibility API and activates them directly, without translating to pixel coordinates at all. This means:
+
+\begin{itemize}
+    \item No Retina scaling translation is required.
+    \item The interaction succeeds regardless of window position or screen resolution.
+    \item Failure messages are descriptive: \texttt{"button 'Save' not found in TextEdit"} rather than a silent misclick.
+\end{itemize}
+
+\texttt{MouseTool} is used only for elements that have no accessible label, such as canvas drawing areas, video players, and games.
+
+\subsection{Adaptive Trajectory Replay}
+
+\subsubsection{Recording}
+
+\texttt{LearnRecorder} captures all user input globally via \texttt{pynput}, recording mouse moves, clicks, scroll events, and keystrokes, interleaved with screenshots at each discrete action. Each event is stored as a \texttt{TrajectoryEvent} dataclass with a timestamp, event type, parameters, and the associated screenshot. A \texttt{Trajectory} is a named, ordered sequence of \texttt{TrajectoryEvent} records persisted to \texttt{.opendesk/learned/} as JSON.
+
+\subsubsection{Replay}
+
+At replay time, Opendesk does not re-execute the recorded coordinate sequence. Instead, it:
+
+\begin{enumerate}
+    \item Loads the stored \texttt{Trajectory}.
+    \item Builds a natural-language summary of the trajectory using \texttt{summary\_builders} in \texttt{trajectory.py}.
+    \item Takes a fresh screenshot of the current screen state.
+    \item Submits the summary and current screenshot to the VLM, which identifies the corresponding action in the current UI.
+    \item Executes via \texttt{UITool} (label match) or \texttt{MouseTool} (coordinate fallback) as appropriate.
+\end{enumerate}
+
+This design makes replay adaptive to UI changes. If an application was updated and a button moved, the replay succeeds as long as the button's accessible label is unchanged. The model re-grounds each step independently rather than trusting that recorded coordinates remain valid.
+
+\subsection{Layer 3: Integrations}
+
+\subsubsection{Model Context Protocol (MCP)}
+
+The MCP adapter wraps a \texttt{ToolRegistry} as an MCP \texttt{Server}. On \texttt{list\_tools}, it returns tool definitions built from each tool's JSON schema. On \texttt{call\_tool}, it parses arguments, calls \texttt{tool.execute()}, and converts binary \texttt{Attachment} objects to \texttt{ImageContent} blocks for transmission over the MCP protocol.
+
+\subsubsection{Anthropic SDK}
+
+\texttt{ClaudeCodeAdapter} converts tool schemas to Anthropic's \texttt{input\_schema} format and drives the standard \texttt{stop\_reason == "tool\_use"} agentic loop. All \texttt{tool\_use} blocks in a single model response are dispatched in parallel via \texttt{asyncio.gather}.
+
+\subsubsection{OpenAI-Compatible Endpoints}
+
+\texttt{OpenAIAdapter} wraps schemas in OpenAI's \texttt{\{"type": "function", "function": \{...\}\}} envelope and handles \texttt{tool\_calls} from \texttt{chat.completions.create} responses. Because it targets the OpenAI API format rather than the OpenAI service specifically, it is compatible with any conforming endpoint including Ollama, Groq, Together AI, vLLM, LiteLLM, and llama.cpp servers. This enables fully on-device computer-use agents with locally hosted models.
+
+\subsubsection{LangChain}
+
+\texttt{as\_langchain\_tools()} creates \texttt{BaseTool} subclasses dynamically from the registry, implementing both \texttt{\_run} (sync) and \texttt{\_arun} (async) entry points. The resulting tools are compatible with LangGraph's \texttt{create\_react\_agent}.
+
+\subsection{Data Flow}
+
+The full request path from agent to action and back is:
+
+\begin{enumerate}
+    \item The LLM outputs a tool name and argument dict.
+    \item \texttt{ToolRegistry.get(name)} retrieves the tool instance.
+    \item \texttt{Tool.parse\_params(arguments)} validates via Pydantic.
+    \item \texttt{ToolContext.check\_permission()} calls the injected policy handler.
+    \item \texttt{Tool.execute(ctx, params)} runs the action, calling into the computer layer and recording to the sandbox.
+    \item A \texttt{ToolResult} is returned and converted by the integration adapter into the format expected by the LLM client.
+\end{enumerate}
+
+\section{Discussion}
+
+\subsection{Comparison with Coordinate-Prediction Approaches}
+
+Table \ref{tab:comparison} summarizes the behavioral differences between coordinate-prediction computer-use systems and Opendesk's accessibility-grounded approach.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Property} & \textbf{Coordinate prediction} & \textbf{Opendesk (a11y + SoM)} \\
+\midrule
+Element targeting & Pixel coordinate output & Mark number selection \\
+Retina handling & Model-dependent & Deterministic scale factor \\
+Window repositioning & Breaks & Unaffected \\
+UI layout change & Breaks & Adapts via label match \\
+Unlabeled elements & Supported & Mouse fallback \\
+Replay strategy & Coordinate replay & Trajectory re-grounding \\
+\bottomrule
+\end{tabular}
+\caption{Comparison of coordinate-prediction and accessibility-grounded computer-use approaches.}
+\label{tab:comparison}
+\end{table}
+
+\subsection{Limitations}
+
+Several limitations apply to the current system.
+
+\textbf{Accessibility API coverage.} Not all applications expose rich accessibility metadata. Games, Electron apps with custom renderers, and some cross-platform toolkits provide sparse or empty accessibility trees. In these cases Opendesk falls back to coordinate prediction, losing the reliability benefits of the grounded approach.
+
+\textbf{Dynamic content.} Web applications that render content dynamically may produce accessibility trees that are stale or incomplete at query time. A snapshot taken before JavaScript completes rendering will be missing elements present at interaction time.
+
+\textbf{Replay semantic drift.} If a recorded workflow involves elements whose accessible labels change between recording and replay, re-grounding will fail to match them. The model may recover by reasoning about visual similarity, but this is not guaranteed.
+
+\textbf{Formal evaluation.} This paper presents a system description. Quantitative evaluation against OSWorld \cite{osworld} or a similar benchmark is left for future work.
+
+\section{Conclusion}
+
+We presented Opendesk, a desktop automation framework that grounds VLM-driven computer-use agents via native accessibility APIs and Set-of-Marks visual prompting. By separating element identification from pixel-level localization, the system avoids the most common failure modes of coordinate-prediction approaches. The adaptive replay mechanism extends this principle to workflow recording and playback, re-grounding each step against the current screen state rather than trusting that recorded coordinates remain valid. Opendesk is released as open-source software at \url{https://github.com/vitalops/opendesk}.
+
+\bibliographystyle{plain}
+\bibliography{opendesk}
+
+\end{document}
