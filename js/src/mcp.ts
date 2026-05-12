@@ -18,6 +18,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 export interface BridgeOptions {
   /** Command to start the Python MCP server. Defaults to "opendesk-mcp". */
@@ -52,14 +53,14 @@ export async function createMcpBridge(options: BridgeOptions = {}): Promise<Serv
     { capabilities: { tools: {} } }
   );
 
-  server.setRequestHandler(
-    { method: "tools/list" } as never,
+server.setRequestHandler(
+    ListToolsRequestSchema,
     async () => ({ tools })
   );
 
   server.setRequestHandler(
-    { method: "tools/call" } as never,
-    async (request: { params: { name: string; arguments?: Record<string, unknown> } }) => {
+    CallToolRequestSchema,
+    async (request) => {
       const { name, arguments: args = {} } = request.params;
       return upstream.callTool({ name, arguments: args });
     }
