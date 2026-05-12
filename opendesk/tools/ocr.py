@@ -1,4 +1,9 @@
-"""OCRTool — extract visible text from any screen region."""
+"""OCRTool — extract visible text from any screen region.
+
+Captures the region via :class:`~opendesk.computer.Computer` then runs the
+OCR backend on the resulting pixmap locally, so OCR works even when the
+captured machine is a remote :class:`RemoteComputer`.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ from typing import List, Optional
 
 from pydantic import Field
 
+from opendesk.computer.types import Rect
 from opendesk.tools.base import Tool, ToolContext, ToolResult
 
 
@@ -41,7 +47,7 @@ class OCRTool(Tool):
 
         sandbox = get_sandbox(ctx.session_id)
 
-        region = None
+        rect: Optional[Rect] = None
         if params.region:
             if len(params.region) != 4:
                 return ToolResult(
@@ -49,12 +55,21 @@ class OCRTool(Tool):
                     output="region must have exactly 4 elements: [x, y, width, height]",
                     error=True,
                 )
-            region = (params.region[0], params.region[1], params.region[2], params.region[3])
+            x, y, w, h = params.region
+            rect = Rect(x=x, y=y, width=w, height=h)
 
         try:
-            from opendesk.computer.ocr import extract_text_from_region
+            pixmap = await ctx.computer.capture(region=rect)
+        except Exception as exc:
+            await sandbox.record_action(ActionType.OCR, {"region": params.region}, error=str(exc))
+            return ToolResult(title="OCR error", output=str(exc), error=True)
+
+        try:
+            from opendesk.computer.ocr import ocr_image
             loop = asyncio.get_event_loop()
-            text = await loop.run_in_executor(None, extract_text_from_region, region)
+            text = await loop.run_in_executor(
+                None, ocr_image, pixmap.data, pixmap.width, pixmap.height
+            )
         except Exception as exc:
             await sandbox.record_action(ActionType.OCR, {"region": params.region}, error=str(exc))
             return ToolResult(title="OCR error", output=str(exc), error=True)

@@ -42,25 +42,32 @@ Open Spotify and play lo-fi beats
 
 ## Architecture
 
-opendesk is built in three layers — each independently importable:
+opendesk is built in independently-importable layers:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Integrations    MCP  ·  Claude Code  ·  OpenAI  ·  LangChain  │
-├─────────────────────────────────────────────────────────┤
-│  Tools      screenshot · mouse · keyboard · ui          │
-│             clipboard · ocr · learn · schedule          │
-├─────────────────────────────────────────────────────────┤
-│  Computer        capture  ·  Set-of-Marks  ·  OCR  ·  sandbox  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Integrations   MCP  ·  Claude Code  ·  OpenAI  ·  LangChain │
+├──────────────────────────────────────────────────────────────┤
+│  Tools          screenshot · mouse · keyboard · ui ·         │
+│                 clipboard · ocr · learn · schedule           │
+├──────────────────────────────────────────────────────────────┤
+│  Computer       LocalComputer  ·  RemoteComputer  (ABC)      │
+├──────────────────────────────────────────────────────────────┤
+│  Remote         server · client · discovery (mDNS)           │
+├──────────────────────────────────────────────────────────────┤
+│  Protocol       frames · codec (msgpack) · peer · transports │
+│                 auth (X25519 + AEAD, pairing)                │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 | Layer | What it does |
 |-------|-------------|
-| **Computer** | Low-level screen capture, SoM element detection, OCR, per-session audit log |
-| **Tools** | One class per capability. Pydantic schema auto-shared with every integration |
-| **Integrations** | Thin adapters for MCP, Anthropic, OpenAI, LangChain — add one tool, get all four |
-| **Automation** | `learn` + `schedule` backed by pynput recording, JSON storage, APScheduler daemon |
+| **Computer** | The capability surface of a computer (observe / act / subscribe). `LocalComputer` drives the local machine; `RemoteComputer` forwards every call over the wire to a paired peer. Tools and integrations target this ABC — they never know whether the machine is local or remote. |
+| **Tools** | One class per capability, agent-friendly Pydantic schemas. Calls into the active `Computer` on the `ToolContext`. |
+| **Integrations** | Thin adapters for MCP, Anthropic, OpenAI, LangChain — add one tool, get all four. |
+| **Remote** | `opendesk serve` / `opendesk pair`, mDNS discovery, client helper. |
+| **Protocol** | Five-frame wire protocol (msgpack binary, no base64 ever), WebSocket transport, mutual X25519 + ChaCha20-Poly1305 auth and encryption. |
+| **Automation** | `learn` + `schedule` backed by pynput recording, JSON storage, APScheduler daemon. |
 
 Full details → [docs/architecture.md](docs/architecture.md)
 
@@ -116,11 +123,64 @@ Full guide → [docs/automation.md](docs/automation.md)
 
 ---
 
+## Remote computer use
+
+Control another machine from your agent — same tools, same MCP server, the
+`Computer` abstraction just lives on the other end of an encrypted WebSocket.
+
+**On the machine being controlled** (one time):
+
+```bash
+pip install 'opendesk[core,remote]'
+opendesk pair        # prints a 6-digit code, listens
+```
+
+**On the controller** (one time):
+
+```bash
+pip install 'opendesk[remote]'
+opendesk discover                          # list opendesk peers on the LAN
+opendesk pair-with <host> <code> --name mini
+```
+
+**After pairing**, the controlled machine runs the long-lived server:
+
+```bash
+opendesk serve            # accepts paired peers only
+```
+
+…and the controller drives it through the existing MCP server (Claude Code,
+Claude Desktop, Cursor — anything that speaks MCP). The agent gets new admin
+tools — `opendesk_peers`, `opendesk_use`, `opendesk_status` — and every
+existing tool accepts an optional `peer:` argument:
+
+```
+screenshot                       → controls the local machine
+screenshot peer=mini             → controls the paired remote
+opendesk_use mini                → make mini the default for this session
+screenshot                       → [on mini] ...
+```
+
+With exactly one paired peer the agent doesn't have to specify anything —
+it becomes the implicit default. With multiple, the agent must pick
+explicitly (no silent fallback).
+
+**Security model:** pairing exchanges long-lived X25519 keypairs via a 6-digit
+code-authenticated handshake (PBKDF2-stretched, ~CPU-month to brute force).
+Subsequent connections use mutual static-key authentication. Every frame is
+ChaCha20-Poly1305 AEAD-encrypted with per-direction counters. No CA-signed
+certificates required — the keys ARE the trust.
+
+Full guide → [docs/remote.md](docs/remote.md)
+
+---
+
 ## Installation options
 
 ```bash
 pip install opendesk                              # core framework only
 pip install 'opendesk[core,mcp]'                  # + screen capture + MCP server (recommended)
+pip install 'opendesk[core,mcp,remote]'           # + control another machine over LAN
 pip install 'opendesk[core,mcp,learn]'            # + task recording and replay
 pip install 'opendesk[core,mcp,learn,schedule]'   # + scheduled tasks
 pip install 'opendesk[all]'                       # everything
@@ -140,6 +200,8 @@ pip install 'opendesk[all]'                       # everything
 | App control | `open -a` | `xdg-open` | `start` |
 | Task recording | ✓ | ✓ | ✓ |
 | Scheduled tasks | ✓ | ✓ | ✓ |
+| Remote control (LAN) | ✓ | ✓ | ✓ |
+| LAN discovery (mDNS) | ✓ | ✓ | ✓ |
 
 ---
 

@@ -2,166 +2,315 @@
 
 ## Overview
 
-opendesk is structured in three layers:
+opendesk separates *what a computer can do* (the capability surface) from
+*where that computer lives* (local vs. remote) and *how agents talk to it*
+(via tools, MCP, etc.).  Each layer is independently importable.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Integrations  (MCP, Claude Code, OpenAI, LangChain)    │
-├─────────────────────────────────────────────────────────┤
-│  Tools         (screenshot, mouse, keyboard, ui, ...)   │
-├─────────────────────────────────────────────────────────┤
-│  Computer      (capture, marks/SoM, OCR, sandbox)       │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Integrations   MCP  ·  Claude Code  ·  OpenAI  ·  LangChain │
+├──────────────────────────────────────────────────────────────┤
+│  Tools          screenshot · mouse · keyboard · ui ·         │
+│                 clipboard · ocr · app · learn · schedule     │
+├──────────────────────────────────────────────────────────────┤
+│  Computer       Computer ABC                                 │
+│                   ├─ LocalComputer  (the machine we're on)   │
+│                   └─ RemoteComputer (via the wire protocol)  │
+│                 ComputerDispatcher (server-side router)      │
+├──────────────────────────────────────────────────────────────┤
+│  Remote         opendesk serve · pair · discover · connect   │
+│                 mDNS advertisement & browsing                │
+├──────────────────────────────────────────────────────────────┤
+│  Protocol       frames · msgpack codec · peer (call-id mux)  │
+│                 transports: WebSocket (TCP) — future: QUIC   │
+│                 auth: X25519 + ChaCha20-Poly1305, pairing PSK│
+└──────────────────────────────────────────────────────────────┘
 ```
 
-Each layer is independently importable. A caller that only wants the MCP server doesn't need to import any tool internals.
+Three load-bearing properties:
+
+1. **Tools never know whether a Computer is local or remote.**  The same tool
+   code runs against `LocalComputer` or `RemoteComputer`.
+2. **Bytes are bytes.**  msgpack `bin` carries pixmaps, file contents, and
+   process output natively — no base64 anywhere on the wire.
+3. **Trust is keys, not certs.**  No CA-signed certificates required.  Both
+   peers hold long-lived X25519 keypairs that authenticate each connection.
 
 ---
 
-## Layer 1: computer/
+## Layer 1: `computer/`
 
-Low-level modules with no tool or integration dependencies.
+### `Computer` ABC (`base.py`)
 
-### `capture.py`
-Screen capture via `mss`. Key details:
-- `mss` returns BGRA pixels; PIL's `"BGRX"` raw decoder reorders them to RGB correctly.
-- Screens wider than 1920 px are downscaled to stay under LLM image-size limits.
-- `diff_screenshots()` uses `ImageChops.difference()` and a threshold mask to detect changed regions between two captures. Reports `change_fraction` and a bounding box.
+The capability surface of a computer.  Three kinds of operations:
 
-### `marks.py` — Set-of-Marks (SoM)
-Implements the SoM visual prompting technique (Yang et al. 2023 / OmniParser / AgentS).
+* **Observe** (one-shot queries): `capture`, `cursor_position`, `displays`,
+  `windows`, `focused_window`, `ui_tree`, `clipboard_read`, `processes`,
+  `environment`, `read_file`, `list_dir`, `stat`, `notifications`.
+* **Act** (one-shot state changes): `pointer`, `key`, `text`, `open_app`,
+  `close_app`, `focus_app`, `focus_window`, `move_window`, `close_window`,
+  `perform_ui_action`, `clipboard_write`, `write_file`, `delete`, `move`,
+  `mkdir`, `shell`, `exec`, `lock_screen`.
+* **Subscribe** (server-pushed streams): `subscribe_display`,
+  `subscribe_input` — return async iterators.
 
-1. `get_interactive_elements()` queries the platform's native accessibility API:
-   - macOS: `osascript` / AppleScript — queries `System Events` for `AXButton`, `AXTextField`, etc.
-   - Linux: `pyatspi` (AT-SPI2) — walks the AT-SPI tree filtering interactive roles.
-   - Windows: `pywinauto` UI Automation — enumerates `descendants()` filtering by friendly class name.
-   Returns `[{mark, role, label, x, y, w, h}]` in logical screen coordinates.
+Plus a sync `capabilities()` returning a `CapabilityManifest` so callers can
+check support before attempting an operation.
 
-2. `draw_som_marks()` overlays numbered, colour-coded chips on a PIL Image. Scale factors (`scale_x = screenshot_width / logical_screen_width`) handle Retina/HiDPI correctly.
+Convenience helpers on top of the abstract primitives: `click`, `drag`,
+`scroll`, `press`, `hotkey`, `type_text`, `clipboard_text` / `clipboard_set_text`.
 
-3. `overlay_cursor()` draws a red disc + white dot at the current cursor position, matching Anthropic's computer-use demo style.
+### `LocalComputer` (`local.py`)
 
-### `ocr.py`
-Text extraction from screen regions. Three backends tried in order:
-1. `pytesseract` — best quality, cross-platform.
-2. macOS Vision (Swift subprocess, zero deps, macOS 11+).
-3. Windows WinRT OCR (PowerShell, zero deps, Windows 10+).
+Concrete implementation for the current machine.  Wraps the existing screen
+capture (mss), accessibility backends (AppleScript / AT-SPI2 / UI Automation),
+input (pyautogui), and filesystem / process primitives.  All blocking I/O
+runs in `asyncio.to_thread`.
 
-### `sandbox.py`
-Per-session audit log and policy enforcement.
-- `ComputerSandbox` tracks every action with a UUID, timestamp, params, and result.
-- `allowed_apps` — app name allow-list for open/close/focus actions.
-- `screen_region` — bounding box constraint; coordinates outside it are rejected.
-- `last_screenshot` — stores the previous PNG for automatic change detection.
-- `export_audit_log()` — returns the full log as plain dicts for compliance export.
+### `RemoteComputer` (`remote.py`)
+
+Implements the same `Computer` ABC by forwarding every call to a
+:class:`Peer`.  Each abstract method serialises params, awaits
+`peer.call(method, params)`, and validates the result back into a Pydantic
+model.  Subscriptions return async iterators backed by `peer.stream(...)`.
+
+`capabilities()` is synchronous (per the ABC) and served from the manifest
+cached during the HELLO handshake — no round-trip.
+
+### `ComputerDispatcher` (`dispatcher.py`)
+
+Server-side router.  Implements the protocol's `Dispatcher` Protocol by
+mapping each method name (`display.capture`, `input.pointer`, …) to the
+matching `Computer` method, with Pydantic de/serialisation at the boundary.
+
+### `types.py`
+
+Pydantic value types exchanged across the boundary: `Point`, `Rect`,
+`Pixmap` (with built-in pixel ↔ logical coordinate translation), `Display`,
+`Window`, `Process`, `UIElement`, `PointerEvent`, `KeyEvent`,
+`ClipboardContents`, `FileEntry`, `CompletedCommand`, `Environment`,
+`Notification`, the `Capability` enum, and the `CapabilityManifest`.
+
+### Auxiliary modules
+
+* `capture.py` — mss-based screen capture. Wider-than-1920 displays are
+  downscaled; the resulting `Pixmap` always carries the true logical screen
+  dimensions so coordinates translate cleanly.
+* `marks.py` — Set-of-Marks rendering helpers (`draw_som_marks`,
+  `overlay_cursor`).  The element list is now produced by `Computer.ui_tree()`
+  rather than by a separate accessibility query.
+* `ocr.py` — `ocr_image(png_bytes)` runs the best available OCR backend
+  (pytesseract → macOS Vision → WinRT OCR).  Decoupled from capture so it
+  works on a `Pixmap` from any Computer, including a remote one.
+* `sandbox.py` — per-session audit log used by tools that record actions.
 
 ---
 
-## Layer 2: tools/
+## Layer 2: `tools/`
 
 ### `base.py`
-Core abstractions:
 
 ```
 ToolResult      — title, output, error, attachments, metadata
 Attachment      — filename, content (bytes), media_type
-ToolContext     — session_id, permission_handler (async callable)
+ToolContext     — session_id, permission_handler, computer
 Tool            — ABC: name, description, Params (Pydantic), execute()
 ```
 
-`ToolContext.check_permission(tool, argument, description)` calls the injected handler before every action. If no handler is set, all actions are approved. If the handler raises `PermissionDeniedError`, the tool returns an error result.
+The crucial field on `ToolContext` is **`computer: Computer`** — every tool
+calls `ctx.computer.X(...)` instead of poking pyautogui / AppleScript
+directly.  Swap in a `RemoteComputer` and the same tool runs against another
+machine with zero code changes.
 
-`Tool.get_schema()` returns the JSON Schema for `Params` via Pydantic's `model_json_schema()`. This is the single source of truth used by all integrations to generate tool definitions.
+`ToolContext.check_permission(tool, argument, description)` calls the
+injected handler before every action.  Raise `PermissionDeniedError` to
+block.
 
 ### Tool files
 
-Each tool file contains one class inheriting from `Tool`:
+Each file contains one `Tool` subclass.  None of them open subprocesses or
+poke OS APIs directly — they always go through `ctx.computer`.
 
-| File | Class | Key dependencies |
-|------|-------|-----------------|
-| `screenshot.py` | `ScreenshotTool` | `opendesk.computer.capture`, `marks` |
-| `mouse.py` | `MouseTool` | `pyautogui` |
-| `keyboard.py` | `KeyboardTool` | `pyautogui` |
-| `app.py` | `AppTool` | `osascript`/`xdg-open`/`start` |
-| `ui.py` | `UITool` | `osascript`/`pyatspi`/`pywinauto` |
-| `clipboard.py` | `ClipboardTool` | `pbcopy`/`xclip`/`pyperclip` |
-| `ocr.py` | `OCRTool` | `opendesk.computer.ocr` |
-| `automation.py` | `LearnTool`, `ScheduleTool` | `opendesk.automation.*`, `pynput`, `apscheduler` |
-
-All blocking I/O runs in `asyncio.get_event_loop().run_in_executor(None, ...)` so tools are safe to call from async code without blocking the event loop.
-
-### UITool — why it's the primary interaction path
-
-The `ui` tool uses each platform's accessibility API to find elements by their visible label, not their pixel location. This means:
-- No coordinate guessing.
-- No Retina scaling translation.
-- Works regardless of window position, screen resolution, or zoom level.
-- Provides descriptive errors: `"button 'Save' not found in TextEdit"`.
-
-Mouse coordinates are only needed for elements with no accessible label (canvas games, video players, drawing apps).
+| File | Class | What it does |
+|------|-------|-------------|
+| `screenshot.py` | `ScreenshotTool` | `ctx.computer.capture()` + optional SoM marks via `ui_tree()` |
+| `mouse.py` | `MouseTool` | `ctx.computer.click/drag/scroll` with image→logical coord translation |
+| `keyboard.py` | `KeyboardTool` | `ctx.computer.text/press/hotkey` |
+| `ui.py` | `UITool` | `ctx.computer.ui_tree()` + `perform_ui_action` (or bounds-center fallback) |
+| `app.py` | `AppTool` | `ctx.computer.open_app/close_app/focus_app/list_apps` |
+| `clipboard.py` | `ClipboardTool` | `ctx.computer.clipboard_read/clipboard_write` |
+| `ocr.py` | `OCRTool` | `ctx.computer.capture()` → `ocr_image(pixmap.data)` |
+| `automation.py` | `LearnTool`, `ScheduleTool` | Local session state; never remoted |
+| `audit.py` | `AuditTool` | Local audit log; never remoted |
 
 ---
 
-## automation/
+## Layer 3: `protocol/`
 
-Supporting module for the `learn` and `schedule` tools. Not a layer — it sits alongside `computer/` as a shared utility package.
+The transport-agnostic wire protocol.  Five frame types carry every byte
+exchanged between peers:
 
-| File | Purpose |
-|------|---------|
-| `trajectory.py` | `TrajectoryEvent`, `Trajectory` dataclasses; summary builders for LLM replay context |
-| `recorder.py` | `LearnRecorder` — global input capture via `pynput` (mouse moves, clicks, keystrokes, screenshots) |
-| `storage.py` | `save_procedure()`, `load_procedure()`, `list_procedures()` — persists to `.opendesk/learned/` |
-| `schedule_store.py` | `ScheduleStore`, `ScheduleEntry`, `parse_timing()` — human-readable timing strings (`"every day at 9am"`) |
-| `runner.py` | `run_task()` — executes a replay or natural-language task via Claude API |
-| `daemon.py` | `start_daemon()` — APScheduler `BlockingScheduler` that polls `ScheduleStore` and calls `run_task()` |
+| Frame | Direction | Purpose |
+|---|---|---|
+| `HELLO` | both | First frame each side sends. Carries protocol version, role, principal, auth proof, capability manifest. |
+| `REQ` | caller → peer | Unary call (`stream=false`) or stream-starting call (`stream=true`). |
+| `RES` | peer → caller | Response or one frame of a streaming response. Carries `result` or `error`. |
+| `CANCEL` | either | Abort an in-flight call. |
+| `PUSH` | either | Server-originated event not tied to a prior request. |
+
+### `frames.py`
+
+Pydantic models for the five frame types and `ErrorInfo` with a stable
+`ErrorCode` enum (`capability_unsupported`, `permission_denied`,
+`invalid_argument`, `not_found`, `timeout`, `cancelled`, `internal`,
+`protocol`).
+
+### `codec.py`
+
+msgpack encode/decode.  Bytes round-trip as native msgpack `bin`; no base64
+ever.  A `default` hook converts Python `set` and `Enum` instances to
+list / value so Pydantic models with those types serialise cleanly.
+
+### `connection.py`
+
+The transport-shaped interface a `Peer` runs on.  `Connection` ABC with
+`send(bytes)`, `recv() → bytes`, `aclose()`.  Includes `LoopbackConnection`
+for hermetic in-process testing.
+
+### `transports/websocket.py`
+
+`WebSocketConnection`, `connect_websocket(url)`, `serve_websocket(handler, host, port)`.
+Binary-only — text frames are rejected as a protocol violation.
+
+### `peer.py`
+
+`Peer` correlates call ids over a `Connection`.  Public API:
+
+```python
+peer = Peer(connection, role="client", dispatcher=optional)
+await peer.hello(my_manifest)        # 1 RTT handshake
+peer.start()                          # spawn recv loop
+result = await peer.call("display.capture", {...})
+async for frame in peer.stream("display.subscribe", {...}): ...
+await peer.aclose()
+```
+
+Owns in-flight tables (unary, stream, inbound), routes cancellation in both
+directions, maps wire error codes to Python exceptions (`cancelled` →
+`CancelledError`, `permission_denied` → `PermissionDeniedError`, everything
+else → `ProtocolError(code, message, details)`).
+
+### `auth/`
+
+* `identity.py` — `Identity` long-lived X25519 keypair persisted at
+  `~/.opendesk/identity.key` (mode 0600, atomic write).
+* `storage.py` — `TrustedPeers` JSON file with entries
+  `{public_key, name, paired_at}`.
+* `handshake.py` — two flavours:
+  * `pair_server` / `pair_client` — 3-message PSK-authenticated handshake.
+    PSK derived from the 6-digit code via PBKDF2-HMAC-SHA256 at 200 000
+    iterations.  Both sides learn each other's static public key.
+  * `auth_server` / `auth_client` — 2-message mutual-static-key handshake.
+    Server rejects clients whose key isn't in `TrustedPeers`; client rejects
+    servers that don't hold the expected static key.
+* `encrypted.py` — `EncryptedConnection` wraps a Connection with
+  ChaCha20-Poly1305 AEAD per frame.  Per-direction counter as the nonce;
+  counter not transmitted (sender and receiver each maintain their own).
+  Tamper or sync loss → `ConnectionClosed`.
 
 ---
 
-## Layer 3: integrations/
+## Layer 4: `remote/`
+
+User-facing stitching for the LAN flow.
+
+* `server.py` — `OpendeskServer`.  Accepts WebSocket connections, runs the
+  right handshake (pair vs. auth), wraps each session in a `Peer` +
+  `ComputerDispatcher`, tracks sessions in a `SessionRegistry`.
+  `enable_pairing(code)` flips into one-shot pairing mode.
+* `discovery.py` — `advertise(name, port, public_key)` and `discover(timeout)`
+  via Zeroconf.  Service type `_opendesk._tcp.local.` with TXT records
+  carrying the host's public key + fingerprint.
+* `client.py` — `connect(target)` and `pair_with(host, port, code)`.
+  Resolves a peer name → mDNS → WebSocket → `auth_client` → `RemoteComputer`.
+
+---
+
+## Layer 5: `integrations/`
 
 ### `mcp.py`
-Wraps a `ToolRegistry` as an MCP `Server`. On `list_tools`, returns tool definitions built from each tool's JSON schema. On `call_tool`, parses arguments, calls `tool.execute()`, and converts `ToolResult` attachments to `ImageContent` blocks.
 
-### `claude_code.py`
-Converts tool schemas to Anthropic's `input_schema` format. `ClaudeCodeAdapter.run_loop()` drives the standard `stop_reason == "tool_use"` loop, dispatching all tool_use blocks in parallel via `asyncio.gather`.
+Single MCP server.  At list-tools time, augments Computer-use tool schemas
+(`screenshot`, `mouse`, `keyboard`, `ui`, `app`, `clipboard`, `ocr`) with an
+optional `peer` field; appends admin tools (`opendesk_peers`,
+`opendesk_discover`, `opendesk_use`, `opendesk_status`,
+`opendesk_capabilities`, `opendesk_disconnect`).
 
-### `openai_compat.py`
-Wraps schemas in OpenAI's `{"type": "function", "function": {...}}` envelope. Handles `tool_calls` from `chat.completions.create` responses. Compatible with any OpenAI-format API.
+At call-tool time, strips `peer` from arguments, resolves to a `Computer`
+via `MCPSession`, builds a fresh `ToolContext` with that Computer, and
+dispatches.  Local-only tools (`learn`, `schedule`, `audit`) are passed
+through unchanged.
 
-### `langchain_compat.py`
-Creates `BaseTool` subclasses dynamically. Both `_run` (sync) and `_arun` (async) are implemented.
+### `MCPSession` (`mcp_session.py`)
+
+Per-MCP-session state: explicit default peer, cache of open
+`RemoteComputer` connections, the local `LocalComputer`.  Resolution order:
+
+1. Per-call `peer:` argument
+2. Explicit default from `opendesk_use`
+3. Lone trusted peer (implicit default)
+4. Multiple peers + no default → **error** (forces explicit choice)
+5. No peers paired → local
+
+### `claude_code.py`, `openai_compat.py`, `langchain_compat.py`
+
+Adapters that present tools in the native format of each agent SDK.
 
 ---
 
-## Data flow
+## Data flow — local call
 
 ```
-User / LLM
-    │
-    │ tool_name + arguments (dict)
-    ▼
-ToolRegistry.get(name)
-    │
-    ▼
-Tool.parse_params(arguments)   ← Pydantic validation
-    │
-    ▼
-ToolContext.check_permission() ← policy gate
-    │
-    ▼
+LLM
+  │ tool_name + arguments
+  ▼
+Tool.parse_params  ← Pydantic
+  ▼
+ToolContext.check_permission
+  ▼
 Tool.execute(ctx, params)
-    │
-    ├── computer layer (capture / marks / OCR)
-    ├── sandbox.record_action()
-    │
-    ▼
-ToolResult { output, attachments, error }
-    │
-    ▼
-Integration adapter (MCP / Anthropic / OpenAI / LangChain)
-    │
-    ▼
-LLM response
+  ▼
+ctx.computer = LocalComputer
+  ▼
+mss / pyautogui / AppleScript / etc.
+  ▼
+ToolResult → Integration adapter → LLM
+```
+
+## Data flow — remote call
+
+```
+LLM
+  │ tool_name + arguments (with optional peer:)
+  ▼
+MCPDispatcher: strips peer, resolves Computer
+  ▼
+Tool.execute(ctx, params)        ← ctx.computer = RemoteComputer
+  ▼
+peer.call("display.capture", ...)
+  ▼
+encode (msgpack) → AEAD encrypt → WebSocket binary frame → TCP
+  ┌────────── over the wire ──────────┐
+  ▼
+TCP → WebSocket → AEAD decrypt → decode (msgpack)
+  ▼
+Peer dispatches → ComputerDispatcher
+  ▼
+LocalComputer on the remote machine
+  ▼
+result → encode → ... → back through wire → RemoteComputer
+  ▼
+ToolResult → Integration adapter → LLM
 ```
 
 ---
@@ -175,23 +324,18 @@ from pydantic import Field
 
 class PingTool(Tool):
     name = "ping"
-    description = "Check if a host is reachable."
+    description = "Check if a host is reachable from the active computer."
 
     class Params(Tool.Params):
         host: str = Field(description="Hostname or IP to ping.")
         count: int = Field(default=3, description="Number of pings.")
 
     async def execute(self, ctx: ToolContext, params: "PingTool.Params") -> ToolResult:
-        import asyncio
-        proc = await asyncio.create_subprocess_exec(
-            "ping", "-c", str(params.count), params.host,
-            stdout=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
+        result = await ctx.computer.exec(["ping", "-c", str(params.count), params.host])
         return ToolResult(
             title=f"Ping {params.host}",
-            output=stdout.decode(),
-            error=proc.returncode != 0,
+            output=result.stdout_text(),
+            error=result.returncode != 0,
         )
 
 # Register and use
@@ -199,4 +343,8 @@ registry = create_registry()
 registry.register(PingTool())
 ```
 
-It will automatically appear in MCP, Anthropic, OpenAI, and LangChain adapters.
+Because the tool calls `ctx.computer.exec(...)`, it runs on the local
+machine when `ctx.computer = LocalComputer`, on a remote peer when
+`ctx.computer = RemoteComputer` — same code, both paths.  And because the
+schema comes from Pydantic, it automatically appears in MCP, Anthropic,
+OpenAI, and LangChain adapters with no extra adapter code.

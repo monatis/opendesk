@@ -24,6 +24,7 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.0",
+    "msgpack>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -76,9 +77,17 @@ schedule = [
     "apscheduler>=3.10",
 ]
 
+# Remote computer use — control another machine over the network.
+# Includes the WebSocket transport, mDNS discovery, and Noise-handshake auth.
+remote = [
+    "websockets>=12.0",
+    "cryptography>=42.0",
+    "zeroconf>=0.140",
+]
+
 # Everything
 all = [
-    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule]",
+    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule,remote]",
 ]
 
 [project.scripts]
