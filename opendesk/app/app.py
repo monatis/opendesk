@@ -16,6 +16,8 @@ import asyncio
 import base64
 import contextlib
 import logging
+import socket
+import sys
 import time
 import webbrowser
 from dataclasses import dataclass, field
@@ -617,6 +619,20 @@ def create_app(state: AppState) -> FastAPI:
 # ---------------------------------------------------------------------------
 
 
+def _port_in_use(host: str, port: int) -> bool:
+    """Return True if *host:port* can't be bound — i.e. something already owns it."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+        except OSError:
+            return True
+        return False
+    finally:
+        s.close()
+
+
 def run(
     *,
     home: Optional[Path] = None,
@@ -626,6 +642,18 @@ def run(
 ) -> None:
     """Boot the FastAPI app + OpendeskServer behind it, then run uvicorn."""
     import uvicorn
+
+    # Pre-flight: bail out with an actionable message rather than a 30-line
+    # traceback if either port is already taken (typically another opendesk
+    # instance — `opendesk app` and `opendesk serve` both bind 8423).
+    for h, p, label in (("0.0.0.0", 8423, "WebSocket"), (host, port, "UI")):
+        if _port_in_use(h, p):
+            sys.stderr.write(
+                f"opendesk: {label} port {p} on {h} is already in use.\n"
+                f"  Another opendesk instance is probably running. "
+                f"Stop it (e.g. `pkill -f 'opendesk app'` or close the other process) and try again.\n"
+            )
+            sys.exit(1)
 
     identity = Identity.load_or_create(home)
     trusted = TrustedPeers(home)
