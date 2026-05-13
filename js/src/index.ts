@@ -21,6 +21,8 @@ export { connect, pairWith, type Target, type ConnectOptions, type PairWithOptio
 export { OpendeskServer, readDescription, writeDescription, clearDescription, DEFAULT_PORT } from "./remote/server.js";
 export { discover, advertise, type DiscoveredPeer, type Advertisement } from "./remote/discovery.js";
 export { RemoteComputer, SessionEvicted, type CapabilityManifest, type Connector } from "./computer/remote.js";
+export { ToolDispatcher } from "./computer/dispatcher.js";
+export { AdminClient, AdminServer, AdminError, type SessionInfo, type SessionsProvider } from "./remote/admin.js";
 
 // Protocol — auth / identity
 export { Identity, generatePairingCode, fingerprint, DEFAULT_HOME } from "./protocol/auth/identity.js";
