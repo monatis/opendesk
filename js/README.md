@@ -134,6 +134,120 @@ const client = new OpenDeskClient({
 
 ---
 
+## Remote machine control
+
+Control another machine on your LAN from your agent — screenshot, mouse, keyboard, all the same tools, just forwarded over an encrypted WebSocket.
+
+### Install with remote deps
+
+```bash
+npm install @vitalops/opendesk-sdk
+# ws, msgpackr, and bonjour-service are bundled as regular deps
+```
+
+### One-time pairing
+
+**On the controlled machine** (run `opendesk serve` — Python or JS):
+
+```bash
+# Python
+pip install 'opendesk[remote]'
+opendesk pair
+
+# or JS
+npx opendesk-js pair
+```
+
+You'll see a 6-digit pairing code. Leave the terminal open.
+
+**On the controller (JS)**:
+
+```bash
+npx opendesk-js pair-with 192.168.1.42 428901 --name mini
+# Paired with mini (9c2f:...)
+```
+
+### Start the daemon on the controlled machine
+
+```bash
+# Python
+opendesk serve
+
+# or JS
+npx opendesk-js serve
+```
+
+### Connect from the controller
+
+```typescript
+import { connect } from "@vitalops/opendesk-sdk";
+
+const remote = await connect("mini");           // peer name from pairing
+const shot = await remote.capture();
+console.log(shot.width, shot.height);
+await remote.close();
+```
+
+Or discover peers on the LAN first:
+
+```typescript
+import { discover, connect } from "@vitalops/opendesk-sdk";
+
+const peers = await discover(2000);             // browse for 2 s
+console.log(peers);                             // [{ name, host, port, fingerprint }]
+
+const remote = await connect(peers[0]);         // connect by DiscoveredPeer object
+```
+
+### Serve (JS daemon)
+
+```typescript
+import { OpendeskServer } from "@vitalops/opendesk-sdk";
+import { Identity } from "@vitalops/opendesk-sdk";
+import { TrustedPeers } from "@vitalops/opendesk-sdk";
+
+const identity = Identity.loadOrCreate();
+const trusted = new TrustedPeers();
+const server = new OpendeskServer(identity, trusted);
+await server.start();
+console.log("Listening on port", server.port);
+```
+
+### MCP remote tools
+
+Run the MCP server as normal. Every computer-use tool (`screenshot`, `mouse`, `keyboard`, etc.) accepts an optional `peer` argument to target a remote machine:
+
+```
+opendesk_use mini          # set default peer for this session
+screenshot                 # taken on mini
+mouse { action: "move", x: 100, y: 200 }  # on mini
+opendesk_use local         # switch back to local
+```
+
+**Admin tools** available to the agent:
+
+| Tool | Purpose |
+|---|---|
+| `opendesk_peers` | List trusted peers |
+| `opendesk_discover` | Browse LAN for opendesk peers |
+| `opendesk_use <peer>` | Set default peer (`"local"` to revert) |
+| `opendesk_status` | Show current default peer and connections |
+| `opendesk_capabilities [peer]` | Capability manifest |
+| `opendesk_disconnect [peer]` | Close cached connection |
+
+### JS CLI commands
+
+```
+npx opendesk-js pair           [--port N] [--code XXXXXX] [--timeout S]
+npx opendesk-js serve          [--port N] [--host H] [--no-mdns]
+npx opendesk-js pair-with HOST CODE [--port N] [--name NAME]
+npx opendesk-js discover       [--timeout S]
+npx opendesk-js peers          [list | default [NAME] | rename NAME NEW | remove NAME]
+npx opendesk-js connect PEER
+```
+
+---
+
 ## Tools
 
 Full reference: [docs/tools.md](../docs/tools.md)
