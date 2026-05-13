@@ -228,8 +228,7 @@ textarea {
 }
 
 /* Mode focus — hide the other panel when one mode is selected. */
-body.mode-hosting #panel-controlling,
-body.mode-hosting #panel-control { display: none !important; }
+body.mode-hosting #panel-controlling { display: none !important; }
 body.mode-controlling #panel-hosting { display: none !important; }
 /* In a focused mode the grid collapses to a single column. */
 body.mode-hosting .grid,
@@ -332,6 +331,47 @@ body.mode-controlling .grid { grid-template-columns: 1fr; }
 }
 #active-session .session-card .row {
     margin-top: 12px;
+}
+
+/* Control modal overlay */
+.control-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.80);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+}
+.control-modal[hidden] { display: none; }
+.control-modal-inner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    width: 100%;
+    max-width: 1100px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.control-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.control-modal-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
 }
 
 /* Screen / control panel */

@@ -149,15 +149,26 @@
         </section>
     </div>
 
-    <!-- ============================================================ -->
-    <!-- Control panel when an outbound is active -->
-    <!-- ============================================================ -->
-    <section class="panel wide" id="panel-control" style="display: none;">
-        <header>
+
+</template>
+
+<template id="tpl-peer-row">
+    <div class="peer-row">
+        <div class="peer-main">
+            <div class="peer-name"></div>
+            <div class="peer-meta muted small"></div>
+            <div class="peer-desc muted small"></div>
+        </div>
+        <div class="peer-actions row gap"></div>
+    </div>
+</template>
+
+<!-- Control modal — shown as a full-screen overlay when actively controlling a remote machine -->
+<div id="control-modal" class="control-modal" hidden>
+    <div class="control-modal-inner">
+        <header class="control-modal-header">
             <h2>Controlling <span id="control-peer" class="peer-name"></span></h2>
-            <div class="row gap">
-                <button class="ghost" data-action="stop-controlling">Disconnect</button>
-            </div>
+            <button class="ghost" data-action="stop-controlling">Disconnect</button>
         </header>
         <div class="screen-wrapper">
             <img id="screen" alt="remote screen" />
@@ -172,20 +183,8 @@
                 <button class="ghost" data-key="backspace">⌫</button>
             </div>
         </div>
-    </section>
-
-</template>
-
-<template id="tpl-peer-row">
-    <div class="peer-row">
-        <div class="peer-main">
-            <div class="peer-name"></div>
-            <div class="peer-meta muted small"></div>
-            <div class="peer-desc muted small"></div>
-        </div>
-        <div class="peer-actions row gap"></div>
     </div>
-</template>
+</div>
 
 <script src="/static/app.js" type="module"></script>
 </body>

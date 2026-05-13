@@ -184,8 +184,9 @@ function ensureView(view) {
     }
 }
 
-// One click handler on #root handles every button via data-action.
-root.addEventListener('click', async (ev) => {
+// One click handler on body handles every button via data-action (covers both
+// #root and the control modal which lives outside #root).
+document.body.addEventListener('click', async (ev) => {
     const btn = ev.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
@@ -586,15 +587,15 @@ function updatePairedHosts(peers) {
 }
 
 function updateControlPanel() {
-    const panel = document.getElementById('panel-control');
-    if (!panel) return;
+    const modal = document.getElementById('control-modal');
+    if (!modal) return;
     if (controllingPeer) {
-        panel.style.display = '';
         setText(document.getElementById('control-peer'), controllingPeer);
+        modal.hidden = false;
         attachScreenInputs();
         startScreenshotLoop();
     } else {
-        panel.style.display = 'none';
+        modal.hidden = true;
         stopScreenshotLoop();
     }
 }

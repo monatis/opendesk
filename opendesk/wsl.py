@@ -52,15 +52,43 @@ def wsl_interface_ipv4() -> str:
     return ips[0] if ips else ""
 
 
+def _default_route_ipv4() -> Optional[str]:
+    """Return the IP on the interface that handles the default route.
+
+    Opens a UDP socket toward a public address (no data is sent) and reads
+    back the local address the OS selected.  This is the IP that other
+    machines on the same network would use to reach us — VPN and virtual
+    adapter IPs that are not on the default route are skipped automatically.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        if ip and not ip.startswith("127."):
+            return ip
+    except OSError:
+        pass
+    return None
+
+
 def local_ipv4s() -> list[str]:
     """Return non-loopback IPv4s bound on this host.
 
-    Uses ``hostname -I`` (Linux/WSL) and falls back to
-    ``socket.gethostbyname_ex``.  Loopback and link-local are filtered
-    out.  Order matches the OS's preference where possible.
+    The default-route IP is always listed first (it's the one other LAN
+    devices can actually reach).  Additional IPs from ``hostname -I`` or
+    ``socket.gethostbyname_ex`` follow, so multi-homed hosts still expose
+    all their adapters — but virtual/VPN addresses don't push the working
+    IP down the list.
     """
     out: list[str] = []
     seen: set[str] = set()
+
+    # Lead with the default-route IP — this is almost always the right one.
+    default = _default_route_ipv4()
+    if default:
+        seen.add(default)
+        out.append(default)
+
     try:
         r = subprocess.run(
             ["hostname", "-I"], capture_output=True, text=True, timeout=5,
@@ -72,7 +100,7 @@ def local_ipv4s() -> list[str]:
                     out.append(ip)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
-    if not out:
+    if len(out) <= 1:
         try:
             _, _, addrs = socket.gethostbyname_ex(socket.gethostname())
             for ip in addrs:
