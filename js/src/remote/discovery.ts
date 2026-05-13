@@ -58,7 +58,7 @@ export async function advertise(opts: {
 
   return {
     close: () => {
-      service.stop();
+      service.stop?.();
       bonjour.destroy();
     },
   };
@@ -76,7 +76,7 @@ export async function discover(timeout = 2000): Promise<DiscoveredPeer[]> {
   return new Promise((resolve) => {
     const browser = bonjour.find({ type: `${SERVICE_TYPE}.${SERVICE_PROTOCOL}` }, (service) => {
       try {
-        const txt = (service as Record<string, unknown>)["txt"] as Record<string, string> | undefined;
+        const txt = (service as unknown as Record<string, unknown>)["txt"] as Record<string, string> | undefined;
         if (!txt) return;
         const pkHex = txt["pk"];
         if (!pkHex || pkHex.length !== 64) return;
@@ -85,7 +85,7 @@ export async function discover(timeout = 2000): Promise<DiscoveredPeer[]> {
         const desc = txt["desc"] ?? "";
 
         // Prefer IPv4 address
-        const addrs: string[] = (service as Record<string, unknown>)["addresses"] as string[] ?? [];
+        const addrs: string[] = (service as unknown as Record<string, unknown>)["addresses"] as string[] ?? [];
         const host = addrs.find((a) => !a.includes(":")) ?? service.host ?? "unknown";
 
         peers.set(pkHex, {
