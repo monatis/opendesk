@@ -23,6 +23,7 @@ export { discover, advertise, type DiscoveredPeer, type Advertisement } from "./
 export { RemoteComputer, SessionEvicted, type CapabilityManifest, type Connector } from "./computer/remote.js";
 export { ToolDispatcher } from "./computer/dispatcher.js";
 export { AdminClient, AdminServer, AdminError, type SessionInfo, type SessionsProvider } from "./remote/admin.js";
+export { AuditLog, type AuditEntry } from "./remote/audit.js";
 
 // Protocol — auth / identity
 export { Identity, generatePairingCode, fingerprint, DEFAULT_HOME } from "./protocol/auth/identity.js";

@@ -85,7 +85,7 @@ export async function connectWebSocket(url: string): Promise<WebSocketConnection
   });
 }
 
-export type ConnectionHandler = (conn: WebSocketConnection) => Promise<void>;
+export type ConnectionHandler = (conn: WebSocketConnection, remoteAddr: string) => Promise<void>;
 
 export interface ServeOptions {
   host?: string;
@@ -120,10 +120,11 @@ export async function serveWebSocket(
   return new Promise((resolve, reject) => {
     const server = new WsServer({ host, port: port === 0 ? undefined : port });
 
-    server.on("connection", async (ws) => {
+    server.on("connection", async (ws, req) => {
+      const remoteAddr = req.socket.remoteAddress ?? "unknown";
       const conn = new WebSocketConnection(ws);
       try {
-        await handler(conn);
+        await handler(conn, remoteAddr);
       } catch {
         // ignore per-connection errors at server level
       } finally {

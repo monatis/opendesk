@@ -156,13 +156,17 @@ async function cmdServe(argv: string[]): Promise<void> {
     ctx = allowAllContext();
   }
 
-  const dispatcher = new ToolDispatcher({ registry: createRegistry(), ctx });
+  const { AuditLog } = await import("./remote/audit.js");
+  const registry = createRegistry();
+  const audit = new AuditLog({ home });
   const server = new OpendeskServer(identity, trusted, {
     host,
     port,
     home,
     advertise: !noMdns,
-    dispatcherFactory: () => dispatcher,
+    audit,
+    dispatcherFactory: ({ peerName, peerFingerprint, sessionId }) =>
+      new ToolDispatcher({ registry, ctx, audit, peerName, peerFingerprint, sessionId }),
   });
 
   await server.start();
@@ -511,6 +515,62 @@ async function cmdDisconnect(argv: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// audit
+// ---------------------------------------------------------------------------
+
+async function cmdAudit(argv: string[]): Promise<void> {
+  const { flags } = parseFlags(argv);
+  const home   = resolveHome(str(flags["home"]) || undefined);
+  const date   = str(flags["date"]) || undefined;
+  const peer   = str(flags["peer"]) || undefined;
+  const limit  = num(flags["limit"], 0);
+  const follow = bool(flags["follow"]);
+
+  const { AuditLog } = await import("./remote/audit.js");
+  type AuditEntry = import("./remote/audit.js").AuditEntry;
+  const log = new AuditLog({ home });
+
+  function printEntries(entries: AuditEntry[]): void {
+    let filtered = peer
+      ? entries.filter((e) => e.peer?.name === peer || e.peer?.fp?.startsWith(peer))
+      : entries;
+    if (limit > 0) filtered = filtered.slice(-limit);
+    for (const e of filtered) {
+      const d = new Date(e.ts * 1000).toISOString().replace("T", " ").replace("Z", "");
+      const p = e.peer ? `${(e.peer.name || "?").padEnd(16)} ${e.peer.fp.slice(0, 8)}` : "?".padEnd(25);
+      let detail = "";
+      if (e.type === "call") {
+        detail = `  ${(e.method ?? "").padEnd(18)} ${(e.outcome ?? "").padEnd(7)} ${e.duration_ms ?? 0}ms`;
+        if (e.summary) detail += `  ${e.summary}`;
+      } else if (e.reason) {
+        detail = `  reason=${e.reason}`;
+      }
+      if (e.session_id) detail += `  sid=${e.session_id.slice(0, 12)}`;
+      console.log(`${d}  ${e.type.padEnd(20)} ${p}${detail}`);
+    }
+  }
+
+  if (follow) {
+    let seen = 0;
+    const tick = () => {
+      const entries = log.iterEntries(date);
+      if (entries.length > seen) {
+        printEntries(entries.slice(seen));
+        seen = entries.length;
+      }
+    };
+    tick();
+    const iv = setInterval(tick, 500);
+    process.on("SIGINT", () => { clearInterval(iv); process.exit(0); });
+    await new Promise<void>(() => {});
+  } else {
+    const entries = log.iterEntries(date);
+    printEntries(entries);
+    if (!entries.length) console.log("No audit entries for " + (date ?? "today") + ".");
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Help
 // ---------------------------------------------------------------------------
 
@@ -523,6 +583,7 @@ Controlled-machine commands (run on the machine to be controlled):
   sessions      Show active controller session
   disconnect    Evict the active controller (peer stays paired)
   describe      Read / set / clear this machine's broadcast description
+  audit         View the audit log (session opens, calls, rejections)
 
 Controller commands (run on the machine that drives others):
   pair-with     Complete pairing with a machine running 'opendesk-js pair'
@@ -547,6 +608,8 @@ Examples:
   opendesk-js connect laptop
   opendesk-js peers list
   opendesk-js peers default laptop
+  opendesk-js audit --date=2026-05-13 --peer=laptop --limit=50
+  opendesk-js audit --follow
 `);
 }
 
@@ -572,6 +635,7 @@ export async function main(): Promise<void> {
       case "describe":    return await cmdDescribe(rest);
       case "sessions":    return await cmdSessions(rest);
       case "disconnect":  return await cmdDisconnect(rest);
+      case "audit":       return await cmdAudit(rest);
       default:
         printHelp();
         if (command && command !== "--help" && command !== "-h") {
