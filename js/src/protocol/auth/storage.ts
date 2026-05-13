@@ -46,8 +46,8 @@ export class TrustedPeers {
       const raw = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
       if (!Array.isArray(raw)) return [];
       return raw
-        .filter((item: unknown) => typeof item === "object" && item !== null)
-        .map((item: Record<string, unknown>) => ({
+        .filter((item: unknown): item is Record<string, unknown> => typeof item === "object" && item !== null)
+        .map((item) => ({
           publicKey: String(item["public_key"] ?? item["publicKey"] ?? ""),
           name: String(item["name"] ?? ""),
           pairedAt: Number(item["paired_at"] ?? item["pairedAt"] ?? 0),
@@ -146,6 +146,24 @@ export class TrustedPeers {
     const idx = peers.findIndex((p) => p.publicKey === nameOrKey || p.name === nameOrKey);
     if (idx < 0) return false;
     peers[idx] = { ...peers[idx], name: newName };
+    this.save(peers);
+    return true;
+  }
+
+  setDescriptionOverride(nameOrKey: string, text: string): boolean {
+    const peers = this.load();
+    const idx = peers.findIndex((p) => p.publicKey === nameOrKey || p.name === nameOrKey);
+    if (idx < 0) return false;
+    peers[idx] = { ...peers[idx], descriptionOverride: text };
+    this.save(peers);
+    return true;
+  }
+
+  clearDescriptionOverride(nameOrKey: string): boolean {
+    const peers = this.load();
+    const idx = peers.findIndex((p) => p.publicKey === nameOrKey || p.name === nameOrKey);
+    if (idx < 0) return false;
+    peers[idx] = { ...peers[idx], descriptionOverride: "" };
     this.save(peers);
     return true;
   }

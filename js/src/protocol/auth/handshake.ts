@@ -70,7 +70,7 @@ function chacha20Seal(key: Buffer, plaintext: Buffer): Buffer {
     authTagLength: 16,
   } as Parameters<typeof crypto.createCipheriv>[3]);
   const enc = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const tag = cipher.getAuthTag();
+  const tag = (cipher as crypto.CipherGCM).getAuthTag();
   return Buffer.concat([enc, tag]);
 }
 
@@ -81,7 +81,7 @@ function chacha20Open(key: Buffer, ciphertext: Buffer): Buffer {
   const decipher = crypto.createDecipheriv("chacha20-poly1305", key, nonce, {
     authTagLength: 16,
   } as Parameters<typeof crypto.createDecipheriv>[3]);
-  decipher.setAuthTag(tag);
+  (decipher as crypto.DecipherGCM).setAuthTag(tag);
   try {
     return Buffer.concat([decipher.update(data), decipher.final()]);
   } catch {
