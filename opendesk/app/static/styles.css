@@ -382,6 +382,55 @@ body.mode-controlling .grid { grid-template-columns: 1fr; }
 .audit-row-error td:nth-child(4) { color: var(--danger); font-weight: 500; }
 .audit-row-ok td:nth-child(4) { color: var(--good); }
 
+/* Environment banner (WSL warning) */
+.env-banner {
+    max-width: 1200px;
+    margin: 18px auto 0;
+    padding: 0 24px;
+}
+.env-banner-inner {
+    background: linear-gradient(135deg, rgba(255, 184, 107, 0.12), rgba(255, 184, 107, 0.04));
+    border: 1px solid rgba(255, 184, 107, 0.45);
+    border-left: 3px solid var(--warn);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+}
+.env-banner-title {
+    font-weight: 600;
+    color: var(--warn);
+    margin-bottom: 6px;
+}
+.env-banner-body {
+    color: var(--text);
+    margin-bottom: 12px;
+}
+.env-banner-body code {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+}
+
+/* Pairing endpoints list */
+.pairing-endpoints {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin: 18px auto;
+    max-width: 640px;
+}
+.pairing-endpoints .code-hint {
+    display: block;
+    text-align: left;
+    width: 100%;
+}
+.pairing-endpoints .small {
+    margin: 6px 0 0;
+}
+
 /* Toast */
 .toast {
     position: fixed;

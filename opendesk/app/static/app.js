@@ -248,6 +248,12 @@ root.addEventListener('click', async (ev) => {
             case 'wsl-undo':
                 await applyWslUndo();
                 break;
+            case 'wsl-enable-mirrored':
+                await applyWslEnableMirrored();
+                break;
+            case 'copy-shutdown':
+                await copyShutdownCommand();
+                break;
         }
     } catch (e) {
         toast(e.message, 'error');
@@ -285,7 +291,9 @@ function renderModeSwitcher() {
 function updateEnvBanner(env) {
     const el = document.getElementById('env-banner');
     if (!el) return;
-    if (!env || !env.wsl) {
+    // Banner only matters inside WSL.  When mirrored mode is *active*,
+    // mDNS and inbound LAN traffic work natively — nothing to warn about.
+    if (!env || !env.wsl || env.mirrored_active) {
         if (!el.hidden) el.hidden = true;
         return;
     }
@@ -294,24 +302,83 @@ function updateEnvBanner(env) {
     const ipHtml = ips.length
         ? ips.map(ip => `<code>${escapeHtml(ip)}:${port}</code>`).join(' or ')
         : '<span class="muted">(none detected)</span>';
+
+    let title, body, primary, secondary;
+    if (env.mirrored_configured) {
+        // Config is set but the runtime hasn't picked it up.  The user just
+        // needs to bounce WSL.  This is the *most common* state after the
+        // user (or our button) has written .wslconfig.
+        title = '⏎ Restart WSL to finish — mirrored mode is configured but not active';
+        body = `
+            <p>Your <code>${escapeHtml(env.wslconfig_path || '.wslconfig')}</code>
+            already has <code>networkingMode=mirrored</code>, but WSL hasn't
+            been restarted since.  Once you do, this WSL instance will share
+            the Windows network adapters — mDNS discovery and LAN inbound
+            will Just Work.</p>
+            <p class="muted small">
+                In PowerShell, run <code>wsl --shutdown</code>, then reopen
+                this terminal and refresh.
+            </p>
+        `;
+        primary = `<button class="ghost" data-action="copy-shutdown">Copy 'wsl --shutdown'</button>`;
+        secondary = '';
+    } else {
+        // Neither configured nor active — full setup needed.
+        title = '⚠ Running inside WSL — LAN discovery won\'t work';
+        body = `
+            <p>WSL2 puts this Linux instance behind a NAT, so mDNS doesn't
+            cross either way.  The robust fix is <strong>mirrored networking
+            mode</strong> — one line in
+            <code>${escapeHtml(env.wslconfig_path || '~/.wslconfig')}</code>
+            plus a WSL restart.</p>
+            <p class="muted small">
+                As a fallback, you can also forward inbound TCP on the
+                Windows side.  Controllers would then connect to
+                ${ipHtml}.
+            </p>
+        `;
+        primary = `<button class="primary" data-action="wsl-enable-mirrored">Enable mirrored networking</button>`;
+        secondary = `
+            <button class="ghost" data-action="wsl-setup">Use port forwarding instead</button>
+            <button class="ghost" data-action="wsl-undo" title="Remove a previous port-forwarding rule">Undo port forwarding</button>
+        `;
+    }
+
     const html = `
         <div class="env-banner-inner">
-            <div class="env-banner-title">
-                ⚠ Running inside WSL — extra setup needed for LAN reach
-            </div>
-            <div class="env-banner-body">
-                WSL2 isolates this Linux instance from your real network.
-                For other machines on the LAN to reach this host, point them at
-                ${ipHtml} and run port-forwarding on the Windows side once.
-            </div>
+            <div class="env-banner-title">${title}</div>
+            <div class="env-banner-body">${body}</div>
             <div class="env-banner-actions row gap">
-                <button class="primary" data-action="wsl-setup">Set up Windows port forwarding</button>
-                <button class="ghost" data-action="wsl-undo">Undo</button>
+                ${primary}
+                ${secondary}
             </div>
         </div>
     `;
     setHtml(el, html);
     if (el.hidden) el.hidden = false;
+}
+
+async function applyWslEnableMirrored() {
+    try {
+        const r = await apiPost('/api/wsl/enable-mirrored');
+        if (r.wrote) {
+            toast(`Wrote ${r.path} — now run "wsl --shutdown" in PowerShell.`, 'ok');
+        } else {
+            toast(`${r.path} already has mirrored mode — just run "wsl --shutdown".`, 'ok');
+        }
+        await poll();
+    } catch (e) {
+        toast(`Could not write .wslconfig: ${e.message}`, 'error');
+    }
+}
+
+async function copyShutdownCommand() {
+    try {
+        await navigator.clipboard.writeText('wsl --shutdown');
+        toast('"wsl --shutdown" copied — paste it into PowerShell.', 'ok');
+    } catch (e) {
+        toast('Run: wsl --shutdown (in PowerShell)', '');
+    }
 }
 
 async function applyWslSetup() {

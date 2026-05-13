@@ -13,9 +13,11 @@ import pytest
 
 from opendesk.protocol.auth import Identity, TrustedPeers
 from opendesk.wsl import (
+    _wslconfig_section_has,
     is_wsl,
     render_setup_commands,
     render_undo_commands,
+    render_wslconfig_with_mirrored,
     windows_host_ipv4,
     wsl_interface_ipv4,
 )
@@ -92,6 +94,77 @@ class TestWSLIPHelpers:
         # Can't easily monkeypatch the open() inside windows_host_ipv4
         # without reading the source; this is a soft check.
         # If we're actually in WSL the function should return something.
+
+
+# ---------------------------------------------------------------------------
+# .wslconfig writer — the file we ask users to edit to enable mirrored mode
+# ---------------------------------------------------------------------------
+
+
+class TestRenderWslconfig:
+    """``render_wslconfig_with_mirrored`` must be safe to call on any
+    pre-existing ``.wslconfig`` content — we don't want to clobber the
+    user's other tweaks."""
+
+    def test_empty_file_gets_full_section(self):
+        out = render_wslconfig_with_mirrored("")
+        assert "[wsl2]" in out
+        assert "networkingMode=mirrored" in out
+        assert _wslconfig_section_has(out, "wsl2", "networkingmode", "mirrored")
+
+    def test_already_set_is_idempotent(self):
+        existing = "[wsl2]\nnetworkingMode=mirrored\n"
+        # Already-set content is returned with the same content (newline
+        # normalization is fine, but the user's content shouldn't change).
+        out = render_wslconfig_with_mirrored(existing)
+        assert out == existing
+        # Calling again is also a no-op.
+        assert render_wslconfig_with_mirrored(out) == out
+
+    def test_existing_wsl2_section_without_networkingmode(self):
+        existing = "[wsl2]\nmemory=8GB\nprocessors=4\n"
+        out = render_wslconfig_with_mirrored(existing)
+        # Other [wsl2] settings preserved.
+        assert "memory=8GB" in out
+        assert "processors=4" in out
+        # networkingMode added inside the section.
+        assert _wslconfig_section_has(out, "wsl2", "networkingmode", "mirrored")
+
+    def test_existing_wsl2_section_with_different_networkingmode(self):
+        existing = "[wsl2]\nnetworkingMode=nat\nmemory=8GB\n"
+        out = render_wslconfig_with_mirrored(existing)
+        # NAT is replaced, not duplicated.
+        assert out.lower().count("networkingmode") == 1
+        assert _wslconfig_section_has(out, "wsl2", "networkingmode", "mirrored")
+        assert "memory=8GB" in out
+
+    def test_other_section_preserved(self):
+        """Sections we don't touch (like [experimental]) must survive."""
+        existing = (
+            "[experimental]\n"
+            "autoMemoryReclaim=gradual\n"
+            "\n"
+            "[wsl2]\n"
+            "memory=4GB\n"
+        )
+        out = render_wslconfig_with_mirrored(existing)
+        assert "autoMemoryReclaim=gradual" in out
+        assert "memory=4GB" in out
+        assert _wslconfig_section_has(out, "wsl2", "networkingmode", "mirrored")
+
+    def test_no_wsl2_section_at_all_appends_new(self):
+        existing = "[experimental]\nautoMemoryReclaim=gradual\n"
+        out = render_wslconfig_with_mirrored(existing)
+        assert "autoMemoryReclaim=gradual" in out
+        assert "[wsl2]" in out
+        assert _wslconfig_section_has(out, "wsl2", "networkingmode", "mirrored")
+
+    def test_case_insensitive_match_for_already_set(self):
+        existing = "[WSL2]\nNetworkingMode=Mirrored\n"
+        # Already mirrored — must not duplicate.
+        out = render_wslconfig_with_mirrored(existing)
+        # The function leaves user's casing alone if it's already correct.
+        assert out.lower().count("networkingmode") == 1
 
 
 # ---------------------------------------------------------------------------

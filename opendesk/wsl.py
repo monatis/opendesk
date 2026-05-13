@@ -143,6 +143,152 @@ def windows_lan_ipv4s() -> list[str]:
     return ips
 
 
+def windows_user_profile() -> Optional[Path]:
+    """Return the WSL path (``/mnt/c/Users/<user>``) for the Windows user.
+
+    Resolved via ``cmd.exe /c echo %USERPROFILE%`` + ``wslpath``.  Returns
+    ``None`` outside WSL, or when interop / wslpath aren't available.
+    """
+    if not is_wsl():
+        return None
+    try:
+        r = subprocess.run(
+            ["cmd.exe", "/c", "echo %USERPROFILE%"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    win_path = r.stdout.strip().split("\r")[0].strip()
+    if not win_path or "%" in win_path:
+        return None
+    try:
+        r2 = subprocess.run(
+            ["wslpath", win_path], capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if r2.returncode != 0:
+        return None
+    p = Path(r2.stdout.strip())
+    return p if p.exists() else None
+
+
+def wslconfig_path() -> Optional[Path]:
+    """The full path to the user's ``.wslconfig`` (whether it exists or not)."""
+    profile = windows_user_profile()
+    return (profile / ".wslconfig") if profile else None
+
+
+def is_mirrored_mode() -> bool:
+    """True when WSL is *currently running* in mirrored networking mode.
+
+    Heuristic: in mirrored mode WSL binds to the Windows network adapters
+    directly, so ``hostname -I`` returns one of the Windows LAN IPs (not
+    the 172.16/12 NAT range).  We declare mirrored when the local IP set
+    intersects the Windows LAN IP set.
+
+    This is the *runtime* state, not the config state — a host can have
+    ``networkingMode=mirrored`` set in ``.wslconfig`` but still be running
+    NAT'd because it hasn't been restarted yet (``wsl --shutdown``).
+    Use :func:`wslconfig_has_mirrored` for the config side.
+    """
+    if not is_wsl():
+        return False
+    return bool(set(local_ipv4s()) & set(windows_lan_ipv4s()))
+
+
+def wslconfig_has_mirrored() -> bool:
+    """True iff the user's ``.wslconfig`` has ``networkingMode=mirrored``.
+
+    Doesn't say whether it's *active* — just whether the file is set up
+    so a ``wsl --shutdown`` would activate it.
+    """
+    path = wslconfig_path()
+    if path is None or not path.exists():
+        return False
+    try:
+        text = path.read_text()
+    except OSError:
+        return False
+    return _wslconfig_section_has(text, "wsl2", "networkingmode", "mirrored")
+
+
+def _wslconfig_section_has(
+    text: str, section: str, key: str, value: str,
+) -> bool:
+    """Tiny INI scan: does ``[section]`` contain ``key=value`` (case-insens.)?"""
+    section_l = section.lower()
+    key_l = key.lower()
+    value_l = value.lower()
+    current: Optional[str] = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith((";", "#")):
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            current = stripped[1:-1].strip().lower()
+            continue
+        if current != section_l or "=" not in stripped:
+            continue
+        k, _, v = stripped.partition("=")
+        if k.strip().lower() == key_l and v.strip().lower() == value_l:
+            return True
+    return False
+
+
+def render_wslconfig_with_mirrored(existing: str = "") -> str:
+    """Return ``.wslconfig`` text guaranteed to contain ``[wsl2] /
+    networkingMode=mirrored`` while preserving any other lines.
+
+    Idempotent — calling on already-mirrored content returns it unchanged
+    apart from a guaranteed trailing newline.
+    """
+    if _wslconfig_section_has(existing or "", "wsl2", "networkingmode", "mirrored"):
+        if existing and not existing.endswith("\n"):
+            existing += "\n"
+        return existing
+
+    lines = existing.splitlines() if existing else []
+    # Find or create the [wsl2] section.
+    wsl2_header_idx: Optional[int] = None
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if s.startswith("[") and s.endswith("]") and s[1:-1].strip().lower() == "wsl2":
+            wsl2_header_idx = i
+            break
+
+    if wsl2_header_idx is None:
+        # Append a new section.
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append("[wsl2]")
+        lines.append("networkingMode=mirrored")
+        return "\n".join(lines) + "\n"
+
+    # Within [wsl2], look for an existing networkingMode line (any value).
+    end = len(lines)
+    for j in range(wsl2_header_idx + 1, len(lines)):
+        s = lines[j].strip()
+        if s.startswith("[") and s.endswith("]"):
+            end = j
+            break
+
+    for j in range(wsl2_header_idx + 1, end):
+        s = lines[j].strip()
+        if "=" not in s:
+            continue
+        k, _, _ = s.partition("=")
+        if k.strip().lower() == "networkingmode":
+            lines[j] = "networkingMode=mirrored"
+            return "\n".join(lines) + "\n"
+
+    # No networkingMode line — insert right after the header.
+    lines.insert(wsl2_header_idx + 1, "networkingMode=mirrored")
+    return "\n".join(lines) + "\n"
+
+
 def _is_plausible_lan_ipv4(ip: str) -> bool:
     """True for an IPv4 a controller on the same LAN could conceivably use."""
     if ip.count(".") != 3:
@@ -217,22 +363,78 @@ def render_undo_commands(port: int) -> list[str]:
 
 
 def run_via_uac(commands: list[str]) -> int:
-    """Try to run ``commands`` on the Windows host with a UAC prompt.
+    """Run ``commands`` on the Windows host with a UAC prompt, *and wait*.
 
-    Joins them with ``;`` and invokes through ``powershell.exe`` available
-    via WSL's Windows interop.  Returns the exit code; non-zero means the
-    elevation didn't happen (UAC declined or powershell.exe unreachable).
+    Writes the commands to a one-shot ``.ps1`` in the Windows user's TEMP
+    directory, then launches it via ``Start-Process -Verb RunAs -Wait
+    -PassThru`` so we can propagate the inner process's exit code.
+
+    Returns:
+        0 on success; non-zero if the elevated commands themselves failed,
+        if the UAC prompt was declined, or if interop / wslpath / temp
+        directory weren't available.
     """
     if not is_wsl():
         raise RuntimeError("not running inside WSL")
-    script = "; ".join(commands)
-    # -Verb RunAs triggers UAC.  -NoProfile keeps it fast.
+
+    profile = windows_user_profile()
+    if profile is None:
+        return 127
+    temp_dir = profile / "AppData" / "Local" / "Temp"
+    if not temp_dir.exists():
+        return 127
+
+    import time as _time
+    script_path = temp_dir / f"opendesk-uac-{int(_time.time() * 1000)}.ps1"
+
+    # The script: stop on any error, run the commands in order, surface the
+    # right exit code.  $ErrorActionPreference = 'Stop' ensures the script
+    # exits non-zero when (e.g.) netsh complains about a duplicate rule.
+    body = "\r\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        "try {",
+        *(f"    {c}" for c in commands),
+        "    exit 0",
+        "} catch {",
+        "    Write-Error $_",
+        "    exit 1",
+        "}",
+    ]) + "\r\n"
+
+    try:
+        # utf-8-sig (BOM) so PowerShell handles non-ASCII reliably.
+        script_path.write_text(body, encoding="utf-8-sig")
+    except OSError:
+        return 127
+
+    try:
+        win_path_r = subprocess.run(
+            ["wslpath", "-w", str(script_path)],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        script_path.unlink(missing_ok=True)
+        return 127
+    if win_path_r.returncode != 0:
+        script_path.unlink(missing_ok=True)
+        return 127
+    win_path = win_path_r.stdout.strip()
+
+    # -Wait stalls until the elevated process finishes; -PassThru returns
+    # the process object so we can read ExitCode.  Without these, the outer
+    # powershell returns immediately and we never know if the commands ran.
     outer = (
-        "Start-Process powershell -Verb RunAs -ArgumentList "
-        f"'-NoProfile', '-Command', \"{script}\""
+        "$p = Start-Process powershell -Verb RunAs -Wait -PassThru "
+        "-ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"
+        f"'{win_path}'; exit $p.ExitCode"
     )
-    r = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-Command", outer],
-        capture_output=True, text=True, timeout=30,
-    )
-    return r.returncode
+    try:
+        r = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", outer],
+            capture_output=True, text=True, timeout=180,
+        )
+        return r.returncode
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return 127
+    finally:
+        script_path.unlink(missing_ok=True)

@@ -95,17 +95,32 @@ def _host_environment(state: "AppState") -> dict[str, Any]:
     the Windows host's LAN adapters (what other devices on the network
     can actually reach); on a regular machine it's this host's own LAN
     interfaces.
+
+    The mirrored-mode block has *two* booleans for a reason — a user can
+    have ``.wslconfig`` set up correctly (``mirrored_configured = True``)
+    but still be running on the old NAT'd kernel because they haven't
+    done ``wsl --shutdown`` yet.  The UI shows a different prompt for
+    each state.
     """
     in_wsl = _wsl.is_wsl()
     if in_wsl:
         reachable = _wsl.windows_lan_ipv4s()
+        mirrored_active = _wsl.is_mirrored_mode()
+        mirrored_configured = _wsl.wslconfig_has_mirrored()
+        cfg_path = _wsl.wslconfig_path()
     else:
         reachable = _wsl.local_ipv4s()
+        mirrored_active = False
+        mirrored_configured = False
+        cfg_path = None
     return {
         "wsl": in_wsl,
         "wsl_ip": _wsl.wsl_interface_ipv4() if in_wsl else "",
         "reachable_ipv4s": reachable,
         "server_port": state.server.port if state.server is not None else None,
+        "mirrored_active": mirrored_active,
+        "mirrored_configured": mirrored_configured,
+        "wslconfig_path": str(cfg_path) if cfg_path else "",
     }
 
 
@@ -510,6 +525,52 @@ def create_app(state: AppState) -> FastAPI:
             "port": port,
             "wsl_ip": wsl_ip,
             "reachable_ipv4s": _wsl.windows_lan_ipv4s(),
+        }
+
+    @app.post("/api/wsl/enable-mirrored")
+    async def wsl_enable_mirrored(req: Request) -> dict[str, Any]:
+        """Write ``[wsl2] networkingMode=mirrored`` to ``~/.wslconfig``.
+
+        Mirrored mode is the actual fix for WSL2 LAN reachability — once
+        active, WSL binds to the Windows adapters directly so mDNS works
+        in both directions and no port-forwarding is needed.  Activating
+        it requires ``wsl --shutdown`` on the Windows side; we can't do
+        that ourselves (it would kill this very process), so the response
+        includes the command to run.
+        """
+        if not _wsl.is_wsl():
+            raise HTTPException(400, "not running inside WSL")
+        path = _wsl.wslconfig_path()
+        if path is None:
+            raise HTTPException(
+                500,
+                "could not locate the Windows user profile via interop",
+            )
+        try:
+            existing = path.read_text() if path.exists() else ""
+        except OSError as exc:
+            raise HTTPException(500, f"could not read {path}: {exc}")
+        new_text = _wsl.render_wslconfig_with_mirrored(existing)
+        already = new_text == existing or (
+            existing and new_text == existing
+        )
+        wrote = False
+        if new_text != existing:
+            try:
+                path.write_text(new_text)
+                wrote = True
+            except OSError as exc:
+                raise HTTPException(500, f"could not write {path}: {exc}")
+        return {
+            "ok": True,
+            "wrote": wrote,
+            "already_configured": _wsl.wslconfig_has_mirrored(),
+            "mirrored_active": _wsl.is_mirrored_mode(),
+            "path": str(path),
+            "next_step": (
+                None if _wsl.is_mirrored_mode()
+                else "Run 'wsl --shutdown' in PowerShell, then reopen your WSL terminal."
+            ),
         }
 
     @app.post("/api/wsl/undo")

@@ -347,6 +347,7 @@ class TestHostEnvironment:
             env = body["host_environment"]
             assert set(env.keys()) == {
                 "wsl", "wsl_ip", "reachable_ipv4s", "server_port",
+                "mirrored_active", "mirrored_configured", "wslconfig_path",
             }
             assert isinstance(env["wsl"], bool)
             assert isinstance(env["reachable_ipv4s"], list)
@@ -483,3 +484,104 @@ class TestWslSetupEndpoint:
             assert r.status_code == 503
             r = client.post("/api/wsl/undo")
             assert r.status_code == 503
+
+
+class TestWslEnableMirrored:
+    """``/api/wsl/enable-mirrored`` writes the .wslconfig directly (no UAC
+    needed — it's the user's own home dir).  Tests redirect the path
+    helper at a tmp file so we can verify writes without touching the
+    real Windows profile."""
+
+    def _setup(self, tmp_path: Path, monkeypatch, *, existing: str = None):
+        cfg = tmp_path / ".wslconfig"
+        if existing is not None:
+            cfg.write_text(existing)
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: True)
+        monkeypatch.setattr("opendesk.wsl.wslconfig_path", lambda: cfg)
+        # is_mirrored_mode compares local vs windows IPs.  We want it false
+        # in tests so the "next step" hint is included.
+        monkeypatch.setattr("opendesk.wsl.is_mirrored_mode", lambda: False)
+        return cfg
+
+    def test_creates_file_when_missing(self, tmp_path: Path, monkeypatch):
+        cfg = self._setup(tmp_path, monkeypatch)
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            r = client.post("/api/wsl/enable-mirrored")
+            assert r.status_code == 200
+            body = r.json()
+            assert body["ok"] is True
+            assert body["wrote"] is True
+            assert body["already_configured"] is True
+            assert body["mirrored_active"] is False
+            assert "wsl --shutdown" in body["next_step"]
+            text = cfg.read_text()
+            assert "[wsl2]" in text
+            assert "networkingMode=mirrored" in text
+
+    def test_idempotent_when_already_configured(self, tmp_path: Path, monkeypatch):
+        cfg = self._setup(
+            tmp_path, monkeypatch,
+            existing="[wsl2]\nnetworkingMode=mirrored\n",
+        )
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            r = client.post("/api/wsl/enable-mirrored")
+            assert r.status_code == 200
+            body = r.json()
+            assert body["wrote"] is False
+            assert body["already_configured"] is True
+
+    def test_preserves_other_keys(self, tmp_path: Path, monkeypatch):
+        cfg = self._setup(
+            tmp_path, monkeypatch,
+            existing="[wsl2]\nmemory=8GB\nprocessors=4\n",
+        )
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            r = client.post("/api/wsl/enable-mirrored")
+            assert r.status_code == 200
+        text = cfg.read_text()
+        assert "memory=8GB" in text
+        assert "processors=4" in text
+        assert "networkingMode=mirrored" in text
+
+    def test_no_next_step_when_already_active(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        self._setup(tmp_path, monkeypatch)
+        monkeypatch.setattr("opendesk.wsl.is_mirrored_mode", lambda: True)
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            body = client.post("/api/wsl/enable-mirrored").json()
+            assert body["mirrored_active"] is True
+            assert body["next_step"] is None
+
+    def test_refuses_outside_wsl(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: False)
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            r = client.post("/api/wsl/enable-mirrored")
+            assert r.status_code == 400
+
+    def test_host_environment_exposes_mirrored_fields(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        cfg = self._setup(
+            tmp_path, monkeypatch,
+            existing="[wsl2]\nnetworkingMode=mirrored\n",
+        )
+        # Inactive runtime, but config has it — exactly the state the user
+        # is in right after writing .wslconfig but before `wsl --shutdown`.
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            env = client.get("/api/state").json()["host_environment"]
+            assert env["mirrored_active"] is False
+            assert env["mirrored_configured"] is True
+            assert env["wslconfig_path"] == str(cfg)
