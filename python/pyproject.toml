@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opendesk"
-version = "0.1.2"
+version = "0.1.3"
 description = "Open Computer Use Agent — framework for desktop and browser automation"
 readme = "README.md"
 license = { text = "MIT" }
@@ -102,9 +102,9 @@ opendesk-mcp = "opendesk.integrations.mcp:run_stdio_server"
 opendesk = "opendesk.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/abhijithneilabraham/opendesk"
-Documentation = "https://github.com/abhijithneilabraham/opendesk/tree/main/docs"
-Issues = "https://github.com/abhijithneilabraham/opendesk/issues"
+Homepage = "https://github.com/vitalops/opendesk"
+Documentation = "https://github.com/vitalops/opendesk/tree/main/docs"
+Issues = "https://github.com/vitalops/opendesk/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
