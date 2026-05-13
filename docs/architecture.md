@@ -205,7 +205,11 @@ else → `ProtocolError(code, message, details)`).
 * `identity.py` — `Identity` long-lived X25519 keypair persisted at
   `~/.opendesk/identity.key` (mode 0600, atomic write).
 * `storage.py` — `TrustedPeers` JSON file with entries
-  `{public_key, name, paired_at}`.
+  `{public_key, name, paired_at, description, description_override,
+  last_host, last_port}`.  `description` is cached from the peer's
+  mDNS/HELLO broadcast; `description_override` is the local user label
+  (wins when non-empty).  `last_host`/`last_port` allow reconnecting
+  without an mDNS round-trip — essential in WSL2 environments.
 * `handshake.py` — two flavours:
   * `pair_server` / `pair_client` — 3-message PSK-authenticated handshake.
     PSK derived from the 6-digit code via PBKDF2-HMAC-SHA256 at 200 000

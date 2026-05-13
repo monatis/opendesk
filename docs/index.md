@@ -11,7 +11,9 @@
 | [Automation](automation.md) | Record, replay, and schedule desktop tasks |
 | [Tools reference](tools.md) | Full parameter docs for every tool |
 | [Integrations](integrations.md) | Anthropic SDK, OpenAI, LangChain |
+| [Remote control](remote.md) | Pair machines, run the daemon, security model, CLI reference |
 | [Architecture](architecture.md) | How the layers fit together, how to add custom tools |
+| [Protocol](protocol.md) | Wire format, handshakes, frames, encryption, mDNS |
 
 ## Key concepts
 

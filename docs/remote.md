@@ -207,16 +207,17 @@ through the LLM channel where they might be logged, leaked, or replayed.
 The code is 6 digits — 10⁶ possibilities.  Brute force matters because an
 attacker who recorded the pairing exchange could try every code offline.
 opendesk stretches the code via PBKDF2-HMAC-SHA256 at 200 000 iterations
-before using it.  At ~25 ms per derivation, exhausting the space takes
-~CPU-month.  Pairings only ever accept one attempt and exit on success,
-so an online attacker has one shot per `opendesk pair` invocation.
+before using it.  At ~100 ms per derivation on a modern CPU, exhausting
+the space takes ~a CPU-month.  Pairings only ever accept one attempt and
+exit on success, so an online attacker has one shot per `opendesk pair`
+invocation.
 
 ### Files written to disk
 
 | Path | Mode | Contents |
 |---|---|---|
 | `~/.opendesk/identity.key` | `0600` | Raw 32-byte X25519 private key.  Owner-only.  Treat as a master secret. |
-| `~/.opendesk/trusted-peers.json` | `0600` | `[{public_key, name, paired_at}, ...]` |
+| `~/.opendesk/trusted-peers.json` | `0600` | `[{public_key, name, paired_at, description, description_override, last_host, last_port}, ...]` |
 | `~/.opendesk/pairing-code` | `0600` | Transient: present only while `opendesk pair` runs, deleted on success. |
 
 ---
