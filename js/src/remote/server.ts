@@ -19,8 +19,10 @@ import {
   WebSocketConnection,
 } from "../protocol/transports/websocket.js";
 import { Peer, Dispatcher } from "../protocol/peer.js";
+import { Connection } from "../protocol/connection.js";
 import type { CapabilityManifest } from "../computer/remote.js";
 import { advertise, Advertisement } from "./discovery.js";
+import { AdminServer } from "./admin.js";
 
 export const DEFAULT_PORT = 8423;
 const DESCRIPTION_FILE = "description.txt";
@@ -75,6 +77,7 @@ export class OpendeskServer {
 
   private wsServer?: WebSocketServerWrapper;
   private mdnsAd?: Advertisement;
+  private adminServer?: AdminServer;
   private activeSession?: ServerSession;
   private activePeer?: Peer;
 
@@ -116,9 +119,39 @@ export class OpendeskServer {
         // mDNS is optional; continue without it
       }
     }
+
+    // Admin IPC — owner-only socket / localhost port for sessions + disconnect CLI commands.
+    try {
+      this.adminServer = new AdminServer({
+        home: this.opts.home,
+        getSessions: () =>
+          this.activeSession
+            ? [{
+                id:               this.activeSession.id,
+                peerName:         this.activeSession.peerName,
+                peerFingerprint:  this.activeSession.peerFingerprint,
+                remoteAddr:       this.activeSession.remoteAddr,
+                openedAt:         this.activeSession.openedAt,
+              }]
+            : [],
+        killSession: async (id) => {
+          if (this.activeSession?.id === id) return this.disconnectActive();
+          return false;
+        },
+        killAllSessions: async () => {
+          if (!this.activeSession) return 0;
+          await this.disconnectActive();
+          return 1;
+        },
+      });
+      await this.adminServer.start();
+    } catch {
+      // Admin IPC is optional; serve continues without it
+    }
   }
 
   async close(): Promise<void> {
+    this.adminServer?.close();
     this.mdnsAd?.close();
     await this.wsServer?.close().catch(() => {});
     await this.activePeer?.close().catch(() => {});
@@ -137,8 +170,8 @@ export class OpendeskServer {
           this.trusted.add(session.peerPublic, { name: `peer-${session.peerPublic.toString("hex").slice(0, 6)}` });
           clearTimeout(timer);
           resolve(session.peerPublic);
-          // Also complete the session so the peer is usable immediately
-          await this.openSession(conn, session.peerPublic, "paired");
+          // Use session.connection (EncryptedConnection) — same reason as handleConnection.
+          await this.openSession(session.connection, session.peerPublic);
         } catch (e) {
           if (e instanceof AuthFailure && e.reason === "wrong_code") {
             // Let normal auth try it
@@ -160,18 +193,18 @@ export class OpendeskServer {
       await conn.close().catch(() => {});
       return;
     }
-    await this.openSession(conn, session.peerPublic, session.connection.constructor.name);
+    // Use session.connection (EncryptedConnection), NOT the raw WebSocket.
+    // After auth the client sends encrypted frames; the server must read them the same way.
+    await this.openSession(session.connection, session.peerPublic);
   }
 
   private async openSession(
-    rawConn: WebSocketConnection,
+    conn: Connection,
     peerPublic: Buffer,
-    _label: string,
   ): Promise<void> {
     // Enforce single-controller: reject if someone is already connected
     if (this.activeSession) {
-      // Send BUSY via a fresh Peer on the raw conn before upgrading to encrypted
-      const tmpPeer = new Peer(rawConn, { role: "server" });
+      const tmpPeer = new Peer(conn, { role: "server" });
       await tmpPeer.hello(
         {},
         { error: { code: "busy", message: "another controller is active" } },
@@ -187,7 +220,7 @@ export class OpendeskServer {
     const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const dispatcher = this.dispatcherFactory?.();
 
-    const peer = new Peer(rawConn, { role: "server", dispatcher });
+    const peer = new Peer(conn, { role: "server", dispatcher });
     const desc = readDescription(this.opts.home);
     const manifest: CapabilityManifest = {
       backend: "local",
