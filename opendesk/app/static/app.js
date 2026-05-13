@@ -28,6 +28,9 @@ let screenshotTimer = null;
 let pollTimer = null;
 let auditEntries = [];
 let auditPending = false;
+let discoveryTimer = null;
+let discoveryPending = false;
+let pendingDiscoverPair = null;   // { host, name } while pair modal is open
 
 function loadMode() {
     try {
@@ -165,8 +168,22 @@ function render(state) {
     updateMain(state);
 }
 
+function startDiscoveryLoop() {
+    if (discoveryTimer) return;
+    runDiscovery(true);
+    discoveryTimer = setInterval(() => runDiscovery(false), 10_000);
+}
+
+function stopDiscoveryLoop() {
+    if (discoveryTimer) {
+        clearInterval(discoveryTimer);
+        discoveryTimer = null;
+    }
+}
+
 function ensureView(view) {
     if (renderedView === view) return;
+    stopDiscoveryLoop();
     root.innerHTML = '';
     if (view === 'welcome') {
         root.appendChild(tpl('tpl-welcome'));
@@ -234,11 +251,41 @@ document.body.addEventListener('click', async (ev) => {
             case 'clear-default':
                 await setDefault(null);
                 break;
-            case 'pair-with':
-                await pairWith();
-                break;
             case 'discover':
                 await discover();
+                break;
+            case 'discover-pair': {
+                pendingDiscoverPair = { host: btn.dataset.host, name: btn.dataset.peerName || '' };
+                setText(document.getElementById('pair-modal-name'), pendingDiscoverPair.name || pendingDiscoverPair.host);
+                setText(document.getElementById('pair-modal-host'), pendingDiscoverPair.host);
+                document.getElementById('pair-modal-code').value = '';
+                document.getElementById('pair-modal-name-input').value = pendingDiscoverPair.name;
+                document.getElementById('pair-modal-description').value = '';
+                document.getElementById('pair-modal').hidden = false;
+                document.getElementById('pair-modal-code').focus();
+                break;
+            }
+            case 'confirm-discover-pair': {
+                if (!pendingDiscoverPair) break;
+                const code = document.getElementById('pair-modal-code').value.trim();
+                if (!code) { toast('Enter the 6-digit code', 'error'); break; }
+                const nameOverride = document.getElementById('pair-modal-name-input').value.trim();
+                const desc = document.getElementById('pair-modal-description').value.trim();
+                const r = await apiPost('/api/pair-with', {
+                    host: pendingDiscoverPair.host,
+                    code,
+                    name: nameOverride || pendingDiscoverPair.name,
+                    description: desc,
+                });
+                document.getElementById('pair-modal').hidden = true;
+                pendingDiscoverPair = null;
+                toast(`Paired with ${r.peer_name}`, 'ok');
+                await poll();
+                break;
+            }
+            case 'cancel-discover-pair':
+                document.getElementById('pair-modal').hidden = true;
+                pendingDiscoverPair = null;
                 break;
             case 'send-key':
                 if (key) await sendKey(key);
@@ -491,6 +538,9 @@ function updateMain(state) {
     if (viewMode === 'hosting') {
         scheduleAuditRefresh();
     }
+    if (viewMode === 'controlling') {
+        startDiscoveryLoop();
+    }
 }
 
 function updateSelfDescription(state) {
@@ -579,6 +629,7 @@ function updatePairedHosts(peers) {
                     ${p.is_default
                         ? `<button class="ghost" data-action="clear-default">Clear default</button>`
                         : `<button class="ghost" data-action="set-default" data-peer="${escapeHtml(p.name)}">Make default</button>`}
+                    <button class="danger ghost" data-action="unpair" data-peer="${escapeHtml(p.name)}">Unpair</button>
                 </div>
             </div>
         `;
@@ -703,25 +754,13 @@ async function unpairAll() {
     await poll();
 }
 
-async function pairWith() {
-    const host = document.getElementById('pair-host').value.trim();
-    const code = document.getElementById('pair-code').value.trim();
-    const name = document.getElementById('pair-name').value.trim();
-    if (!host || !code) {
-        toast('host and code required', 'error');
-        return;
-    }
-    const r = await apiPost('/api/pair-with', { host, code, name });
-    toast(`Paired with ${r.peer_name}`, 'ok');
-    document.getElementById('pair-host').value = '';
-    document.getElementById('pair-code').value = '';
-    document.getElementById('pair-name').value = '';
-    await poll();
-}
 
-async function discover() {
+async function runDiscovery(showSpinner) {
+    if (discoveryPending) return;
     const el = document.getElementById('discovered');
-    setHtml(el, '<p class="muted">scanning…</p>');
+    if (!el) return;
+    discoveryPending = true;
+    if (showSpinner) setHtml(el, '<p class="muted">scanning…</p>');
     try {
         const r = await apiGet('/api/discover?timeout=2');
         if (!r.peers.length) {
@@ -732,21 +771,38 @@ async function discover() {
                    above with the host's IP + 6-digit code.</p>`
                 : '';
             setHtml(el, `<p class="muted">No peers found on the LAN.</p>${wslHint}`);
-            return;
-        }
-        const html = r.peers.map(p => `
-            <div class="peer-row">
-                <div class="peer-main">
-                    <div class="peer-name">${escapeHtml(p.name)}</div>
-                    <div class="peer-meta muted small">${escapeHtml(p.host)}:${p.port} · ${escapeHtml(p.fingerprint)}</div>
-                    ${p.description ? `<div class="peer-desc muted small">${escapeHtml(p.description)}</div>` : ''}
-                </div>
-            </div>
-        `).join('');
+        } else {
+            const pairedFps = new Set(
+            (lastState && lastState.trusted_peers || []).map(p => p.fingerprint)
+        );
+        const html = r.peers.map(p => {
+            const isPaired = pairedFps.has(p.fingerprint);
+            const action = isPaired
+                ? `<span class="badge already-paired">Paired</span>`
+                : `<button class="ghost" data-action="discover-pair"
+                       data-host="${escapeHtml(p.host)}:${p.port}"
+                       data-peer-name="${escapeHtml(p.name)}">Pair</button>`;
+            return `
+                <div class="peer-row">
+                    <div class="peer-main">
+                        <div class="peer-name">${escapeHtml(p.name)}</div>
+                        <div class="peer-meta muted small">${escapeHtml(p.host)}:${p.port} · ${escapeHtml(p.fingerprint)}</div>
+                        ${p.description ? `<div class="peer-desc muted small">${escapeHtml(p.description)}</div>` : ''}
+                    </div>
+                    <div class="peer-actions row gap">${action}</div>
+                </div>`;
+        }).join('');
         setHtml(el, html);
+        }
     } catch (e) {
         setHtml(el, `<p class="muted">discover failed: ${escapeHtml(e.message)}</p>`);
+    } finally {
+        discoveryPending = false;
     }
+}
+
+async function discover() {
+    await runDiscovery(true);
 }
 
 async function setDefault(name) {
@@ -888,6 +944,12 @@ const brandEl = document.getElementById('brand');
 if (brandEl) {
     brandEl.addEventListener('click', () => setMode(null));
 }
+
+// Pair modal — Enter submits, Escape cancels.
+document.getElementById('pair-modal-code').addEventListener('keydown', e => {
+    if (e.key === 'Enter')  document.querySelector('[data-action="confirm-discover-pair"]').click();
+    if (e.key === 'Escape') document.querySelector('[data-action="cancel-discover-pair"]').click();
+});
 
 applyModeClass();
 startPolling();

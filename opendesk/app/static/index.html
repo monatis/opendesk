@@ -129,22 +129,13 @@
                 </div>
             </div>
 
-            <div class="block">
-                <h3>Pair with a new host</h3>
-                <div class="row gap">
-                    <input type="text" id="pair-host" placeholder="hostname or IP">
-                    <input type="text" id="pair-code" maxlength="6" placeholder="6-digit code">
-                    <input type="text" id="pair-name" placeholder="local name (optional)">
-                    <button class="primary" data-action="pair-with">Pair</button>
-                </div>
-            </div>
 
             <div class="block">
-                <h3>Discovered on LAN</h3>
+                <h3>Discovered on LAN <span class="muted small" style="font-weight:400;text-transform:none;letter-spacing:0">· auto-refreshing</span></h3>
                 <div id="discovered">
-                    <p class="muted">Click "Refresh" to scan.</p>
+                    <p class="muted">scanning…</p>
                 </div>
-                <button class="ghost" data-action="discover">Refresh</button>
+                <button class="ghost" data-action="discover">Scan now</button>
             </div>
         </section>
     </div>
@@ -162,6 +153,39 @@
         <div class="peer-actions row gap"></div>
     </div>
 </template>
+
+<!-- Pair modal — shown when pairing with a discovered LAN peer -->
+<div id="pair-modal" class="pair-modal" hidden>
+    <div class="pair-modal-inner">
+        <header class="pair-modal-header">
+            <h2>Pair with <span id="pair-modal-name"></span></h2>
+            <div id="pair-modal-host" class="muted small" style="font-family:ui-monospace,'SF Mono',Menlo,monospace"></div>
+        </header>
+        <p class="muted">Enter the 6-digit code shown on the host machine.</p>
+        <div class="pair-modal-fields">
+            <input id="pair-modal-code" type="text" maxlength="6" placeholder="000000"
+                   style="font-family:ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:4px;font-size:22px;text-align:center">
+            <div class="field-labeled">
+                <label for="pair-modal-name-input">
+                    Local name
+                    <span class="tip">?<span class="tip-body">A local alias for this machine — shown in your paired hosts list.</span></span>
+                </label>
+                <input id="pair-modal-name-input" type="text" placeholder="Optional">
+            </div>
+            <div class="field-labeled">
+                <label for="pair-modal-description">
+                    Description
+                    <span class="tip">?<span class="tip-body">Injected into the MCP tool prompt exposed by opendesk, so AI agents know what this machine is for.</span></span>
+                </label>
+                <textarea id="pair-modal-description" placeholder="Optional" rows="2"></textarea>
+            </div>
+        </div>
+        <div class="row gap">
+            <button class="primary" data-action="confirm-discover-pair">Pair</button>
+            <button class="ghost" data-action="cancel-discover-pair">Cancel</button>
+        </div>
+    </div>
+</div>
 
 <!-- Control modal — shown as a full-screen overlay when actively controlling a remote machine -->
 <div id="control-modal" class="control-modal" hidden>

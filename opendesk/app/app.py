@@ -373,6 +373,7 @@ def create_app(state: AppState) -> FastAPI:
         except ImportError as exc:
             raise HTTPException(503, f"discovery unavailable: {exc}")
         peers = await discover(timeout=timeout)
+        own_key = s.identity().public_bytes
         return {
             "peers": [
                 {
@@ -382,6 +383,7 @@ def create_app(state: AppState) -> FastAPI:
                     "public_key_hex": p.public_key.hex(),
                 }
                 for p in peers
+                if p.public_key != own_key
             ],
         }
 
@@ -392,6 +394,7 @@ def create_app(state: AppState) -> FastAPI:
         host = body.get("host")
         code = body.get("code")
         name = body.get("name") or ""
+        description = body.get("description") or ""
         port = int(body.get("port") or 8423)
         if not host or not code:
             raise HTTPException(400, "missing 'host' or 'code'")
@@ -402,10 +405,13 @@ def create_app(state: AppState) -> FastAPI:
             )
         except Exception as exc:
             raise HTTPException(400, str(exc))
+        trusted = s.trusted()
+        peer_entry = trusted.find(server_pub)
+        peer_name = peer_entry.name if peer_entry else (name or f"peer-{server_pub.hex()[:6]}")
+        if description:
+            trusted.set_description_override(peer_name, description)
         # Hand the live RemoteComputer off into the outbound cache so the
         # user doesn't need to reconnect to start driving.
-        peer_entry = s.trusted().find(server_pub)
-        peer_name = peer_entry.name if peer_entry else (name or f"peer-{server_pub.hex()[:6]}")
         s.outbound[peer_name] = remote
         return {
             "ok": True,

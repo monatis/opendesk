@@ -307,6 +307,106 @@ body.mode-controlling .grid { grid-template-columns: 1fr; }
 }
 .peer-name .badge.active { background: rgba(110, 226, 151, 0.18); color: var(--good); }
 .peer-name .badge.default { background: rgba(106, 166, 255, 0.18); color: var(--primary); }
+.already-paired {
+    display: inline-block;
+    background: var(--border);
+    color: var(--muted);
+    border-radius: 4px;
+    font-size: 11px;
+    padding: 2px 8px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+/* Pair modal */
+.pair-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+}
+.pair-modal[hidden] { display: none; }
+.pair-modal-inner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px 28px;
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.pair-modal-header h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+}
+.pair-modal-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.pair-modal-fields input,
+.pair-modal-fields textarea { width: 100%; }
+.pair-modal-fields textarea { resize: vertical; }
+.field-labeled {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.field-labeled label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Tooltip */
+.tip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    cursor: default;
+    flex-shrink: 0;
+}
+.tip-body {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 220px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text);
+    line-height: 1.4;
+    white-space: normal;
+    pointer-events: none;
+    z-index: 2000;
+}
+.tip:hover .tip-body { display: block; }
 .peer-meta { margin-top: 2px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .peer-desc { margin-top: 4px; }
 .peer-actions { flex-shrink: 0; margin-left: 14px; }
