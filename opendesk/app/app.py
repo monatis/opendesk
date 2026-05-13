@@ -372,6 +372,7 @@ def create_app(state: AppState) -> FastAPI:
             from opendesk.remote.discovery import discover
         except ImportError as exc:
             raise HTTPException(503, f"discovery unavailable: {exc}")
+        s: AppState = req.app.state.opendesk
         peers = await discover(timeout=timeout)
         own_key = s.identity().public_bytes
         return {
