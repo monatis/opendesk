@@ -4,13 +4,12 @@
 
 **Give any AI agent eyes and hands on your desktop.**
 
-Opendesk is a computer use tool to navigate your computer just like a human would.  Opendesk can be integrated with  Claude Code, Claude Desktop, Cursor, and Continue via MCP —
-adding screenshot, click, type, scroll, clipboard, OCR, and task recording to every conversation.
+Opendesk is a computer use framework that lets AI agents navigate your computer just like a human would — screenshots, mouse, keyboard, UI interaction, OCR, workflow recording, scheduling, and remote machine control.
 
 **macOS · Linux · Windows**
 
-[![PyPI](https://img.shields.io/pypi/v/opendesk)](https://pypi.org/project/opendesk/)
-[![Python](https://img.shields.io/pypi/pyversions/opendesk)](https://pypi.org/project/opendesk/)
+[![PyPI](https://img.shields.io/pypi/v/opendesk?label=pypi%20opendesk)](https://pypi.org/project/opendesk/)
+[![npm](https://img.shields.io/npm/v/@vitalops/opendesk-sdk?label=npm%20opendesk-sdk)](https://www.npmjs.com/package/@vitalops/opendesk-sdk)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -21,7 +20,20 @@ adding screenshot, click, type, scroll, clipboard, OCR, and task recording to ev
 
 ---
 
+## SDKs
+
+| Language | Location | Package | Install |
+|----------|----------|---------|---------|
+| Python | [`python/`](python/) | `opendesk` (PyPI) | `pip install 'opendesk[core,mcp]'` |
+| JavaScript / TypeScript | [`js/`](js/) | `@vitalops/opendesk-sdk` (npm) | `npm install @vitalops/opendesk-sdk` |
+
+More SDKs can be added to this repo following the same pattern.
+
+---
+
 ## Quick start
+
+### Python
 
 ```bash
 pip install 'opendesk[core,mcp]'
@@ -37,6 +49,22 @@ Open Spotify and play lo-fi beats
 ```
 
 > Requires Python 3.10+
+
+### JavaScript / TypeScript
+
+```bash
+cd js
+npm install @vitalops/opendesk-sdk
+npx opendesk-js install
+```
+
+```typescript
+import { OpenDeskClient } from "@vitalops/opendesk-sdk";
+
+const client = new OpenDeskClient();
+await client.screenshot({ marks: true });
+await client.ui({ action: "click", app: "Safari", title: "Go" });
+```
 
 ---
 
@@ -303,8 +331,8 @@ If you use opendesk in your research or project, please cite it:
   author  = {Abraham, Abhijith Neil},
   title   = {opendesk: Open Desktop Automation Framework},
   year    = {2025},
-  url     = {https://github.com/abhijithneilabraham/opendesk},
-  version = {0.1.2},
+  url     = {https://github.com/vitalops/opendesk},
+  version = {0.1.3},
   license = {MIT}
 }
 ```
