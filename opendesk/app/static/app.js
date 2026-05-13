@@ -451,12 +451,20 @@ function updatePairingEndpoints(env, code) {
     const rows = ips.map(ip => `
         <pre class="code-hint"><code>opendesk pair-with ${escapeHtml(ip)}:${port} <span class="code-strong">${escapeHtml(code)}</span></code></pre>
     `).join('');
-    const wslNote = env.wsl
-        ? `<p class="muted small">WSL detected — these are your <strong>Windows</strong> LAN IPs.
-           If pairing fails with "connection refused", use the
-           <strong>Set up Windows port forwarding</strong> button in the
-           banner above.</p>`
-        : '';
+    let wslNote = '';
+    if (env.wsl) {
+        if (env.mirrored_active) {
+            wslNote = `<p class="muted small">WSL detected (mirrored networking active) — these are your <strong>Windows</strong> LAN IPs.</p>`;
+        } else if (env.mirrored_configured) {
+            wslNote = `<p class="muted small">WSL detected — these are your <strong>Windows</strong> LAN IPs.
+                Restart WSL (see banner above) to activate mirrored networking before pairing.</p>`;
+        } else {
+            wslNote = `<p class="muted small">WSL detected — these are your <strong>Windows</strong> LAN IPs.
+                If pairing fails with "connection refused", use the
+                <strong>Set up Windows port forwarding</strong> button in the
+                banner above.</p>`;
+        }
+    }
     setHtml(el, `
         <p class="muted">On the controller, run one of:</p>
         ${rows}
