@@ -137,6 +137,7 @@ function render(state) {
         setHtml(identityEl, fp);
     }
     renderModeSwitcher();
+    updateEnvBanner(state.host_environment);
 
     if (state.pairing_active) {
         ensureView('pairing');
@@ -241,6 +242,12 @@ root.addEventListener('click', async (ev) => {
             case 'send-key':
                 if (key) await sendKey(key);
                 break;
+            case 'wsl-setup':
+                await applyWslSetup();
+                break;
+            case 'wsl-undo':
+                await applyWslUndo();
+                break;
         }
     } catch (e) {
         toast(e.message, 'error');
@@ -266,13 +273,86 @@ function renderModeSwitcher() {
 }
 
 // ---------------------------------------------------------------------------
+// WSL / host-environment banner
+// ---------------------------------------------------------------------------
+//
+// Surface the WSL2-NAT situation prominently so users don't waste time
+// wondering why other devices on the LAN can't reach them.  When WSL is
+// detected we show a banner with the *Windows* LAN IPs (which is what
+// controllers actually need) plus a one-click button to add the port-proxy
+// + firewall rule via UAC.  Outside WSL the banner stays hidden.
+
+function updateEnvBanner(env) {
+    const el = document.getElementById('env-banner');
+    if (!el) return;
+    if (!env || !env.wsl) {
+        if (!el.hidden) el.hidden = true;
+        return;
+    }
+    const ips = env.reachable_ipv4s || [];
+    const port = env.server_port || 8423;
+    const ipHtml = ips.length
+        ? ips.map(ip => `<code>${escapeHtml(ip)}:${port}</code>`).join(' or ')
+        : '<span class="muted">(none detected)</span>';
+    const html = `
+        <div class="env-banner-inner">
+            <div class="env-banner-title">
+                ⚠ Running inside WSL — extra setup needed for LAN reach
+            </div>
+            <div class="env-banner-body">
+                WSL2 isolates this Linux instance from your real network.
+                For other machines on the LAN to reach this host, point them at
+                ${ipHtml} and run port-forwarding on the Windows side once.
+            </div>
+            <div class="env-banner-actions row gap">
+                <button class="primary" data-action="wsl-setup">Set up Windows port forwarding</button>
+                <button class="ghost" data-action="wsl-undo">Undo</button>
+            </div>
+        </div>
+    `;
+    setHtml(el, html);
+    if (el.hidden) el.hidden = false;
+}
+
+async function applyWslSetup() {
+    toast('Look for the UAC prompt on the Windows desktop…', 'ok');
+    try {
+        const r = await apiPost('/api/wsl/setup');
+        if (r.ok) {
+            toast('Port forwarding set up.  LAN devices can now reach this host.', 'ok');
+        } else {
+            toast(`Setup did not complete (rc=${r.returncode}).  UAC may have been declined.`, 'error');
+        }
+        await poll();
+    } catch (e) {
+        toast(`Setup failed: ${e.message}`, 'error');
+    }
+}
+
+async function applyWslUndo() {
+    if (!confirm('Remove the Windows port-forwarding rule for opendesk?')) return;
+    try {
+        const r = await apiPost('/api/wsl/undo');
+        if (r.ok) {
+            toast('Port forwarding removed.', 'ok');
+        } else {
+            toast(`Undo did not complete (rc=${r.returncode}).`, 'error');
+        }
+        await poll();
+    } catch (e) {
+        toast(`Undo failed: ${e.message}`, 'error');
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Pairing view
 // ---------------------------------------------------------------------------
 
 function updatePairing(state) {
     const code = state.pairing_code || '------';
     setText(document.getElementById('bigcode'), code);
-    setText(document.getElementById('code-cmd'), code);
+
+    updatePairingEndpoints(state.host_environment, code);
 
     if (state.pairing_result) {
         if (state.pairing_result.ok) {
@@ -281,6 +361,40 @@ function updatePairing(state) {
             toast(`Pairing failed: ${state.pairing_result.reason}`, 'error');
         }
     }
+}
+
+function updatePairingEndpoints(env, code) {
+    const el = document.getElementById('pairing-endpoints');
+    if (!el || !env) return;
+    const ips = env.reachable_ipv4s || [];
+    const port = env.server_port || 8423;
+    if (!ips.length) {
+        // No reachable IPs — fall back to the generic instruction.  Inside
+        // WSL this happens when ipconfig.exe couldn't be reached.
+        const note = env.wsl
+            ? 'Could not auto-detect Windows LAN IPs.  Run <code>ipconfig.exe</code> in PowerShell and use that machine\'s IPv4 address.'
+            : 'No non-loopback interfaces detected.';
+        setHtml(el, `
+            <p class="muted">On the controller, run:</p>
+            <pre class="code-hint"><code>opendesk pair-with &lt;this-host&gt; <span class="code-strong">${escapeHtml(code)}</span></code></pre>
+            <p class="muted small">${note}</p>
+        `);
+        return;
+    }
+    const rows = ips.map(ip => `
+        <pre class="code-hint"><code>opendesk pair-with ${escapeHtml(ip)}:${port} <span class="code-strong">${escapeHtml(code)}</span></code></pre>
+    `).join('');
+    const wslNote = env.wsl
+        ? `<p class="muted small">WSL detected — these are your <strong>Windows</strong> LAN IPs.
+           If pairing fails with "connection refused", use the
+           <strong>Set up Windows port forwarding</strong> button in the
+           banner above.</p>`
+        : '';
+    setHtml(el, `
+        <p class="muted">On the controller, run one of:</p>
+        ${rows}
+        ${wslNote}
+    `);
 }
 
 async function cancelPair() {
@@ -535,7 +649,13 @@ async function discover() {
     try {
         const r = await apiGet('/api/discover?timeout=2');
         if (!r.peers.length) {
-            setHtml(el, '<p class="muted">No peers found on the LAN.</p>');
+            const env = lastState && lastState.host_environment;
+            const wslHint = env && env.wsl
+                ? `<p class="muted small">WSL2 blocks mDNS — peers on the LAN
+                   won't appear here.  Use <strong>Pair with a new host</strong>
+                   above with the host's IP + 6-digit code.</p>`
+                : '';
+            setHtml(el, `<p class="muted">No peers found on the LAN.</p>${wslHint}`);
             return;
         }
         const html = r.peers.map(p => `

@@ -100,8 +100,12 @@ async def connect(
         peer.start()
         # Cache the peer's broadcast description into trusted-peers so the
         # controller's UI / agent has access to it even when offline.
+        store = TrustedPeers(home)
         if manifest.description:
-            TrustedPeers(home).cache_description(expected_pubkey, manifest.description)
+            store.cache_description(expected_pubkey, manifest.description)
+        # Refresh the cached endpoint so future connects skip mDNS — the
+        # only path that works in WSL2 / NAT'd environments.
+        store.cache_endpoint(expected_pubkey, host, int(port))
         return peer, manifest
 
     if auto_reconnect:
@@ -137,6 +141,7 @@ async def pair_with(
 
     server_pubkey = session.peer_public
     trusted.add(server_pubkey, name=name or _default_peer_name(server_pubkey))
+    trusted.cache_endpoint(server_pubkey, host, int(port))
     remote = await RemoteComputer.connect(session.connection)
     return remote, server_pubkey
 
@@ -183,15 +188,25 @@ async def _resolve(
         )
     pubkey = peer.public_bytes
 
-    # Browse the LAN for the matching public key.
+    # Prefer the last-known endpoint when we have one.  Cheap, fast, and
+    # the only path that works when mDNS can't traverse (WSL2, restricted
+    # Wi-Fi).  The cache is refreshed on every successful connect, so as
+    # long as the peer's address is stable across reboots this is the
+    # happy path.
+    if peer.last_host and peer.last_port:
+        return peer.last_host, peer.last_port, pubkey
+
+    # Fall back to mDNS browse.
     from opendesk.remote.discovery import discover
     peers = await discover(timeout=timeout)
     for p in peers:
         if p.public_key == pubkey:
             return p.host, p.port, pubkey
     raise RuntimeError(
-        f"peer {target!r} is paired but could not be located on the LAN "
-        f"within {timeout:.1f}s.  Is `opendesk serve` running on that machine?"
+        f"peer {target!r} is paired but has no cached address and could "
+        f"not be located on the LAN within {timeout:.1f}s.  Either run "
+        f"`opendesk pair-with <host-ip> <code>` to give it an address, or "
+        f"ensure mDNS is reachable (see `opendesk wsl-setup` if on WSL)."
     )
 
 

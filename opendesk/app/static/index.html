@@ -21,6 +21,11 @@
     </div>
 </header>
 
+<!-- WSL-aware banner, populated by app.js when host_environment.wsl is true.
+     Sits between header and main so it's always visible without clobbering
+     the view. -->
+<div id="env-banner" class="env-banner" hidden></div>
+
 <main id="root" class="container">
     <!-- View switches based on state.  Templates rendered by app.js. -->
     <div class="loader">loading…</div>
@@ -52,10 +57,9 @@
 <template id="tpl-pairing">
     <section class="pairing-active">
         <h1>Pairing</h1>
-        <p class="muted">On the controller, run:</p>
-        <pre class="code-hint"><code>opendesk pair-with &lt;this-host&gt; <span class="code-strong" id="code-cmd"></span></code></pre>
         <div class="bigcode" id="bigcode">000000</div>
-        <p class="muted">…or just enter the code below in the controller's UI.</p>
+        <p class="muted">Share this 6-digit code with the controller.</p>
+        <div id="pairing-endpoints" class="pairing-endpoints"></div>
         <button class="ghost" data-action="cancel-pair">Cancel pairing</button>
     </section>
 </template>

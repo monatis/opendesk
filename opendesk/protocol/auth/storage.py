@@ -50,6 +50,11 @@ class TrustedPeer:
     most recent successful HELLO.  ``description_override`` is the
     controller-side label the local user has set explicitly.  When non-empty,
     the override wins (see :meth:`TrustedPeers.effective_description`).
+
+    ``last_host`` / ``last_port`` are the network endpoint where this peer
+    was last reached successfully.  Reused on the next connect so we don't
+    need an mDNS round-trip — important in environments (WSL2, restricted
+    networks) where mDNS doesn't traverse.
     """
 
     public_key: str  # hex
@@ -57,6 +62,8 @@ class TrustedPeer:
     paired_at: float = field(default_factory=time.time)
     description: str = ""
     description_override: str = ""
+    last_host: str = ""
+    last_port: int = 0
 
     @property
     def public_bytes(self) -> bytes:
@@ -98,6 +105,8 @@ class TrustedPeers:
                     paired_at=float(item.get("paired_at") or 0.0),
                     description=item.get("description", "") or "",
                     description_override=item.get("description_override", "") or "",
+                    last_host=item.get("last_host", "") or "",
+                    last_port=int(item.get("last_port") or 0),
                 ))
             except (KeyError, ValueError, TypeError):
                 continue
@@ -141,6 +150,7 @@ class TrustedPeers:
                         public_key=hex_key, name=name, paired_at=p.paired_at,
                         description=p.description,
                         description_override=p.description_override,
+                        last_host=p.last_host, last_port=p.last_port,
                     )
                     self._save(peers)
                 return peers[i]
@@ -167,6 +177,28 @@ class TrustedPeers:
                     public_key=p.public_key, name=p.name, paired_at=p.paired_at,
                     description=description,
                     description_override=p.description_override,
+                    last_host=p.last_host, last_port=p.last_port,
+                )
+                self._save(peers)
+                return True
+        return False
+
+    def cache_endpoint(self, public_key: bytes, host: str, port: int) -> bool:
+        """Update the cached last-known network endpoint.
+
+        Called after every successful pair / connect so reconnects don't
+        need an mDNS round-trip — and so the connection works at all in
+        WSL2 / similar environments where mDNS doesn't traverse the NAT.
+        """
+        peers = self._load()
+        hex_key = public_key.hex()
+        for i, p in enumerate(peers):
+            if p.public_key == hex_key and (p.last_host != host or p.last_port != port):
+                peers[i] = TrustedPeer(
+                    public_key=p.public_key, name=p.name, paired_at=p.paired_at,
+                    description=p.description,
+                    description_override=p.description_override,
+                    last_host=host, last_port=int(port),
                 )
                 self._save(peers)
                 return True
@@ -180,6 +212,7 @@ class TrustedPeers:
                 peers[i] = TrustedPeer(
                     public_key=p.public_key, name=p.name, paired_at=p.paired_at,
                     description=p.description, description_override=text,
+                    last_host=p.last_host, last_port=p.last_port,
                 )
                 self._save(peers)
                 return True

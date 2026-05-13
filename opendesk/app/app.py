@@ -44,6 +44,7 @@ from opendesk.remote.server import (
     read_description,
     write_description,
 )
+from opendesk import wsl as _wsl
 
 
 log = logging.getLogger("opendesk.app")
@@ -80,6 +81,32 @@ class AppState:
 
     def audit(self) -> AuditLog:
         return AuditLog(self.home)
+
+
+# ---------------------------------------------------------------------------
+# Host environment — surfaces WSL situation + LAN IPs to the UI
+# ---------------------------------------------------------------------------
+
+
+def _host_environment(state: "AppState") -> dict[str, Any]:
+    """Network reachability info the UI needs to render WSL banners + IPs.
+
+    ``reachable_ipv4s`` is the list the UI shows controllers: on WSL it's
+    the Windows host's LAN adapters (what other devices on the network
+    can actually reach); on a regular machine it's this host's own LAN
+    interfaces.
+    """
+    in_wsl = _wsl.is_wsl()
+    if in_wsl:
+        reachable = _wsl.windows_lan_ipv4s()
+    else:
+        reachable = _wsl.local_ipv4s()
+    return {
+        "wsl": in_wsl,
+        "wsl_ip": _wsl.wsl_interface_ipv4() if in_wsl else "",
+        "reachable_ipv4s": reachable,
+        "server_port": state.server.port if state.server is not None else None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +197,7 @@ def create_app(state: AppState) -> FastAPI:
             "pairing_code": s.pairing_code,
             "pairing_result": pairing_result,
             "default_peer": trusted.get_default(),
+            "host_environment": _host_environment(s),
         }
 
     # ------------------------------------------------------------------
@@ -453,6 +481,51 @@ def create_app(state: AppState) -> FastAPI:
         except Exception as exc:
             raise HTTPException(502, f"action failed: {exc}")
         return {"ok": True}
+
+    # ------------------------------------------------------------------
+    # WSL — one-click Windows-side port forwarding setup
+    # ------------------------------------------------------------------
+
+    @app.post("/api/wsl/setup")
+    async def wsl_setup(req: Request) -> dict[str, Any]:
+        s: AppState = req.app.state.opendesk
+        if not _wsl.is_wsl():
+            raise HTTPException(400, "not running inside WSL")
+        if s.server is None:
+            raise HTTPException(503, "server is not running")
+        wsl_ip = _wsl.wsl_interface_ipv4()
+        if not wsl_ip:
+            raise HTTPException(500, "could not determine WSL interface IP")
+        port = s.server.port
+        cmds = _wsl.render_setup_commands(port=port, wsl_ip=wsl_ip)
+        # run_via_uac() is sync; offload so we don't stall the event loop
+        # while the user is staring at the UAC prompt.
+        try:
+            rc = await asyncio.to_thread(_wsl.run_via_uac, cmds)
+        except Exception as exc:
+            raise HTTPException(500, f"could not invoke powershell: {exc}")
+        return {
+            "ok": rc == 0,
+            "returncode": rc,
+            "port": port,
+            "wsl_ip": wsl_ip,
+            "reachable_ipv4s": _wsl.windows_lan_ipv4s(),
+        }
+
+    @app.post("/api/wsl/undo")
+    async def wsl_undo(req: Request) -> dict[str, Any]:
+        s: AppState = req.app.state.opendesk
+        if not _wsl.is_wsl():
+            raise HTTPException(400, "not running inside WSL")
+        if s.server is None:
+            raise HTTPException(503, "server is not running")
+        port = s.server.port
+        cmds = _wsl.render_undo_commands(port=port)
+        try:
+            rc = await asyncio.to_thread(_wsl.run_via_uac, cmds)
+        except Exception as exc:
+            raise HTTPException(500, f"could not invoke powershell: {exc}")
+        return {"ok": rc == 0, "returncode": rc, "port": port}
 
     # ------------------------------------------------------------------
     # Audit

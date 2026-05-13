@@ -139,8 +139,10 @@ def cmd_pair(args) -> None:
     """Run a one-shot pairing session and persist the new peer."""
     Identity, TrustedPeers, generate_pairing_code, OpendeskServer, DEFAULT_PORT = _remote_imports()
     from opendesk.computer import LocalComputer
+    from opendesk.wsl import print_advisory_if_wsl
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    print_advisory_if_wsl()
     home = Path(args.home).expanduser() if args.home else None
     code = args.code or generate_pairing_code()
 
@@ -218,8 +220,10 @@ def cmd_serve(args) -> None:
     _, TrustedPeers, _, OpendeskServer, DEFAULT_PORT = _remote_imports()
     from opendesk.protocol.auth import Identity
     from opendesk.computer import LocalComputer
+    from opendesk.wsl import print_advisory_if_wsl
 
     _configure_logging(getattr(args, "log_file", None))
+    print_advisory_if_wsl()
     home = Path(args.home).expanduser() if args.home else None
     identity = Identity.load_or_create(home)
     trusted = TrustedPeers(home)
@@ -284,6 +288,8 @@ def cmd_discover(args) -> None:
     except ImportError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(2)
+    from opendesk.wsl import print_advisory_if_wsl
+    print_advisory_if_wsl()
 
     async def _run():
         peers = await discover(timeout=args.timeout)
@@ -639,6 +645,67 @@ def _do_unpair(store, target: str, home) -> None:
         print(f"Unpaired {target}.")
 
 
+def cmd_wsl_setup(args) -> None:
+    """Print (or apply via UAC) Windows-side port forwarding for the WSL listener."""
+    from opendesk.wsl import (
+        is_wsl, render_setup_commands, render_undo_commands, run_via_uac,
+        wsl_interface_ipv4,
+    )
+
+    if not is_wsl():
+        print(
+            "This command is for WSL instances only.  You don't seem to be "
+            "inside one.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    port = args.port
+    wsl_ip = wsl_interface_ipv4()
+    if not wsl_ip:
+        print(
+            "ERROR: couldn't determine the WSL IPv4 address.  Try running "
+            "`hostname -I` to confirm WSL has a network interface.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    cmds = render_undo_commands(port) if args.undo else render_setup_commands(port, wsl_ip)
+    verb = "Removing" if args.undo else "Adding"
+
+    if args.apply:
+        print(
+            f"{verb} Windows port-forward for opendesk on port {port}.  "
+            "A UAC prompt should appear on the Windows host — accept it."
+        )
+        rc = run_via_uac(cmds)
+        if rc != 0:
+            print(
+                f"ERROR: powershell.exe returned {rc}.  Are Windows interop "
+                "binaries on PATH?",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print("Done.  Verify with `netsh interface portproxy show all` "
+              "from an elevated PowerShell.")
+        return
+
+    print(f"{verb} Windows-side port forwarding for opendesk.")
+    print()
+    print(f"  WSL IP:  {wsl_ip}")
+    print(f"  Port:    {port}")
+    print()
+    print("Open an elevated PowerShell on the Windows host and run:")
+    print()
+    for line in cmds:
+        print(f"  {line}")
+    print()
+    print(
+        "Or rerun this command with --apply to trigger a UAC prompt and "
+        "execute them for you."
+    )
+
+
 def cmd_app(args) -> None:
     """Launch the local opendesk app UI (FastAPI + uvicorn)."""
     try:
@@ -646,6 +713,8 @@ def cmd_app(args) -> None:
     except ImportError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(2)
+    from opendesk.wsl import print_advisory_if_wsl
+    print_advisory_if_wsl()
     home = Path(args.home).expanduser() if args.home else None
     try:
         run_app(
@@ -736,12 +805,15 @@ def cmd_peers(args) -> None:
             print("No trusted peers.")
             return
         default = store.get_default()
-        print(f"{'NAME':<24}  {'FINGERPRINT':<22}  DESCRIPTION")
+        print(f"{'NAME':<22}  {'FINGERPRINT':<22}  {'LAST ENDPOINT':<22}  DESCRIPTION")
         for p in peers:
             marker = "  [default]" if p.name == default else ""
+            endpoint = f"{p.last_host}:{p.last_port}" if p.last_host else "(unknown)"
             desc = p.effective_description.splitlines()[0] if p.effective_description else ""
-            desc = desc[:80] + "…" if len(desc) > 80 else desc
-            print(f"{p.name:<24}  {p.fingerprint:<22}  {desc}{marker}")
+            desc = desc[:60] + "…" if len(desc) > 60 else desc
+            print(
+                f"{p.name:<22}  {p.fingerprint:<22}  {endpoint:<22}  {desc}{marker}"
+            )
     elif action == "remove":
         _do_unpair(store, args.target, home)
     elif action == "rename":
@@ -896,6 +968,23 @@ def main() -> None:
     )
     conn_p.add_argument("--screenshot", default=None, help="Path to save a captured screenshot")
     conn_p.add_argument("--home", default=None)
+
+    wsl_p = sub.add_parser(
+        "wsl-setup",
+        help=(
+            "(WSL only) Print or apply Windows-side port forwarding so other "
+            "devices on the LAN can reach this WSL instance's opendesk listener."
+        ),
+    )
+    wsl_p.add_argument("--port", type=int, default=8423)
+    wsl_p.add_argument(
+        "--apply", action="store_true",
+        help="Trigger a UAC prompt on the Windows host and run the commands.",
+    )
+    wsl_p.add_argument(
+        "--undo", action="store_true",
+        help="Print / apply the cleanup commands instead.",
+    )
 
     app_p = sub.add_parser(
         "app",
@@ -1061,6 +1150,8 @@ def main() -> None:
         cmd_describe(args)
     elif args.command == "app":
         cmd_app(args)
+    elif args.command == "wsl-setup":
+        cmd_wsl_setup(args)
     elif args.command == "install-service":
         cmd_install_service(args)
     elif args.command == "uninstall-service":

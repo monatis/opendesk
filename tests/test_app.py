@@ -56,6 +56,7 @@ class FakeServer:
     def __init__(self) -> None:
         self.sessions = FakeSessionRegistry()
         self.enable_pairing_calls: list[str] = []
+        self.port: int = 8423
 
     async def enable_pairing(self, code: str, *, timeout=None) -> bytes:
         """Block until cancelled — so tests can observe the in-flight state.
@@ -326,3 +327,159 @@ class TestCLI:
         assert r.returncode == 0
         assert "--port" in r.stdout
         assert "--no-browser" in r.stdout
+
+
+# ---------------------------------------------------------------------------
+# Host environment + WSL setup endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestHostEnvironment:
+    """`/api/state` exposes a `host_environment` block so the UI can render
+    the WSL banner and the reachable-IPs list without making its own calls.
+    """
+
+    def test_block_present_with_expected_keys(self, tmp_path: Path):
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            body = client.get("/api/state").json()
+            env = body["host_environment"]
+            assert set(env.keys()) == {
+                "wsl", "wsl_ip", "reachable_ipv4s", "server_port",
+            }
+            assert isinstance(env["wsl"], bool)
+            assert isinstance(env["reachable_ipv4s"], list)
+            assert env["server_port"] == 8423  # from FakeServer.port
+
+    def test_wsl_true_shows_windows_ips(self, tmp_path: Path, monkeypatch):
+        # Pretend we're in WSL and stub the Windows-LAN lookup.
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: True)
+        monkeypatch.setattr(
+            "opendesk.wsl.windows_lan_ipv4s",
+            lambda: ["192.168.1.42", "10.0.0.5"],
+        )
+        monkeypatch.setattr("opendesk.wsl.wsl_interface_ipv4", lambda: "172.21.0.1")
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            env = client.get("/api/state").json()["host_environment"]
+            assert env["wsl"] is True
+            assert env["reachable_ipv4s"] == ["192.168.1.42", "10.0.0.5"]
+            assert env["wsl_ip"] == "172.21.0.1"
+
+    def test_non_wsl_uses_local_ips(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: False)
+        monkeypatch.setattr(
+            "opendesk.wsl.local_ipv4s", lambda: ["192.168.1.7"],
+        )
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            env = client.get("/api/state").json()["host_environment"]
+            assert env["wsl"] is False
+            assert env["wsl_ip"] == ""
+            assert env["reachable_ipv4s"] == ["192.168.1.7"]
+
+
+class TestWslSetupEndpoint:
+    """`/api/wsl/setup` + `/api/wsl/undo` shell out to UAC-elevated
+    PowerShell.  Tests stub the subprocess invocation so we just verify
+    routing and the inputs we hand to ``run_via_uac``.
+    """
+
+    def test_refuses_outside_wsl(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: False)
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            r = client.post("/api/wsl/setup")
+            assert r.status_code == 400
+            assert "WSL" in r.json()["detail"]
+            r = client.post("/api/wsl/undo")
+            assert r.status_code == 400
+
+    def test_setup_invokes_run_via_uac_with_setup_commands(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: True)
+        monkeypatch.setattr("opendesk.wsl.wsl_interface_ipv4", lambda: "172.21.0.99")
+        monkeypatch.setattr(
+            "opendesk.wsl.windows_lan_ipv4s", lambda: ["192.168.1.42"],
+        )
+        captured: dict[str, Any] = {}
+
+        def fake_run(commands):
+            captured["commands"] = commands
+            return 0
+
+        monkeypatch.setattr("opendesk.wsl.run_via_uac", fake_run)
+
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            r = client.post("/api/wsl/setup")
+            assert r.status_code == 200
+            body = r.json()
+            assert body["ok"] is True
+            assert body["returncode"] == 0
+            assert body["port"] == 8423
+            assert body["wsl_ip"] == "172.21.0.99"
+            assert body["reachable_ipv4s"] == ["192.168.1.42"]
+            # Commands must reference the server port and the WSL IP — these
+            # are exactly what the user would have to run by hand.
+            joined = "\n".join(captured["commands"])
+            assert "listenport=8423" in joined
+            assert "connectaddress=172.21.0.99" in joined
+            assert "opendesk inbound 8423" in joined
+
+    def test_setup_nonzero_returncode_surfaces_ok_false(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        """When UAC is declined, ``run_via_uac`` returns a non-zero exit
+        code — the endpoint reports ``ok=False`` so the UI can show a
+        meaningful toast."""
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: True)
+        monkeypatch.setattr("opendesk.wsl.wsl_interface_ipv4", lambda: "172.21.0.1")
+        monkeypatch.setattr("opendesk.wsl.windows_lan_ipv4s", lambda: [])
+        monkeypatch.setattr("opendesk.wsl.run_via_uac", lambda _cmds: 1)
+
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            body = client.post("/api/wsl/setup").json()
+            assert body["ok"] is False
+            assert body["returncode"] == 1
+
+    def test_undo_invokes_run_via_uac_with_undo_commands(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: True)
+        captured: dict[str, Any] = {}
+
+        def fake_run(cmds):
+            captured["commands"] = cmds
+            return 0
+
+        monkeypatch.setattr("opendesk.wsl.run_via_uac", fake_run)
+        state = _state(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            r = client.post("/api/wsl/undo")
+            assert r.status_code == 200
+            assert r.json()["ok"] is True
+            joined = "\n".join(captured["commands"])
+            assert "portproxy delete" in joined
+            assert "Remove-NetFirewallRule" in joined
+            assert "opendesk inbound 8423" in joined
+
+    def test_refuses_when_no_server(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("opendesk.wsl.is_wsl", lambda: True)
+        state = AppState(home=tmp_path, server=None)
+        Identity.load_or_create(tmp_path)
+        app = create_app(state)
+        with TestClient(app) as client:
+            r = client.post("/api/wsl/setup")
+            assert r.status_code == 503
+            r = client.post("/api/wsl/undo")
+            assert r.status_code == 503
