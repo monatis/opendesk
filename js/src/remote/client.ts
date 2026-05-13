@@ -112,10 +112,15 @@ export async function pairWith(
 
   const serverPubkey = session.peerPublic;
   const peerName = name || `peer-${serverPubkey.toString("hex").slice(0, 6)}`;
-  trusted.add(serverPubkey, { name: peerName });
+
+  // Cache endpoint before HELLO so reconnect logic can find the peer.
   trusted.cacheEndpoint(serverPubkey, host, port);
 
+  // Complete the HELLO exchange first — on same-machine tests the server writes
+  // its own auto-generated name to the shared trusted-peers file during enablePairing
+  // (before HELLO). Writing our name after HELLO guarantees we win that race.
   const remote = await RemoteComputer.connect(session);
+  trusted.add(serverPubkey, { name: peerName });
   return { remote, serverPubkey };
 }
 
