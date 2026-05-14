@@ -1,6 +1,6 @@
 {
   "name": "@vitalops/opendesk-sdk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "JavaScript/TypeScript SDK for opendesk — give any AI agent eyes and hands on your desktop, including remote machine control",
   "type": "module",
   "main": "./dist/index.js",

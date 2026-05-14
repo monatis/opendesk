@@ -31,7 +31,9 @@ More SDKs can be added to this repo following the same pattern.
 
 ---
 
-## Quick start
+## MCP install (Claude Code / Claude Desktop)
+
+Use opendesk as an MCP server — no code needed, just install and start chatting.
 
 ### Python
 
@@ -40,7 +42,16 @@ pip install 'opendesk[core,mcp]'
 opendesk install
 ```
 
-Start a Claude Code conversation and try:
+> Requires Python 3.10+
+
+### JavaScript / TypeScript
+
+```bash
+npm install @vitalops/opendesk-sdk
+npx opendesk-js install
+```
+
+Once installed, start a Claude Code conversation and try:
 
 ```
 Take a screenshot of my screen
@@ -48,15 +59,24 @@ Click the Chrome icon
 Open Spotify and play lo-fi beats
 ```
 
-> Requires Python 3.10+
+---
+
+## SDK usage
+
+Use opendesk programmatically in your own agent or app.
+
+### Python
+
+```python
+from opendesk import create_registry, allow_all_context
+
+registry = create_registry()
+ctx = allow_all_context()
+
+result = await registry.get("screenshot").execute(ctx, ...)
+```
 
 ### JavaScript / TypeScript
-
-```bash
-cd js
-npm install @vitalops/opendesk-sdk
-npx opendesk-js install
-```
 
 ```typescript
 import { OpenDeskClient } from "@vitalops/opendesk-sdk";
@@ -328,11 +348,11 @@ If you use opendesk in your research or project, please cite it:
 
 ```bibtex
 @software{opendesk,
-  author  = {Abraham, Abhijith Neil},
+  author  = {Abraham, Abhigith Neil and Rahman, Fariz and Rahman, Fadil},
   title   = {opendesk: Open Desktop Automation Framework},
-  year    = {2025},
+  year    = {2026},
   url     = {https://github.com/vitalops/opendesk},
-  version = {0.1.3},
+  version = {0.2.0},
   license = {MIT}
 }
 ```

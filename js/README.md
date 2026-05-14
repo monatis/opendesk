@@ -4,29 +4,20 @@ Give any JavaScript or TypeScript AI agent eyes and hands on your desktop.
 
 No Python required. All desktop automation runs natively in Node.js — screenshot capture, mouse/keyboard control, accessibility APIs, OCR, clipboard, and audit logging.
 
-**macOS · Linux · Windows**
+**Requirements:** Node.js 18+
 
 ---
 
-## Requirements
+## MCP installation (Claude Code / Claude Desktop)
 
-- Node.js 18+
-
----
-
-## Install
+Install the package and register it as an MCP server in one command:
 
 ```bash
 npm install @vitalops/opendesk-sdk
-```
-
-### Claude Code
-
-```bash
 npx opendesk-js install
 ```
 
-Registers the native MCP server with Claude Code. The tools (`screenshot`, `mouse`, `keyboard`, `ui`, etc.) are then available in every Claude Code conversation.
+The tools (`screenshot`, `mouse`, `keyboard`, `ui`, etc.) are then available in every Claude Code conversation.
 
 To remove:
 
@@ -34,9 +25,9 @@ To remove:
 npx opendesk-js uninstall
 ```
 
-### Claude Desktop
+### Claude Desktop manual config
 
-Add to your config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
@@ -47,6 +38,14 @@ Add to your config (`~/Library/Application Support/Claude/claude_desktop_config.
     }
   }
 }
+```
+
+---
+
+## SDK install
+
+```bash
+npm install @vitalops/opendesk-sdk
 ```
 
 ---
