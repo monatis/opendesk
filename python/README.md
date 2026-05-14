@@ -52,6 +52,7 @@ pip install opendesk                              # core framework only
 pip install 'opendesk[core,mcp]'                  # + screen capture + MCP server (recommended)
 pip install 'opendesk[core,mcp,learn]'            # + task recording and replay
 pip install 'opendesk[core,mcp,learn,schedule]'   # + scheduled tasks
+pip install 'opendesk[core,mcp,remote]'           # + remote machine control
 pip install 'opendesk[all]'                       # everything
 ```
 
@@ -73,6 +74,24 @@ pip install 'opendesk[all]'                       # everything
 | `audit` | Show the session audit log in any MCP session |
 
 Full reference: [docs/tools.md](../docs/tools.md)
+
+---
+
+## Remote machine control
+
+opendesk supports controlling remote machines over an encrypted WebSocket connection with mDNS peer discovery.
+
+```bash
+# On the machine to be controlled:
+pip install 'opendesk[core,mcp,remote]'
+opendesk pair            # prints a pairing code
+
+# On the controlling machine:
+opendesk pair-with <host> <code>
+opendesk serve           # start the server
+```
+
+See [docs/remote.md](../docs/remote.md) and [docs/protocol.md](../docs/protocol.md) for full details.
 
 ---
 
@@ -131,7 +150,6 @@ result = await adapter.run_loop(
 from openai import OpenAI
 from opendesk.integrations.openai_compat import OpenAIAdapter
 
-# Any OpenAI-compatible endpoint works
 client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
 adapter = OpenAIAdapter()
 result = await adapter.run_loop(client, model="qwen2.5:72b", messages=messages)
@@ -164,6 +182,8 @@ pip install -e '.[core,mcp]'
 
 - [Quickstart](../docs/quickstart.md)
 - [Tools reference](../docs/tools.md)
+- [Remote control](../docs/remote.md)
+- [Protocol](../docs/protocol.md)
 - [Integrations](../docs/integrations.md)
 - [Architecture](../docs/architecture.md)
 

@@ -24,6 +24,7 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.0",
+    "msgpack>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -76,9 +77,24 @@ schedule = [
     "apscheduler>=3.10",
 ]
 
+# Remote computer use — control another machine over the network.
+# Includes the WebSocket transport, mDNS discovery, and Noise-handshake auth.
+remote = [
+    "websockets>=12.0",
+    "cryptography>=42.0",
+    "zeroconf>=0.140",
+]
+
+# Local UI — `opendesk app` (FastAPI + uvicorn).
+app = [
+    "opendesk[remote]",
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+]
+
 # Everything
 all = [
-    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule]",
+    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule,remote,app]",
 ]
 
 [project.scripts]
@@ -86,9 +102,9 @@ opendesk-mcp = "opendesk.integrations.mcp:run_stdio_server"
 opendesk = "opendesk.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/abhijithneilabraham/opendesk"
-Documentation = "https://github.com/abhijithneilabraham/opendesk/tree/main/docs"
-Issues = "https://github.com/abhijithneilabraham/opendesk/issues"
+Homepage = "https://github.com/vitalops/opendesk"
+Documentation = "https://github.com/vitalops/opendesk/tree/main/docs"
+Issues = "https://github.com/vitalops/opendesk/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

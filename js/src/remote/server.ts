@@ -1,0 +1,300 @@
+/**
+ * opendesk serve — the controlled-machine WebSocket daemon.
+ * Mirrors Python opendesk.remote.server.
+ *
+ * Accepts paired peers only (static-key auth).  One controller at a time:
+ * a second peer trying to connect while one is active gets BUSY.
+ * Optionally runs a pairing window to accept new peers.
+ */
+
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { Identity, fingerprint, generatePairingCode } from "../protocol/auth/identity.js";
+import { TrustedPeers } from "../protocol/auth/storage.js";
+import { authServer, pairServer, AuthFailure } from "../protocol/auth/handshake.js";
+import {
+  serveWebSocket,
+  WebSocketServerWrapper,
+  WebSocketConnection,
+} from "../protocol/transports/websocket.js";
+import { Peer, Dispatcher } from "../protocol/peer.js";
+import { Connection } from "../protocol/connection.js";
+import type { CapabilityManifest } from "../computer/remote.js";
+import { advertise, Advertisement } from "./discovery.js";
+import { AdminServer } from "./admin.js";
+import type { AuditLog } from "./audit.js";
+
+export const DEFAULT_PORT = 8423;
+const DESCRIPTION_FILE = "description.txt";
+
+export function readDescription(home?: string): string {
+  const base = home ?? path.join(os.homedir(), ".opendesk");
+  const f = path.join(base, DESCRIPTION_FILE);
+  try {
+    return fs.existsSync(f) ? fs.readFileSync(f, "utf8").trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+export function writeDescription(home: string | undefined, text: string): void {
+  const base = home ?? path.join(os.homedir(), ".opendesk");
+  fs.mkdirSync(base, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(base, DESCRIPTION_FILE), text ? text + "\n" : "", "utf8");
+}
+
+export function clearDescription(home?: string): boolean {
+  const base = home ?? path.join(os.homedir(), ".opendesk");
+  const f = path.join(base, DESCRIPTION_FILE);
+  if (!fs.existsSync(f)) return false;
+  fs.unlinkSync(f);
+  return true;
+}
+
+export interface PeerInfo {
+  peerName: string;
+  peerFingerprint: string;
+  sessionId: string;
+}
+
+export interface ServerSession {
+  id: string;
+  peerName: string;
+  peerFingerprint: string;
+  peerPublic: Buffer;
+  remoteAddr: string;
+  openedAt: number;
+}
+
+export interface ServerOptions {
+  host?: string;
+  port?: number;
+  home?: string;
+  advertise?: boolean;
+  dispatcher?: Dispatcher;
+  /** Called to get a fresh Dispatcher for each new session. */
+  dispatcherFactory?: (peerInfo: PeerInfo) => Dispatcher;
+  audit?: AuditLog;
+}
+
+export class OpendeskServer {
+  private identity: Identity;
+  private trusted: TrustedPeers;
+  private opts: Required<Pick<ServerOptions, "host" | "port" | "home" | "advertise">>;
+  private dispatcherFactory?: (peerInfo: PeerInfo) => Dispatcher;
+  private audit?: AuditLog;
+
+  private wsServer?: WebSocketServerWrapper;
+  private mdnsAd?: Advertisement;
+  private adminServer?: AdminServer;
+  private activeSession?: ServerSession;
+  private activePeer?: Peer;
+
+  constructor(identity: Identity, trusted: TrustedPeers, opts: ServerOptions = {}) {
+    this.identity = identity;
+    this.trusted = trusted;
+    this.opts = {
+      host: opts.host ?? "0.0.0.0",
+      port: opts.port ?? DEFAULT_PORT,
+      home: opts.home ?? path.join(os.homedir(), ".opendesk"),
+      advertise: opts.advertise ?? true,
+    };
+    this.audit = opts.audit;
+    if (opts.dispatcherFactory) {
+      this.dispatcherFactory = opts.dispatcherFactory;
+    } else if (opts.dispatcher) {
+      this.dispatcherFactory = () => opts.dispatcher!;
+    }
+  }
+
+  get port(): number {
+    return this.wsServer?.port ?? this.opts.port;
+  }
+
+  get sessions(): ServerSession[] {
+    return this.activeSession ? [this.activeSession] : [];
+  }
+
+  async start(): Promise<void> {
+    this.wsServer = await serveWebSocket(
+      (conn, remoteAddr) => this.handleConnection(conn, remoteAddr),
+      { host: this.opts.host, port: this.opts.port },
+    );
+
+    if (this.opts.advertise) {
+      try {
+        this.mdnsAd = await advertise({
+          name: os.hostname(),
+          port: this.wsServer.port,
+          publicKey: this.identity.publicBytes,
+          description: readDescription(this.opts.home),
+        });
+      } catch {
+        // mDNS is optional; continue without it
+      }
+    }
+
+    // Admin IPC — owner-only socket / localhost port for sessions + disconnect CLI commands.
+    try {
+      this.adminServer = new AdminServer({
+        home: this.opts.home,
+        getSessions: () =>
+          this.activeSession
+            ? [{
+                id:               this.activeSession.id,
+                peerName:         this.activeSession.peerName,
+                peerFingerprint:  this.activeSession.peerFingerprint,
+                remoteAddr:       this.activeSession.remoteAddr,
+                openedAt:         this.activeSession.openedAt,
+              }]
+            : [],
+        killSession: async (id) => {
+          if (this.activeSession?.id === id) return this.disconnectActive();
+          return false;
+        },
+        killAllSessions: async () => {
+          if (!this.activeSession) return 0;
+          await this.disconnectActive();
+          return 1;
+        },
+      });
+      await this.adminServer.start();
+    } catch {
+      // Admin IPC is optional; serve continues without it
+    }
+  }
+
+  async close(): Promise<void> {
+    this.adminServer?.close();
+    this.mdnsAd?.close();
+    await this.wsServer?.close().catch(() => {});
+    await this.activePeer?.close().catch(() => {});
+  }
+
+  /** Enable a one-shot pairing window.  Resolves with the new peer's public key on success. */
+  async enablePairing(code: string, timeoutMs = 300_000): Promise<Buffer | null> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), timeoutMs);
+
+      // A second connection handler that tries pairing before standard auth
+      const origHandle = this.handleConnection.bind(this);
+      this.handleConnection = async (conn: WebSocketConnection, remoteAddr: string) => {
+        try {
+          const session = await pairServer(conn, this.identity, code);
+          this.trusted.add(session.peerPublic, { name: `peer-${session.peerPublic.toString("hex").slice(0, 6)}` });
+          clearTimeout(timer);
+          resolve(session.peerPublic);
+          // Use session.connection (EncryptedConnection) — same reason as handleConnection.
+          await this.openSession(session.connection, session.peerPublic, remoteAddr);
+        } catch (e) {
+          if (e instanceof AuthFailure && e.reason === "wrong_code") {
+            // Let normal auth try it
+            await origHandle(conn, remoteAddr);
+          }
+        }
+      };
+    });
+  }
+
+  private async handleConnection(conn: WebSocketConnection, remoteAddr: string): Promise<void> {
+    let session;
+    try {
+      session = await authServer(conn, this.identity, this.trusted);
+    } catch (e) {
+      if (e instanceof AuthFailure) {
+        this.audit?.recordSessionRejected({
+          peerPublic: Buffer.alloc(0),
+          peerName: "?",
+          remoteAddr,
+          reason: e.reason,
+        });
+      }
+      await conn.close().catch(() => {});
+      return;
+    }
+    // Use session.connection (EncryptedConnection), NOT the raw WebSocket.
+    // After auth the client sends encrypted frames; the server must read them the same way.
+    await this.openSession(session.connection, session.peerPublic, remoteAddr);
+  }
+
+  private async openSession(
+    conn: Connection,
+    peerPublic: Buffer,
+    remoteAddr: string,
+  ): Promise<void> {
+    // Enforce single-controller: reject if someone is already connected
+    if (this.activeSession) {
+      const tmpPeer = new Peer(conn, { role: "server" });
+      await tmpPeer.hello(
+        {},
+        { error: { code: "busy", message: "another controller is active" } },
+      ).catch(() => {});
+      await tmpPeer.close().catch(() => {});
+      return;
+    }
+
+    const peerEntry = this.trusted.find(peerPublic);
+    const peerName = peerEntry?.name ?? fingerprint(peerPublic);
+    const fp = fingerprint(peerPublic);
+
+    const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const peerInfo: PeerInfo = { peerName, peerFingerprint: fp, sessionId };
+    const dispatcher = this.dispatcherFactory?.(peerInfo);
+
+    const peer = new Peer(conn, { role: "server", dispatcher });
+    const desc = readDescription(this.opts.home);
+    const manifest: CapabilityManifest = {
+      backend: "local",
+      description: desc,
+    };
+
+    try {
+      await peer.hello(manifest as Record<string, unknown>);
+    } catch {
+      await peer.close().catch(() => {});
+      return;
+    }
+
+    this.activePeer = peer;
+    this.activeSession = {
+      id: sessionId,
+      peerName,
+      peerFingerprint: fp,
+      peerPublic,
+      remoteAddr,
+      openedAt: Date.now(),
+    };
+
+    this.audit?.recordSessionOpened({
+      peerPublic,
+      peerName,
+      sessionId,
+      remoteAddr,
+      mode: "serve",
+    });
+
+    const openedAt = Date.now();
+    peer.start();
+    await peer.waitClosed();
+
+    this.audit?.recordSessionClosed({
+      peerPublic,
+      peerName,
+      sessionId,
+      duration: (Date.now() - openedAt) / 1000,
+      reason: "peer disconnected",
+    });
+
+    this.activeSession = undefined;
+    this.activePeer = undefined;
+  }
+
+  /** Disconnect the active controller (cooperative eviction). */
+  async disconnectActive(): Promise<boolean> {
+    if (!this.activePeer || !this.activeSession) return false;
+    await this.activePeer.push("session.evicted", { reason: "server requested disconnect" });
+    await this.activePeer.close().catch(() => {});
+    return true;
+  }
+}

@@ -30,6 +30,13 @@ Integrations::
     from opendesk.integrations.langchain_compat import as_langchain_tools
 """
 
+from opendesk.computer import (
+    Capability,
+    CapabilityManifest,
+    CapabilityUnsupported,
+    Computer,
+    LocalComputer,
+)
 from opendesk.registry import ToolRegistry, create_registry, create_minimal_registry
 from opendesk.tools.base import (
     Tool,
@@ -47,7 +54,7 @@ __all__ = [
     "create_registry",
     "create_minimal_registry",
     "ToolRegistry",
-    # Base types
+    # Tool framework
     "Tool",
     "ToolContext",
     "ToolResult",
@@ -55,4 +62,10 @@ __all__ = [
     "PermissionDeniedError",
     "allow_all_context",
     "interactive_context",
+    # Computer surface
+    "Computer",
+    "LocalComputer",
+    "Capability",
+    "CapabilityManifest",
+    "CapabilityUnsupported",
 ]

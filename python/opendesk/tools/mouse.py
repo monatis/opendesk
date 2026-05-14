@@ -1,4 +1,5 @@
-"""MouseTool — control the mouse pointer."""
+"""MouseTool — control the mouse pointer via the active
+:class:`~opendesk.computer.Computer`."""
 
 from __future__ import annotations
 
@@ -7,33 +8,23 @@ from typing import Literal, Optional
 
 from pydantic import Field
 
+from opendesk.computer.types import Point, PointerButton
 from opendesk.tools.base import Tool, ToolContext, ToolResult
 
 
-def _pyautogui():
-    try:
-        import pyautogui  # type: ignore[import-not-found]
-        return pyautogui
-    except ImportError as exc:
-        raise ImportError(
-            "pyautogui is required for mouse control: pip install 'opendesk[core]'"
-        ) from exc
-
-
-def _check_accessibility() -> None:
-    import platform
-    if platform.system() != "Darwin":
-        return
-    import subprocess
-    r = subprocess.run(
-        ["osascript", "-e", 'tell application "System Events" to get name of first process'],
-        capture_output=True, text=True, timeout=5,
-    )
-    if r.returncode != 0 and "not allowed" in (r.stderr + r.stdout).lower():
-        raise RuntimeError(
-            "macOS Accessibility permission is required for mouse control. "
-            "Go to System Settings -> Privacy & Security -> Accessibility."
-        )
+_ACTION_TO_BUTTON: dict[str, PointerButton] = {
+    "click": PointerButton.LEFT,
+    "double_click": PointerButton.LEFT,
+    "triple_click": PointerButton.LEFT,
+    "right_click": PointerButton.RIGHT,
+    "middle_click": PointerButton.MIDDLE,
+    "left_down": PointerButton.LEFT,
+    "left_up": PointerButton.LEFT,
+}
+_CLICK_COUNT: dict[str, int] = {
+    "click": 1, "double_click": 2, "triple_click": 3,
+    "right_click": 1, "middle_click": 1,
+}
 
 
 class MouseTool(Tool):
@@ -89,28 +80,7 @@ class MouseTool(Tool):
     async def execute(self, ctx: ToolContext, params: "MouseTool.Params") -> ToolResult:
         from opendesk.computer.sandbox import ActionType, get_sandbox
 
-        scaled_params = params
-        scale_note = ""
-        if params.image_width and params.image_height:
-            try:
-                pag = _pyautogui()
-                screen_w, screen_h = pag.size()
-                sx = screen_w / params.image_width
-                sy = screen_h / params.image_height
-                if abs(sx - 1.0) > 0.02 or abs(sy - 1.0) > 0.02:
-                    scaled = params.model_copy(update={
-                        "x": round(params.x * sx),
-                        "y": round(params.y * sy),
-                        "end_x": round(params.end_x * sx) if params.end_x is not None else None,
-                        "end_y": round(params.end_y * sy) if params.end_y is not None else None,
-                    })
-                    scaled_params = scaled
-                    scale_note = (
-                        f" [image ({params.x},{params.y}) -> logical ({scaled.x},{scaled.y})"
-                        f" scale {sx:.3f}x{sy:.3f}]"
-                    )
-            except Exception:
-                pass
+        sandbox = get_sandbox(ctx.session_id)
 
         if params.action == "cursor_position":
             await ctx.check_permission(
@@ -118,10 +88,11 @@ class MouseTool(Tool):
                 description="Query current cursor position",
             )
             try:
-                pag = _pyautogui()
-                cx, cy = pag.position()
-                sandbox = get_sandbox(ctx.session_id)
-                await sandbox.record_action(ActionType.CURSOR_POSITION, {}, result=f"({cx},{cy})")
+                pos = await ctx.computer.cursor_position()
+                cx, cy = int(pos.x), int(pos.y)
+                await sandbox.record_action(
+                    ActionType.CURSOR_POSITION, {}, result=f"({cx},{cy})",
+                )
                 return ToolResult(title="Cursor position", output=f"Current cursor: ({cx}, {cy})")
             except Exception as exc:
                 return ToolResult(title="Cursor position error", output=str(exc), error=True)
@@ -132,30 +103,14 @@ class MouseTool(Tool):
             description=f"Mouse action: {action_label}",
         )
 
-        sandbox = get_sandbox(ctx.session_id)
-        if not sandbox.is_coordinate_allowed(scaled_params.x, scaled_params.y):
+        logical_point, logical_end, scale_note = await self._to_logical(ctx, params)
+
+        if not sandbox.is_coordinate_allowed(int(logical_point.x), int(logical_point.y)):
             return ToolResult(
                 title="Mouse action denied",
-                output=f"Coordinate ({scaled_params.x}, {scaled_params.y}) is outside the permitted region.",
+                output=f"Coordinate ({int(logical_point.x)}, {int(logical_point.y)}) is outside the permitted region.",
                 error=True,
             )
-
-        action_params = {
-            "action": params.action, "x": params.x, "y": params.y,
-            "amount": params.amount, "duration": params.duration,
-        }
-        if params.action == "drag":
-            action_params["end_x"] = params.end_x
-            action_params["end_y"] = params.end_y
-
-        try:
-            loop = asyncio.get_event_loop()
-            result_msg = await loop.run_in_executor(None, self._do_action, scaled_params)
-        except ImportError as exc:
-            return ToolResult(title="Mouse error", output=str(exc), error=True)
-        except Exception as exc:
-            await sandbox.record_action(ActionType.MOUSE_CLICK, action_params, error=str(exc))
-            return ToolResult(title="Mouse error", output=f"Mouse action failed: {exc}", error=True)
 
         action_type_map = {
             "move": ActionType.MOUSE_MOVE,
@@ -169,86 +124,124 @@ class MouseTool(Tool):
             "scroll": ActionType.MOUSE_SCROLL,
             "drag": ActionType.MOUSE_DRAG,
         }
-        await sandbox.record_action(
-            action_type_map.get(params.action, ActionType.MOUSE_CLICK),
-            action_params, result=result_msg,
-        )
+        action_type = action_type_map.get(params.action, ActionType.MOUSE_CLICK)
+        record_params = {
+            "action": params.action, "x": params.x, "y": params.y,
+            "amount": params.amount, "duration": params.duration,
+        }
+        if params.action == "drag":
+            record_params["end_x"] = params.end_x
+            record_params["end_y"] = params.end_y
 
+        try:
+            result_msg = await self._dispatch(ctx, params, logical_point, logical_end)
+            if params.settle_ms > 0:
+                await asyncio.sleep(params.settle_ms / 1000.0)
+        except Exception as exc:
+            await sandbox.record_action(action_type, record_params, error=str(exc))
+            return ToolResult(title="Mouse error", output=f"Mouse action failed: {exc}", error=True)
+
+        await sandbox.record_action(action_type, record_params, result=result_msg)
         return ToolResult(title=f"Mouse: {params.action}", output=result_msg + scale_note)
 
-    @staticmethod
-    def _do_action(params: "MouseTool.Params") -> str:
-        import time
-        _check_accessibility()
-        pag = _pyautogui()
-        pag.FAILSAFE = True
-        settle = params.settle_ms / 1000.0
+    async def _to_logical(
+        self, ctx: ToolContext, params: "MouseTool.Params"
+    ) -> tuple[Point, Optional[Point], str]:
+        """Translate the image-space coordinates the agent passes to logical pixels."""
+        if not (params.image_width and params.image_height):
+            return (
+                Point(x=params.x, y=params.y),
+                Point(x=params.end_x, y=params.end_y) if params.end_x is not None and params.end_y is not None else None,
+                "",
+            )
+        displays = await ctx.computer.displays()
+        if not displays:
+            return (
+                Point(x=params.x, y=params.y),
+                Point(x=params.end_x, y=params.end_y) if params.end_x is not None and params.end_y is not None else None,
+                "",
+            )
+        screen_w = displays[0].bounds.width
+        screen_h = displays[0].bounds.height
+        sx = screen_w / params.image_width
+        sy = screen_h / params.image_height
+        if abs(sx - 1.0) <= 0.02 and abs(sy - 1.0) <= 0.02:
+            scaled = Point(x=params.x, y=params.y)
+            scaled_end = (
+                Point(x=params.end_x, y=params.end_y)
+                if params.end_x is not None and params.end_y is not None else None
+            )
+            return scaled, scaled_end, ""
+        scaled = Point(x=round(params.x * sx), y=round(params.y * sy))
+        scaled_end = None
+        if params.end_x is not None and params.end_y is not None:
+            scaled_end = Point(x=round(params.end_x * sx), y=round(params.end_y * sy))
+        note = (
+            f" [image ({params.x},{params.y}) -> logical "
+            f"({int(scaled.x)},{int(scaled.y)}) scale {sx:.3f}x{sy:.3f}]"
+        )
+        return scaled, scaled_end, note
+
+    async def _dispatch(
+        self,
+        ctx: ToolContext,
+        params: "MouseTool.Params",
+        point: Point,
+        end: Optional[Point],
+    ) -> str:
+        comp = ctx.computer
 
         if params.action == "move":
-            pag.moveTo(params.x, params.y, duration=params.duration)
-            time.sleep(settle)
-            return f"Moved mouse to ({params.x}, {params.y})."
+            from opendesk.computer.types import PointerEvent, PointerAction
+            await comp.pointer(PointerEvent(action=PointerAction.MOVE, point=point))
+            return f"Moved mouse to ({int(point.x)}, {int(point.y)})."
 
-        if params.action == "click":
-            pag.click(params.x, params.y, duration=params.duration)
-            time.sleep(settle)
-            return f"Left-clicked at ({params.x}, {params.y})."
-
-        if params.action == "double_click":
-            pag.doubleClick(params.x, params.y, duration=params.duration)
-            time.sleep(settle)
-            return f"Double-clicked at ({params.x}, {params.y})."
-
-        if params.action == "triple_click":
-            pag.click(params.x, params.y, duration=params.duration, clicks=3, interval=0.05)
-            time.sleep(settle)
-            return f"Triple-clicked at ({params.x}, {params.y})."
-
-        if params.action == "right_click":
-            pag.rightClick(params.x, params.y, duration=params.duration)
-            time.sleep(settle)
-            return f"Right-clicked at ({params.x}, {params.y})."
-
-        if params.action == "middle_click":
-            pag.middleClick(params.x, params.y)
-            time.sleep(settle)
-            return f"Middle-clicked at ({params.x}, {params.y})."
+        if params.action in ("click", "double_click", "triple_click", "right_click", "middle_click"):
+            await comp.click(
+                point,
+                button=_ACTION_TO_BUTTON[params.action],
+                count=_CLICK_COUNT[params.action],
+            )
+            return f"{params.action.replace('_', '-').capitalize()} at ({int(point.x)}, {int(point.y)})."
 
         if params.action == "left_down":
-            pag.moveTo(params.x, params.y, duration=params.duration)
-            pag.mouseDown(button="left")
-            time.sleep(settle)
-            return f"Left button pressed at ({params.x}, {params.y}) -- button is held."
+            from opendesk.computer.types import PointerEvent, PointerAction
+            await comp.pointer(PointerEvent(action=PointerAction.MOVE, point=point))
+            await comp.pointer(PointerEvent(
+                action=PointerAction.DOWN, point=point, button=PointerButton.LEFT,
+            ))
+            return f"Left button pressed at ({int(point.x)}, {int(point.y)}) -- button is held."
 
         if params.action == "left_up":
-            pag.moveTo(params.x, params.y, duration=params.duration)
-            pag.mouseUp(button="left")
-            time.sleep(settle)
-            return f"Left button released at ({params.x}, {params.y})."
+            from opendesk.computer.types import PointerEvent, PointerAction
+            await comp.pointer(PointerEvent(action=PointerAction.MOVE, point=point))
+            await comp.pointer(PointerEvent(
+                action=PointerAction.UP, point=point, button=PointerButton.LEFT,
+            ))
+            return f"Left button released at ({int(point.x)}, {int(point.y)})."
 
         if params.action == "scroll":
             direction = params.direction
-            if direction in ("up", "down"):
-                clicks = params.amount if direction == "up" else -params.amount
-                pag.scroll(clicks, x=params.x, y=params.y)
-                time.sleep(settle)
-                return f"Scrolled {direction} {params.amount} click(s) at ({params.x}, {params.y})."
-            if direction in ("left", "right"):
-                clicks = params.amount if direction == "right" else -params.amount
-                pag.hscroll(clicks, x=params.x, y=params.y)
-                time.sleep(settle)
-                return f"Scrolled {direction} {params.amount} click(s) at ({params.x}, {params.y})."
-            pag.scroll(params.amount, x=params.x, y=params.y)
-            time.sleep(settle)
-            scroll_dir = "up" if params.amount > 0 else "down"
-            return f"Scrolled {scroll_dir} by {abs(params.amount)} click(s) at ({params.x}, {params.y})."
+            amount = params.amount
+            dx, dy = 0.0, 0.0
+            if direction == "up":
+                dy = amount
+            elif direction == "down":
+                dy = -amount
+            elif direction == "right":
+                dx = amount
+            elif direction == "left":
+                dx = -amount
+            else:
+                dy = amount
+            await comp.scroll(point, dx=dx, dy=dy)
+            label = direction or ("up" if amount > 0 else "down")
+            return f"Scrolled {label} {abs(amount)} click(s) at ({int(point.x)}, {int(point.y)})."
 
         if params.action == "drag":
-            if params.end_x is None or params.end_y is None:
+            if end is None:
                 raise ValueError("end_x and end_y are required for drag action.")
-            pag.moveTo(params.x, params.y, duration=0.1)
-            pag.dragTo(params.end_x, params.end_y, duration=params.duration, mouseDownUp=True)
-            time.sleep(params.settle_ms / 1000.0)
-            return f"Dragged from ({params.x}, {params.y}) to ({params.end_x}, {params.end_y})."
+            await comp.drag(point, end)
+            return f"Dragged from ({int(point.x)}, {int(point.y)}) to ({int(end.x)}, {int(end.y)})."
 
         raise ValueError(f"Unknown mouse action: {params.action!r}")

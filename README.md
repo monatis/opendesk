@@ -4,12 +4,12 @@
 
 **Give any AI agent eyes and hands on your desktop.**
 
-Opendesk is a computer use framework that lets AI agents navigate your computer just like a human would — screenshots, mouse, keyboard, UI interaction, OCR, workflow recording, and scheduling.
+Opendesk is a computer use framework that lets AI agents navigate your computer just like a human would — screenshots, mouse, keyboard, UI interaction, OCR, workflow recording, scheduling, and remote machine control.
 
 **macOS · Linux · Windows**
 
 [![PyPI](https://img.shields.io/pypi/v/opendesk?label=pypi%20opendesk)](https://pypi.org/project/opendesk/)
-[![npm](https://img.shields.io/npm/v/@abhijithneilabraham/opendesk-sdk?label=npm%20opendesk-sdk)](https://www.npmjs.com/package/@abhijithneilabraham/opendesk-sdk)
+[![npm](https://img.shields.io/npm/v/@vitalops/opendesk-sdk?label=npm%20opendesk-sdk)](https://www.npmjs.com/package/@vitalops/opendesk-sdk)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -48,6 +48,8 @@ Click the Chrome icon
 Open Spotify and play lo-fi beats
 ```
 
+> Requires Python 3.10+
+
 ### JavaScript / TypeScript
 
 ```bash
@@ -68,25 +70,32 @@ await client.ui({ action: "click", app: "Safari", title: "Go" });
 
 ## Architecture
 
-opendesk is built in three layers — each independently importable:
+opendesk is built in independently-importable layers:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Integrations  (MCP, Anthropic, OpenAI, LangChain)      │
-├─────────────────────────────────────────────────────────┤
-│  Tools   (screenshot · mouse · keyboard · ui            │
-│           clipboard · ocr · learn · schedule · audit)   │
-├─────────────────────────────────────────────────────────┤
-│  Computer  (capture · Set-of-Marks · OCR · sandbox)     │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Integrations   MCP  ·  Claude Code  ·  OpenAI  ·  LangChain │
+├──────────────────────────────────────────────────────────────┤
+│  Tools          screenshot · mouse · keyboard · ui ·         │
+│                 clipboard · ocr · learn · schedule           │
+├──────────────────────────────────────────────────────────────┤
+│  Computer       LocalComputer  ·  RemoteComputer  (ABC)      │
+├──────────────────────────────────────────────────────────────┤
+│  Remote         server · client · discovery (mDNS)           │
+├──────────────────────────────────────────────────────────────┤
+│  Protocol       frames · codec (msgpack) · peer · transports │
+│                 auth (X25519 + AEAD, pairing)                │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 | Layer | What it does |
 |-------|-------------|
-| **Computer** | Low-level screen capture, SoM element detection, OCR, per-session audit log |
-| **Tools** | One class per capability. Pydantic schema auto-shared with every integration |
-| **Integrations** | Thin adapters for MCP, Anthropic, OpenAI, LangChain — add one tool, get all four |
-| **Automation** | `learn` + `schedule` backed by pynput recording, JSON storage, APScheduler daemon |
+| **Computer** | The capability surface of a computer (observe / act / subscribe). `LocalComputer` drives the local machine; `RemoteComputer` forwards every call over the wire to a paired peer. Tools and integrations target this ABC — they never know whether the machine is local or remote. |
+| **Tools** | One class per capability, agent-friendly Pydantic schemas. Calls into the active `Computer` on the `ToolContext`. |
+| **Integrations** | Thin adapters for MCP, Anthropic, OpenAI, LangChain — add one tool, get all four. |
+| **Remote** | `opendesk serve` / `opendesk pair`, mDNS discovery, client helper. |
+| **Protocol** | Five-frame wire protocol (msgpack binary, no base64 ever), WebSocket transport, mutual X25519 + ChaCha20-Poly1305 auth and encryption. |
+| **Automation** | `learn` + `schedule` backed by pynput recording, JSON storage, APScheduler daemon. |
 
 Full details → [docs/architecture.md](docs/architecture.md)
 
@@ -142,6 +151,84 @@ Full guide → [docs/automation.md](docs/automation.md)
 
 ---
 
+## Remote computer use
+
+Control another machine from your agent — same tools, same MCP server, the
+`Computer` abstraction just lives on the other end of an encrypted WebSocket.
+
+**On the machine being controlled** (one time):
+
+```bash
+pip install 'opendesk[core,remote]'
+opendesk pair        # prints a 6-digit code, listens
+```
+
+**On the controller** (one time):
+
+```bash
+pip install 'opendesk[remote]'
+opendesk discover                          # list opendesk peers on the LAN
+opendesk pair-with <host> <code> --name mini
+```
+
+**After pairing**, the controlled machine runs the long-lived server:
+
+```bash
+opendesk serve            # accepts paired peers only
+```
+
+…and the controller drives it through the existing MCP server (Claude Code,
+Claude Desktop, Cursor — anything that speaks MCP). The agent gets new admin
+tools — `opendesk_peers`, `opendesk_use`, `opendesk_status` — and every
+existing tool accepts an optional `peer:` argument:
+
+```
+screenshot                       → controls the local machine
+screenshot peer=mini             → controls the paired remote
+opendesk_use mini                → make mini the default for this session
+screenshot                       → [on mini] ...
+```
+
+With exactly one paired peer the agent doesn't have to specify anything —
+it becomes the implicit default. With multiple, the agent must pick
+explicitly (no silent fallback).
+
+**One controller at a time.** Pair as many machines as you like, but only
+one drives the desktop at a time — a second peer trying to connect while
+one is active gets a clean `BUSY` error. Same peer reconnecting bumps
+the previous session (no waiting out a stale TCP). Two ways to free the
+slot from the controlled machine:
+
+- `opendesk disconnect` — **cooperative**. Server asks the controller to
+  leave via a `session.evicted` PUSH; a cooperative client (the in-tree
+  `RemoteComputer`) suppresses its auto-reconnect and raises
+  `SessionEvicted`. Trust is preserved.
+- `opendesk unpair <name>` — **enforced**. Revokes trust + closes the
+  session; next reconnect fails authentication.
+
+**Security model:** pairing exchanges long-lived X25519 keypairs via a 6-digit
+code-authenticated handshake (PBKDF2-stretched, ~CPU-month to brute force).
+Subsequent connections use mutual static-key authentication. Every frame is
+ChaCha20-Poly1305 AEAD-encrypted with per-direction counters. No CA-signed
+certificates required — the keys ARE the trust.
+
+Full guide → [docs/remote.md](docs/remote.md)
+
+---
+
+## Installation options
+
+```bash
+pip install opendesk                              # core framework only
+pip install 'opendesk[core,mcp]'                  # + screen capture + MCP server (recommended)
+pip install 'opendesk[core,mcp,remote]'           # + control another machine over LAN
+pip install 'opendesk[core,mcp,learn]'            # + task recording and replay
+pip install 'opendesk[core,mcp,learn,schedule]'   # + scheduled tasks
+pip install 'opendesk[all]'                       # everything
+```
+
+---
+
 ## Platform support
 
 | Feature | macOS | Linux | Windows |
@@ -154,6 +241,8 @@ Full guide → [docs/automation.md](docs/automation.md)
 | App control | `open -a` | `xdg-open` | `start` |
 | Task recording | ✓ | ✓ | ✓ |
 | Scheduled tasks | ✓ | ✓ | ✓ |
+| Remote control (LAN) | ✓ | ✓ | ✓ |
+| LAN discovery (mDNS) | ✓ | ✓ | ✓ |
 
 ---
 
@@ -171,18 +260,71 @@ sudo apt install xclip xdotool python3-atspi
 ### Windows
 No extra permissions needed — opendesk uses Win32 APIs by default.
 
+See [docs/permissions.md](docs/permissions.md) for full setup guide.
+
 ---
 
-## Docs
+## Integrations
 
-- [Quickstart](docs/quickstart.md)
-- [Tools reference](docs/tools.md)
-- [Integrations](docs/integrations.md)
-- [Architecture](docs/architecture.md)
+### Claude Code
+```bash
+opendesk install        # registers opendesk-mcp globally
+opendesk uninstall      # removes the registration
+```
+
+### Claude Desktop
+
+Add to your config file:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "opendesk": { "command": "opendesk-mcp" }
+  }
+}
+```
+
+### Python API
+
+```python
+import asyncio
+from opendesk import create_registry, allow_all_context
+
+async def main():
+    registry = create_registry()
+    ctx = allow_all_context()
+
+    result = await registry.get("screenshot").execute(
+        ctx, registry.get("screenshot").Params(marks=True)
+    )
+    print(result.output)
+
+asyncio.run(main())
+```
+
+Works with Anthropic SDK, OpenAI, and LangChain — see [docs/integrations.md](docs/integrations.md)
+
+### On-device models (Ollama, LM Studio, vLLM, llama.cpp)
+
+Any OpenAI-compatible local server works out of the box:
+
+```python
+from openai import OpenAI
+from opendesk.integrations.openai_compat import OpenAIAdapter
+
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+adapter = OpenAIAdapter()
+result = await adapter.run_loop(client, model="qwen2.5:72b", messages=messages)
+```
 
 ---
 
 ## Citation
+
+If you use opendesk in your research or project, please cite it:
 
 ```bibtex
 @software{opendesk,
@@ -190,10 +332,12 @@ No extra permissions needed — opendesk uses Win32 APIs by default.
   title   = {opendesk: Open Desktop Automation Framework},
   year    = {2025},
   url     = {https://github.com/vitalops/opendesk},
-  version = {0.1.2},
+  version = {0.1.3},
   license = {MIT}
 }
 ```
+
+A `CITATION.cff` is included — GitHub's "Cite this repository" button will pick it up automatically.
 
 ---
 

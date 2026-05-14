@@ -27,7 +27,10 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
+
+if TYPE_CHECKING:
+    from opendesk.computer.base import Computer
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +116,12 @@ class PermissionDeniedError(RuntimeError):
     """Raised by a :data:`PermissionHandler` to block a tool action."""
 
 
+def _default_local_computer() -> "Computer":
+    """Build a :class:`LocalComputer` lazily to avoid import cycles."""
+    from opendesk.computer.local import LocalComputer
+    return LocalComputer()
+
+
 @dataclass
 class ToolContext:
     """Runtime context injected into every tool execution.
@@ -128,11 +137,17 @@ class ToolContext:
         When ``None``, all actions are allowed automatically.
     metadata:
         Arbitrary caller-supplied data (e.g. user identity, org context).
+    computer:
+        The :class:`~opendesk.computer.Computer` instance every tool talks to.
+        Defaults to a :class:`~opendesk.computer.LocalComputer`.  Swap in a
+        ``RemoteComputer`` to make every tool target a different machine
+        without changing any tool code.
     """
 
     session_id: str = "default"
     permission_handler: PermissionHandler | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    computer: "Computer" = field(default_factory=_default_local_computer)
 
     async def check_permission(
         self,

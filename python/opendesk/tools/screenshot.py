@@ -1,14 +1,61 @@
-"""ScreenshotTool — capture the current screen."""
+"""ScreenshotTool — capture the current screen via the active
+:class:`~opendesk.computer.Computer`, with optional Set-of-Marks overlay."""
 
 from __future__ import annotations
 
 import asyncio
+import io
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import Field
 
+from opendesk.computer.types import Pixmap, Rect, UIElement
 from opendesk.tools.base import Attachment, Tool, ToolContext, ToolResult
+
+
+_INTERACTIVE_ROLES = {
+    "AXButton", "AXTextField", "AXTextArea", "AXCheckBox", "AXRadioButton",
+    "AXPopUpButton", "AXComboBox", "AXLink", "AXSearchField", "AXMenuButton",
+    "AXDisclosureTriangle", "AXSlider", "AXMenuItem",
+    "button", "checkbox", "radio button", "text", "entry", "combo box",
+    "link", "slider", "menu item",
+    "Button", "Edit", "CheckBox", "ComboBox", "ListItem",
+    "MenuItem", "Hyperlink", "Slider", "Spinner", "TabItem",
+}
+
+
+def _flatten_interactive(root: UIElement, max_count: int = 150) -> list[dict[str, Any]]:
+    """Walk a :class:`UIElement` tree and return the interactive leaves.
+
+    Output matches :func:`opendesk.computer.marks.draw_som_marks`'s expected
+    dict shape: ``{mark, role, label, x, y, w, h}``.
+    """
+    elements: list[dict[str, Any]] = []
+
+    def visit(node: UIElement) -> None:
+        if len(elements) >= max_count:
+            return
+        if node.bounds is not None and (node.role in _INTERACTIVE_ROLES or _looks_interactive(node)):
+            b = node.bounds
+            if b.width > 2 and b.height > 2:
+                elements.append({
+                    "mark": len(elements) + 1,
+                    "role": node.role,
+                    "label": (node.name or "")[:60],
+                    "x": int(b.x), "y": int(b.y),
+                    "w": int(b.width), "h": int(b.height),
+                })
+        for child in node.children:
+            visit(child)
+
+    visit(root)
+    return elements
+
+
+def _looks_interactive(node: UIElement) -> bool:
+    role = node.role.lower()
+    return any(k in role for k in ("button", "field", "check", "radio", "combo", "link", "menu", "slider"))
 
 
 class ScreenshotTool(Tool):
@@ -62,37 +109,20 @@ class ScreenshotTool(Tool):
         )
 
     async def execute(self, ctx: ToolContext, params: "ScreenshotTool.Params") -> ToolResult:
-        from opendesk.computer.capture import capture_screen
         from opendesk.computer.sandbox import ActionType, get_sandbox
 
         await ctx.check_permission(
-            tool="screenshot",
-            argument="capture screen",
+            tool="screenshot", argument="capture screen",
             description="Take a screenshot of the current screen",
         )
 
-        capture_region = None
-        if params.zoom:
-            if len(params.zoom) != 4:
-                return ToolResult(
-                    title="Screenshot error",
-                    output="zoom must have exactly 4 elements: [x0, y0, x1, y1]",
-                    error=True,
-                )
-            x0, y0, x1, y1 = params.zoom
-            capture_region = (x0, y0, x1 - x0, y1 - y0)
-        elif params.region:
-            if len(params.region) != 4:
-                return ToolResult(
-                    title="Screenshot error",
-                    output="region must have exactly 4 elements: [x, y, width, height]",
-                    error=True,
-                )
-            capture_region = tuple(params.region)
+        capture_rect = self._parse_region(params)
+        if isinstance(capture_rect, ToolResult):
+            return capture_rect
 
         sandbox = get_sandbox(ctx.session_id)
-        if capture_region and not sandbox.is_coordinate_allowed(
-            capture_region[0], capture_region[1]
+        if capture_rect and not sandbox.is_coordinate_allowed(
+            int(capture_rect.x), int(capture_rect.y)
         ):
             return ToolResult(
                 title="Screenshot denied",
@@ -101,10 +131,7 @@ class ScreenshotTool(Tool):
             )
 
         try:
-            loop = asyncio.get_event_loop()
-            png_bytes, width, height = await loop.run_in_executor(
-                None, capture_screen, capture_region
-            )
+            pixmap: Pixmap = await ctx.computer.capture(region=capture_rect)
         except ImportError as exc:
             return ToolResult(title="Screenshot error", output=str(exc), error=True)
         except Exception as exc:
@@ -119,60 +146,29 @@ class ScreenshotTool(Tool):
                 error=True,
             )
 
-        logical_w = None
-        logical_h = None
-        try:
-            import pyautogui  # type: ignore[import-not-found]
-            logical_w, logical_h = pyautogui.size()
-        except Exception:
-            pass
+        png_bytes = pixmap.data
+        width, height = pixmap.width, pixmap.height
+        logical_w, logical_h = pixmap.logical_width, pixmap.logical_height
+        scale_x, scale_y = pixmap.scale_x, pixmap.scale_y
 
-        scale_x = (width / logical_w) if logical_w else 1.0
-        scale_y = (height / logical_h) if logical_h else 1.0
-
-        marks_summary = None
+        marks_summary: Optional[str] = None
         if params.marks or params.show_cursor:
-            try:
-                from PIL import Image
-                import io as _io
-                pil_img = Image.open(_io.BytesIO(png_bytes))
+            png_bytes, marks_summary, width, height = await self._overlay(
+                ctx, png_bytes, scale_x, scale_y,
+                draw_marks=params.marks, draw_cursor=params.show_cursor,
+            )
 
-                if params.marks:
-                    from opendesk.computer.marks import draw_som_marks, get_interactive_elements
-                    elements = await loop.run_in_executor(None, get_interactive_elements, None)
-                    pil_img, _mark_map, marks_summary = draw_som_marks(
-                        pil_img, elements, scale_x, scale_y
-                    )
-
-                if params.show_cursor:
-                    from opendesk.computer.marks import overlay_cursor
-                    try:
-                        import pyautogui  # type: ignore[import-not-found]
-                        cx, cy = pyautogui.position()
-                        pil_img = overlay_cursor(pil_img, cx, cy, scale_x, scale_y)
-                    except Exception:
-                        pass
-
-                buf = _io.BytesIO()
-                pil_img.save(buf, format="PNG", optimize=True)
-                png_bytes = buf.getvalue()
-                width, height = pil_img.size
-            except ImportError:
-                pass
-            except Exception:
-                pass
-
-        diff_summary = None
+        diff_summary: Optional[str] = None
         if sandbox.last_screenshot is not None and not params.zoom:
             try:
                 from opendesk.computer.capture import diff_screenshots
+                loop = asyncio.get_event_loop()
                 diff = await loop.run_in_executor(
                     None, diff_screenshots, sandbox.last_screenshot, png_bytes
                 )
                 diff_summary = diff["summary"]
             except Exception:
                 pass
-
         sandbox.last_screenshot = png_bytes
 
         await sandbox.record_action(
@@ -182,7 +178,7 @@ class ScreenshotTool(Tool):
             result=f"{width}x{height}" + (f" | {diff_summary}" if diff_summary else ""),
         )
 
-        saved_path = None
+        saved_path: Optional[str] = None
         if params.save_path:
             try:
                 dest = os.path.expanduser(params.save_path)
@@ -221,11 +217,10 @@ class ScreenshotTool(Tool):
             output_lines.append(f"Change detection vs previous screenshot: {diff_summary}")
         if marks_summary:
             output_lines.append(f"\nSet-of-Marks -- interactive elements:\n{marks_summary}")
-        if params.show_cursor and logical_w:
+        if params.show_cursor:
             try:
-                import pyautogui  # type: ignore[import-not-found]
-                cx, cy = pyautogui.position()
-                output_lines.append(f"Cursor position (logical): ({cx}, {cy})")
+                pos = await ctx.computer.cursor_position()
+                output_lines.append(f"Cursor position (logical): ({int(pos.x)}, {int(pos.y)})")
             except Exception:
                 pass
 
@@ -235,3 +230,67 @@ class ScreenshotTool(Tool):
             attachments=[Attachment("screenshot.png", png_bytes, "image/png")],
             metadata={"width": width, "height": height},
         )
+
+    def _parse_region(self, params: "ScreenshotTool.Params"):
+        if params.zoom:
+            if len(params.zoom) != 4:
+                return ToolResult(
+                    title="Screenshot error",
+                    output="zoom must have exactly 4 elements: [x0, y0, x1, y1]",
+                    error=True,
+                )
+            x0, y0, x1, y1 = params.zoom
+            return Rect(x=x0, y=y0, width=x1 - x0, height=y1 - y0)
+        if params.region:
+            if len(params.region) != 4:
+                return ToolResult(
+                    title="Screenshot error",
+                    output="region must have exactly 4 elements: [x, y, width, height]",
+                    error=True,
+                )
+            x, y, w, h = params.region
+            return Rect(x=x, y=y, width=w, height=h)
+        return None
+
+    async def _overlay(
+        self,
+        ctx: ToolContext,
+        png_bytes: bytes,
+        scale_x: float,
+        scale_y: float,
+        *,
+        draw_marks: bool,
+        draw_cursor: bool,
+    ) -> tuple[bytes, Optional[str], int, int]:
+        """Render Set-of-Marks and / or cursor overlay onto ``png_bytes``."""
+        try:
+            from PIL import Image
+        except ImportError:
+            return png_bytes, None, 0, 0
+
+        loop = asyncio.get_event_loop()
+        pil_img = Image.open(io.BytesIO(png_bytes))
+        marks_summary: Optional[str] = None
+
+        if draw_marks:
+            try:
+                from opendesk.computer.marks import draw_som_marks
+                tree = await ctx.computer.ui_tree()
+                elements = _flatten_interactive(tree)
+                pil_img, _mark_map, marks_summary = await loop.run_in_executor(
+                    None, draw_som_marks, pil_img, elements, scale_x, scale_y,
+                )
+            except Exception:
+                pass
+
+        if draw_cursor:
+            try:
+                from opendesk.computer.marks import overlay_cursor
+                pos = await ctx.computer.cursor_position()
+                pil_img = overlay_cursor(pil_img, int(pos.x), int(pos.y), scale_x, scale_y)
+            except Exception:
+                pass
+
+        buf = io.BytesIO()
+        pil_img.save(buf, format="PNG", optimize=True)
+        return buf.getvalue(), marks_summary, pil_img.width, pil_img.height

@@ -26,33 +26,23 @@ from pathlib import Path
 _PLATFORM = platform.system()
 
 
-def extract_text_from_region(
-    region: tuple[int, int, int, int] | None = None,
-) -> str:
-    """Extract text from a screen region using OCR.
+def ocr_image(png_bytes: bytes, *, width: int = 0, height: int = 0) -> str:
+    """Run OCR on a PNG byte buffer using the best available backend.
 
-    Parameters
-    ----------
-    region:
-        ``(x, y, width, height)`` in logical screen pixels.
-        ``None`` to capture and OCR the full primary screen.
+    Tries pytesseract, then platform-native OCR (Vision on macOS, WinRT on
+    Windows).  Returns the extracted text or an informative error/install-hint
+    string starting with ``"OCR "`` so callers can distinguish.
 
-    Returns
-    -------
-    Extracted text string, or an informative error/install-hint string.
+    ``width`` / ``height`` are optional; when set and small, the image is
+    upscaled for better OCR accuracy.
     """
-    try:
-        from opendesk.computer.capture import capture_screen
-        png_bytes, w, h = capture_screen(region)
-    except Exception as exc:
-        return f"OCR error: could not capture screen: {exc}"
-
-    # 1 — pytesseract (cross-platform, best quality)
     try:
         import pytesseract  # type: ignore[import-not-found]
         from PIL import Image  # type: ignore[import-not-found]
         img = Image.open(io.BytesIO(png_bytes))
-        if w < 300 and w > 0:
+        w = width or img.width
+        h = height or img.height
+        if 0 < w < 300:
             factor = max(2, 300 // w)
             img = img.resize((w * factor, h * factor), Image.LANCZOS)
         text = pytesseract.image_to_string(img, config="--psm 6")
@@ -62,14 +52,12 @@ def extract_text_from_region(
     except Exception as exc:
         return f"pytesseract error: {exc}"
 
-    # 2 — macOS Vision framework (zero deps, macOS 11+)
     if _PLATFORM == "Darwin":
         try:
             return _macos_vision_ocr(png_bytes)
         except Exception:
             pass
 
-    # 3 — Windows WinRT OCR (zero deps, Windows 10+)
     if _PLATFORM == "Windows":
         try:
             return _windows_winrt_ocr(png_bytes)
@@ -84,6 +72,24 @@ def extract_text_from_region(
         "(On macOS 11+ and Windows 10+ a built-in OCR engine is also tried "
         "automatically without any extra installs.)"
     )
+
+
+def extract_text_from_region(
+    region: tuple[int, int, int, int] | None = None,
+) -> str:
+    """Capture a screen region and run OCR on it.
+
+    Convenience wrapper that uses :func:`opendesk.computer.capture.capture_screen`
+    plus :func:`ocr_image`.  Prefer calling them separately when integrating
+    with a :class:`~opendesk.computer.Computer` so OCR can run on a captured
+    :class:`~opendesk.computer.Pixmap` from any backend.
+    """
+    try:
+        from opendesk.computer.capture import capture_screen
+        png_bytes, w, h = capture_screen(region)
+    except Exception as exc:
+        return f"OCR error: could not capture screen: {exc}"
+    return ocr_image(png_bytes, width=w, height=h)
 
 
 def _macos_vision_ocr(png_bytes: bytes) -> str:

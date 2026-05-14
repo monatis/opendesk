@@ -4,6 +4,8 @@ Give any JavaScript or TypeScript AI agent eyes and hands on your desktop.
 
 No Python required. All desktop automation runs natively in Node.js — screenshot capture, mouse/keyboard control, accessibility APIs, OCR, clipboard, and audit logging.
 
+**macOS · Linux · Windows**
+
 ---
 
 ## Requirements
@@ -18,13 +20,13 @@ No Python required. All desktop automation runs natively in Node.js — screensh
 npm install @vitalops/opendesk-sdk
 ```
 
-### Claude Code / Claude Desktop
+### Claude Code
 
 ```bash
 npx opendesk-js install
 ```
 
-This registers the native MCP server with Claude Code. The tools (`screenshot`, `mouse`, `keyboard`, `ui`, etc.) are then available in every Claude Code conversation.
+Registers the native MCP server with Claude Code. The tools (`screenshot`, `mouse`, `keyboard`, `ui`, etc.) are then available in every Claude Code conversation.
 
 To remove:
 
@@ -34,7 +36,7 @@ npx opendesk-js uninstall
 
 ### Claude Desktop
 
-Add to your config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to your config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
@@ -77,9 +79,6 @@ console.log(clip.output);
 
 // OCR a region
 const text = await client.ocr({ region: [0, 0, 800, 400] });
-
-// Show audit log
-const log = await client.audit({ format: "summary" });
 ```
 
 ### With Vercel AI SDK
@@ -117,7 +116,7 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 ```
 
-### Custom session ID or permission handler
+### Custom permission handler
 
 ```typescript
 import { OpenDeskClient } from "@vitalops/opendesk-sdk";
@@ -125,12 +124,43 @@ import { OpenDeskClient } from "@vitalops/opendesk-sdk";
 const client = new OpenDeskClient({
   sessionId: "my-agent-session",
   permissionHandler: async (tool, action, description) => {
-    console.log(`Allow ${description}? [y/n]`);
-    // return true to allow, false to deny
+    console.log(`Allow ${description}?`);
     return true;
   },
 });
 ```
+
+---
+
+## Remote machine control
+
+Control another machine on your LAN — same tools, forwarded over an encrypted WebSocket with mutual X25519 authentication and mDNS peer discovery.
+
+```bash
+# On the machine to be controlled:
+npx opendesk-js pair            # prints a 6-digit pairing code
+
+# On the controlling machine:
+npx opendesk-js pair-with <host> <code> --name mini
+npx opendesk-js serve           # start the long-running daemon (controlled machine)
+```
+
+See [docs/remote-js.md](../docs/remote-js.md) and [docs/protocol.md](../docs/protocol.md) for full details.
+
+### MCP remote tools
+
+Run `npx opendesk-js install` on the controller as normal. Every computer-use tool (`screenshot`, `mouse`, `keyboard`, etc.) accepts an optional `peer` argument to target a remote machine.
+
+**Admin tools** available to the agent:
+
+| Tool | Purpose |
+|---|---|
+| `opendesk_peers` | List `local` + every trusted peer |
+| `opendesk_discover` | Browse the LAN for opendesk peers |
+| `opendesk_use <peer>` | Set default peer for subsequent calls (`"local"` to revert) |
+| `opendesk_status` | Show current default peer and open connections |
+| `opendesk_capabilities [peer]` | Capability manifest of a peer |
+| `opendesk_disconnect [peer]` | Close cached connection |
 
 ---
 
@@ -147,11 +177,12 @@ Full reference: [docs/tools.md](../docs/tools.md)
 | `app` | `client.app(params)` | Open, close, focus applications |
 | `clipboard` | `client.clipboard(params)` | Read/write system clipboard |
 | `ocr` | `client.ocr(params?)` | Extract text from screen |
-| `audit` | `client.audit(params?)` | Show session audit log |
 
 ---
 
 ## How it works
+
+### Local tools
 
 ```
 Your JS/TS code
@@ -163,11 +194,33 @@ Your JS/TS code
       ├── mouse/keyboard  (@nut-tree-fork/nut-js)
       ├── ui  (osascript / PowerShell UI Automation / xdotool)
       ├── ocr  (tesseract.js)
-      ├── clipboard  (clipboardy)
-      └── audit  (in-process session log)
+      └── clipboard  (clipboardy)
+```
+
+### Remote tools
+
+```
+Controller (your machine)                Controlled machine
+      │                                        │
+      ▼                                        ▼
+connect("mini")           ◄──────────►  opendesk-js serve
+      │               ws + ChaCha20-Poly1305    │
+      ▼                                        ▼
+RemoteComputer                          ToolDispatcher
+  .capture()                              maps tool.* RPC → local tools
+  .pointer() / .key()                     records every call to audit log
 ```
 
 All platform-specific automation runs directly in Node.js. No external process is required.
+
+---
+
+## Docs
+
+- [Remote control (JS)](../docs/remote-js.md)
+- [Protocol](../docs/protocol.md)
+- [Tools reference](../docs/tools.md)
+- [Architecture](../docs/architecture.md)
 
 ---
 
