@@ -17,7 +17,7 @@ pip install 'opendesk[core,mcp]'
 opendesk install
 ```
 
-`opendesk install` registers the MCP server with Claude Code globally.
+`opendesk install` registers the MCP server with Claude Code. For Cursor, Windsurf, Continue, or any other MCP client, see the [MCP integrations](#mcp-integrations) section below.
 
 ---
 

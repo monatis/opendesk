@@ -8,16 +8,16 @@ No Python required. All desktop automation runs natively in Node.js — screensh
 
 ---
 
-## MCP installation (Claude Code / Claude Desktop)
+## MCP installation
 
-Install the package and register it as an MCP server in one command:
+opendesk works with any MCP-compatible client — Claude Code, Claude Desktop, Cursor, Windsurf, Continue, or any custom tool.
+
+### Claude Code (quickstart)
 
 ```bash
 npm install @vitalops/opendesk-sdk
 npx opendesk-js install
 ```
-
-The tools (`screenshot`, `mouse`, `keyboard`, `ui`, etc.) are then available in every Claude Code conversation.
 
 To remove:
 
@@ -25,9 +25,9 @@ To remove:
 npx opendesk-js uninstall
 ```
 
-### Claude Desktop manual config
+### Claude Desktop / Cursor / Windsurf / Continue
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+Add to your MCP config file:
 
 ```json
 {
@@ -39,6 +39,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   }
 }
 ```
+
+Config file locations:
+- **Claude Desktop (macOS):** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Cursor:** `.cursor/mcp.json` in your project or `~/.cursor/mcp.json` globally
+- **Windsurf:** `~/.codeium/windsurf/mcp_config.json`
+- **Continue:** `.continue/config.json`
 
 ---
 

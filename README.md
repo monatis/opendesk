@@ -31,15 +31,15 @@ More SDKs can be added to this repo following the same pattern.
 
 ---
 
-## MCP install (Claude Code / Claude Desktop)
+## MCP install
 
-Use opendesk as an MCP server — no code needed, just install and start chatting.
+opendesk works as an MCP server with any MCP-compatible client — Claude Code, Claude Desktop, Cursor, Windsurf, Continue, or any custom tool.
 
 ### Python
 
 ```bash
 pip install 'opendesk[core,mcp]'
-opendesk install
+opendesk install        # shortcut for Claude Code
 ```
 
 > Requires Python 3.10+
@@ -48,10 +48,35 @@ opendesk install
 
 ```bash
 npm install @vitalops/opendesk-sdk
-npx opendesk-js install
+npx opendesk-js install        # shortcut for Claude Code
 ```
 
-Once installed, start a Claude Code conversation and try:
+### Other MCP clients (Cursor, Windsurf, Continue, custom)
+
+Point your client at the `opendesk-mcp` binary:
+
+```json
+{
+  "mcpServers": {
+    "opendesk": { "command": "opendesk-mcp" }
+  }
+}
+```
+
+For JS:
+
+```json
+{
+  "mcpServers": {
+    "opendesk": {
+      "command": "node",
+      "args": ["/path/to/node_modules/@vitalops/opendesk-sdk/bin/opendesk-mcp.js"]
+    }
+  }
+}
+```
+
+Once connected, try:
 
 ```
 Take a screenshot of my screen
