@@ -220,3 +220,38 @@ class TestCLICheck:
         # we just want to confirm the subcommand exists and is wired.
         assert r.returncode in (0, 1)
         assert "opendesk" in (r.stdout + r.stderr).lower() or r.returncode == 0
+
+
+class TestUIElementRanking:
+    def test_exact_leaf_matches_over_container_substring(self):
+        from opendesk.computer.base import UIElement, Rect
+        from opendesk.tools.ui import _find_element
+
+        btn = UIElement(role="Button", name="Save", bounds=Rect(x=10, y=20, width=50, height=30), actions=["click"])
+        pane = UIElement(role="Pane", name="Save options", bounds=Rect(x=5, y=5, width=200, height=200), children=[btn])
+        root = UIElement(role="Window", name="Save as", bounds=Rect(x=0, y=0, width=400, height=400), children=[pane], actions=["click"])
+
+        # title="Save" should pick the leaf Button "Save", not the Window "Save as"
+        found = _find_element(root, title="Save", role=None)
+        assert found is not None
+        assert found.role == "Button"
+        assert found.name == "Save"
+
+        # Explicit container title should pick the Window
+        found_window = _find_element(root, title="Save as", role=None)
+        assert found_window is not None
+        assert found_window.role == "Window"
+        assert found_window.name == "Save as"
+
+    def test_explicit_role_overrides_unspecified(self):
+        from opendesk.computer.base import UIElement, Rect
+        from opendesk.tools.ui import _find_element
+
+        btn = UIElement(role="Button", name="Save", bounds=Rect(x=10, y=20, width=50, height=30), actions=["click"])
+        win = UIElement(role="Window", name="Save", bounds=Rect(x=0, y=0, width=400, height=400), children=[btn])
+
+        found_btn = _find_element(win, title="Save", role="button")
+        assert found_btn is btn
+
+        found_win = _find_element(win, title="Save", role="window")
+        assert found_win is win

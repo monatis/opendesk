@@ -49,18 +49,70 @@ def _flatten_tree(root: UIElement) -> list[UIElement]:
     return out
 
 
+_ACTIONABLE_ROLES: set[str] = {
+    "button", "menuitem", "menu item", "tabitem", "tab item",
+    "link", "hyperlink", "checkbox", "check box", "radiobutton",
+    "radio button", "splitbutton", "combobox", "combo box",
+    "edit", "document", "listitem", "list item", "treeitem"
+}
+_CONTAINER_ROLES: set[str] = {
+    "window", "dialog", "pane", "group", "custom", "root"
+}
+
+
 def _find_element(
     root: UIElement, *, title: Optional[str], role: Optional[str],
 ) -> Optional[UIElement]:
-    title_l = title.lower() if title else None
-    role_l = role.lower() if role else None
+    title_l = title.lower().strip() if title else None
+    role_l = role.lower().strip() if role else None
+    if not title_l and not role_l:
+        return None
+
+    candidates: list[tuple[int, UIElement]] = []
+
     for node in _flatten_tree(root):
-        name_match = not title_l or (node.name and title_l in node.name.lower())
-        role_match = not role_l or role_l in node.role.lower()
-        if name_match and role_match and (title_l or role_l):
-            if node.bounds is not None or node.actions:
-                return node
-    return None
+        if not (node.bounds is not None or node.actions):
+            continue
+
+        node_name_l = (node.name or "").lower().strip()
+        node_role_l = (node.role or "").lower().strip()
+
+        # Check title match
+        title_score = 0
+        if title_l:
+            if not node_name_l or title_l not in node_name_l:
+                continue
+            if node_name_l == title_l:
+                title_score = 100
+            elif node_name_l.startswith(title_l) or node_name_l.endswith(title_l):
+                title_score = 60
+            else:
+                title_score = 30
+
+        # Check role match
+        role_score = 0
+        if role_l:
+            if role_l not in node_role_l:
+                continue
+            if node_role_l == role_l:
+                role_score = 50
+            else:
+                role_score = 25
+        else:
+            # When caller didn't specify role, favor actionable leaf controls over containers
+            if any(act in node_role_l for act in _ACTIONABLE_ROLES):
+                role_score = 40
+            elif any(cont in node_role_l for cont in _CONTAINER_ROLES):
+                role_score = -40
+
+        candidates.append((title_score + role_score, node))
+
+    if not candidates:
+        return None
+
+    # Sort descending by score; stable sort preserves document order for ties
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    return candidates[0][1]
 
 
 async def _try_perform_action(

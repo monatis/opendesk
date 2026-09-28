@@ -445,10 +445,32 @@ class LocalComputer(Computer):
                 raise RuntimeError(r.stderr.decode(errors="replace").strip())
             return
         if _PLATFORM == "Windows":
-            r = subprocess.run(["taskkill", "/IM", name, "/F"], capture_output=True, text=True, timeout=10)
-            if r.returncode != 0:
-                raise RuntimeError(r.stderr.strip())
-            return
+            # 1. Try closing window gracefully if found via UIA
+            try:
+                dlg = self._find_windows_dlg(name)
+                if dlg is not None:
+                    try:
+                        dlg.close()
+                        return
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # 2. Try taskkill by image name (with and without .exe)
+            names_to_try = [name]
+            if not name.lower().endswith(".exe"):
+                names_to_try.append(f"{name}.exe")
+            else:
+                names_to_try.append(name[:-4])
+
+            last_err = ""
+            for im in names_to_try:
+                r = subprocess.run(["taskkill", "/IM", im, "/F"], capture_output=True, text=True, timeout=10)
+                if r.returncode == 0:
+                    return
+                last_err = r.stderr.strip()
+            raise RuntimeError(last_err or f"Could not close process '{name}'.")
         raise RuntimeError(f"Unsupported platform: {_PLATFORM}")
 
     async def focus_app(self, name: str) -> None:
@@ -471,15 +493,31 @@ class LocalComputer(Computer):
                     )
             return
         if _PLATFORM == "Windows":
+            # 1. Try UIA window matching first (handles process name, .exe, or window title substring)
+            try:
+                dlg = self._find_windows_dlg(name)
+                if dlg is not None:
+                    try:
+                        dlg.set_focus()
+                        return
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # 2. Fall back to pygetwindow by title
             try:
                 import pygetwindow as gw  # type: ignore[import-not-found]
-            except ImportError as exc:
-                raise RuntimeError("pygetwindow required: pip install pygetwindow") from exc
-            wins = gw.getWindowsWithTitle(name)
-            if not wins:
-                raise RuntimeError(f"No window found with title '{name}'.")
-            wins[0].activate()
-            return
+                wins = gw.getWindowsWithTitle(name)
+                if not wins and name.lower().endswith(".exe"):
+                    wins = gw.getWindowsWithTitle(name[:-4])
+                if wins:
+                    wins[0].activate()
+                    return
+            except Exception:
+                pass
+
+            raise RuntimeError(f"No window found for '{name}'.")
         raise RuntimeError(f"Unsupported platform: {_PLATFORM}")
 
     async def list_apps(self) -> list[str]:
