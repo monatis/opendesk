@@ -1,6 +1,6 @@
 use chacha20poly1305::{
-    aead::{Aead, KeyInit},
     ChaCha20Poly1305, Nonce,
+    aead::{Aead, KeyInit},
 };
 use thiserror::Error;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -94,7 +94,9 @@ mod tests {
             .map(|i| u8::from_str_radix(&hex_ct[i..i + 2], 16).unwrap())
             .collect();
 
-        let pt = channel.decrypt(&ct).expect("failed to decrypt Python ciphertext");
+        let pt = channel
+            .decrypt(&ct)
+            .expect("failed to decrypt Python ciphertext");
         assert_eq!(pt, b"hello opendesk");
     }
 

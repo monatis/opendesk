@@ -4,13 +4,13 @@
 //! lifecycle events (open / close / rejected), is appended to a per-day JSONL
 //! file under `<home>/audit/YYYY-MM-DD.jsonl`.
 
-use std::fs::{create_dir_all, OpenOptions};
+use chrono::Local;
+use serde_json::{Value, json};
+use std::fs::{OpenOptions, create_dir_all};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use chrono::Local;
-use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use tracing::warn;
 
@@ -62,9 +62,10 @@ impl AuditLog {
     async fn write_entry(&self, mut entry: Value) {
         let _guard = self.lock.lock().await;
         if entry.get("ts").is_none()
-            && let Some(obj) = entry.as_object_mut() {
-                obj.insert("ts".to_string(), json!(Self::now_ts()));
-            }
+            && let Some(obj) = entry.as_object_mut()
+        {
+            obj.insert("ts".to_string(), json!(Self::now_ts()));
+        }
 
         let date = Self::today_iso();
         let path = self.dir.join(format!("{}.jsonl", date));
@@ -133,6 +134,7 @@ impl AuditLog {
         .await;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_call(
         &self,
         peer_public: &[u8],
@@ -199,13 +201,22 @@ pub fn summarise(method: &str, params: &Value) -> String {
             let evt = params.get("event").unwrap_or(&Value::Null);
             let pt = evt.get("point").unwrap_or(&Value::Null);
             let action = evt.get("action").and_then(|v| v.as_str()).unwrap_or("move");
-            let x = pt.get("x").map(|v| v.to_string()).unwrap_or_else(|| "?".into());
-            let y = pt.get("y").map(|v| v.to_string()).unwrap_or_else(|| "?".into());
+            let x = pt
+                .get("x")
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "?".into());
+            let y = pt
+                .get("y")
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "?".into());
             format!("send pointer {} at ({}, {})", action, x, y)
         }
         "input.key" => {
             let evt = params.get("event").unwrap_or(&Value::Null);
-            let action = evt.get("action").and_then(|v| v.as_str()).unwrap_or("press");
+            let action = evt
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("press");
             let keysym = evt.get("keysym").and_then(|v| v.as_str()).unwrap_or("?");
             format!("send key {} '{}'", action, keysym)
         }
@@ -237,7 +248,11 @@ pub fn summarise(method: &str, params: &Value) -> String {
                         .join(" ")
                 })
                 .unwrap_or_default();
-            let preview = if joined.len() > 80 { &joined[..80] } else { &joined };
+            let preview = if joined.len() > 80 {
+                &joined[..80]
+            } else {
+                &joined
+            };
             format!("exec: '{preview}'")
         }
         m if m.starts_with("fs.") => {
@@ -267,7 +282,10 @@ pub fn summarise(method: &str, params: &Value) -> String {
         }
         "ui.action" => {
             let elem = params.get("element").unwrap_or(&Value::Null);
-            let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("click");
+            let action = params
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("click");
             let target = elem
                 .get("name")
                 .and_then(|v| v.as_str())
@@ -315,20 +333,30 @@ pub fn format_audit_entry(entry: &Value) -> String {
                 .and_then(|v| v.as_str())
                 .unwrap_or_else(|| entry.get("method").and_then(|v| v.as_str()).unwrap_or("?"));
 
-            format!(
-                "{dt}  {peer:<16}  {kind:<14}  {outcome_str:<22}  {summary}"
-            )
+            format!("{dt}  {peer:<16}  {kind:<14}  {outcome_str:<22}  {summary}")
         }
         "session.opened" => {
-            let session_id = entry.get("session_id").and_then(|v| v.as_str()).unwrap_or("?");
-            let remote_addr = entry.get("remote_addr").and_then(|v| v.as_str()).unwrap_or("?");
+            let session_id = entry
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let remote_addr = entry
+                .get("remote_addr")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
             format!(
                 "{dt}  {peer:<16}  {kind:<14}                          id={session_id} from {remote_addr}"
             )
         }
         "session.closed" => {
-            let session_id = entry.get("session_id").and_then(|v| v.as_str()).unwrap_or("?");
-            let duration = entry.get("duration").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let session_id = entry
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let duration = entry
+                .get("duration")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let reason = entry.get("reason").and_then(|v| v.as_str()).unwrap_or("");
             format!(
                 "{dt}  {peer:<16}  {kind:<14}                          id={session_id}  duration={duration}s  reason={reason:?}"
@@ -336,7 +364,10 @@ pub fn format_audit_entry(entry: &Value) -> String {
         }
         "session.rejected" => {
             let reason = entry.get("reason").and_then(|v| v.as_str()).unwrap_or("?");
-            let remote_addr = entry.get("remote_addr").and_then(|v| v.as_str()).unwrap_or("?");
+            let remote_addr = entry
+                .get("remote_addr")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
             format!(
                 "{dt}  {peer:<16}  {kind:<14}                          reason={reason}  from {remote_addr}"
             )

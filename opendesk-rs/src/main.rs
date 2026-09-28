@@ -1,13 +1,13 @@
-use std::path::{Path, PathBuf};
-use std::time::Duration;
 use clap::{Parser, Subcommand};
 use serde_json::Value;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opendesk_rs::mcp::server::McpServer;
 use opendesk_rs::protocol::identity::generate_pairing_code;
 use opendesk_rs::protocol::storage::{
-    clear_description, fingerprint, read_description, write_description, TrustedPeers,
+    TrustedPeers, clear_description, fingerprint, read_description, write_description,
 };
 use opendesk_rs::remote::client::{connect as remote_connect, pair_with};
 use opendesk_rs::remote::rendezvous::RendezvousServer;
@@ -257,16 +257,15 @@ enum PeersCommands {
         clear: bool,
     },
     /// Get / set the rendezvous server URL for a trusted peer
-    Rendezvous {
-        name: String,
-        url: Option<String>,
-    },
+    Rendezvous { name: String, url: Option<String> },
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "off".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "off".into()),
+        )
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
@@ -347,7 +346,9 @@ async fn main() -> anyhow::Result<()> {
             .await?;
 
             let fp = fingerprint(&server_pub);
-            let display_name = name.unwrap_or_else(|| format!("peer-{}", &data_encoding::HEXLOWER.encode(&server_pub)[..6]));
+            let display_name = name.unwrap_or_else(|| {
+                format!("peer-{}", &data_encoding::HEXLOWER.encode(&server_pub)[..6])
+            });
             println!("✓ Paired with {} ({})", display_name, fp);
             println!("  Now reachable as: opendesk connect {}", display_name);
         }
@@ -361,7 +362,8 @@ async fn main() -> anyhow::Result<()> {
             rendezvous,
             rendezvous_token,
         } => {
-            let mut server = OpendeskServer::new(&host, port, home.as_deref(), rendezvous, rendezvous_token)?;
+            let mut server =
+                OpendeskServer::new(&host, port, home.as_deref(), rendezvous, rendezvous_token)?;
             server.set_advertise_mdns(!no_mdns);
             server.set_no_audit(no_audit);
             server.serve_forever().await?;
@@ -402,30 +404,54 @@ async fn main() -> anyhow::Result<()> {
             rendezvous_token,
         } => {
             if let Some(r_url) = rendezvous {
-                let client = opendesk_rs::remote::rendezvous::RendezvousClient::new(&r_url, rendezvous_token.as_deref());
+                let client = opendesk_rs::remote::rendezvous::RendezvousClient::new(
+                    &r_url,
+                    rendezvous_token.as_deref(),
+                );
                 let peers = client.list_peers(Duration::from_secs_f64(timeout)).await?;
                 if peers.is_empty() {
                     println!("No online opendesk peers found on rendezvous {}.", r_url);
                     return Ok(());
                 }
-                println!("{:<24}  {:<22}  {:<22}  DESCRIPTION", "NAME", "ADDR", "FINGERPRINT");
+                println!(
+                    "{:<24}  {:<22}  {:<22}  DESCRIPTION",
+                    "NAME", "ADDR", "FINGERPRINT"
+                );
                 for p in peers {
-                    let desc = if p.description.len() > 80 { &p.description[..80] } else { &p.description };
-                    println!("{:<24}  {:<22}  {:<22}  {}", p.name, "rendezvous", p.fingerprint, desc);
+                    let desc = if p.description.len() > 80 {
+                        &p.description[..80]
+                    } else {
+                        &p.description
+                    };
+                    println!(
+                        "{:<24}  {:<22}  {:<22}  {}",
+                        p.name, "rendezvous", p.fingerprint, desc
+                    );
                 }
                 return Ok(());
             }
 
-            let peers = opendesk_rs::remote::discovery::discover(Duration::from_secs_f64(timeout)).await?;
+            let peers =
+                opendesk_rs::remote::discovery::discover(Duration::from_secs_f64(timeout)).await?;
             if peers.is_empty() {
                 println!("No opendesk peers found on the LAN.");
                 return Ok(());
             }
-            println!("{:<24}  {:<22}  {:<22}  DESCRIPTION", "NAME", "ADDR", "FINGERPRINT");
+            println!(
+                "{:<24}  {:<22}  {:<22}  DESCRIPTION",
+                "NAME", "ADDR", "FINGERPRINT"
+            );
             for p in peers {
-                let desc = if p.description.len() > 80 { &p.description[..80] } else { &p.description };
+                let desc = if p.description.len() > 80 {
+                    &p.description[..80]
+                } else {
+                    &p.description
+                };
                 let addr = format!("{}:{}", p.host, p.port);
-                println!("{:<24}  {:<22}  {:<22}  {}", p.name, addr, p.fingerprint, desc);
+                println!(
+                    "{:<24}  {:<22}  {:<22}  {}",
+                    p.name, addr, p.fingerprint, desc
+                );
             }
         }
 
@@ -458,7 +484,9 @@ async fn main() -> anyhow::Result<()> {
                         break;
                     }
                 }
-                println!("Opened the relevant System Settings pane.  Re-run `opendesk check` after granting.");
+                println!(
+                    "Opened the relevant System Settings pane.  Re-run `opendesk check` after granting."
+                );
             }
             std::process::exit(1);
         }
@@ -485,9 +513,10 @@ async fn main() -> anyhow::Result<()> {
             if !follow {
                 let mut entries = audit.iter_entries(date.as_deref());
                 if let Some(lim) = limit
-                    && entries.len() > lim {
-                        entries = entries.split_off(entries.len() - lim);
-                    }
+                    && entries.len() > lim
+                {
+                    entries = entries.split_off(entries.len() - lim);
+                }
                 for e in entries {
                     if matches_peer(&e) {
                         println!("{}", opendesk_rs::remote::audit::format_audit_entry(&e));
@@ -500,9 +529,10 @@ async fn main() -> anyhow::Result<()> {
             let mut entries = audit.iter_entries(date.as_deref());
             let mut seen = entries.len();
             if let Some(lim) = limit
-                && entries.len() > lim {
-                    entries = entries.split_off(entries.len() - lim);
-                }
+                && entries.len() > lim
+            {
+                entries = entries.split_off(entries.len() - lim);
+            }
             for e in entries {
                 if matches_peer(&e) {
                     println!("{}", opendesk_rs::remote::audit::format_audit_entry(&e));
@@ -524,13 +554,14 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Commands::Sessions { home } => {
-            let mut client = match opendesk_rs::remote::admin::AdminClient::connect(home.as_deref()).await {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("ERROR: {}", e);
-                    std::process::exit(1);
-                }
-            };
+            let mut client =
+                match opendesk_rs::remote::admin::AdminClient::connect(home.as_deref()).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("ERROR: {}", e);
+                        std::process::exit(1);
+                    }
+                };
             let sessions = client.list_sessions().await?;
             if sessions.is_empty() {
                 println!("No active session.");
@@ -539,18 +570,22 @@ async fn main() -> anyhow::Result<()> {
             println!("{:<22}  {:<22}  {:<8}  ID", "PEER", "FROM", "AGE");
             for s in sessions {
                 let age = opendesk_rs::remote::admin::format_age(s.age_seconds);
-                println!("{:<22}  {:<22}  {:<8}  {}", s.peer_name, s.remote_addr, age, s.id);
+                println!(
+                    "{:<22}  {:<22}  {:<8}  {}",
+                    s.peer_name, s.remote_addr, age, s.id
+                );
             }
         }
 
         Commands::Disconnect { home } => {
-            let mut client = match opendesk_rs::remote::admin::AdminClient::connect(home.as_deref()).await {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("ERROR: {}", e);
-                    std::process::exit(1);
-                }
-            };
+            let mut client =
+                match opendesk_rs::remote::admin::AdminClient::connect(home.as_deref()).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("ERROR: {}", e);
+                        std::process::exit(1);
+                    }
+                };
             let n = client.kill_all().await?;
             if n == 0 {
                 println!("No active session to disconnect.");
@@ -574,9 +609,16 @@ async fn main() -> anyhow::Result<()> {
                         return Ok(());
                     }
                     let default = trusted.get_default();
-                    println!("{:<22}  {:<22}  {:<22}  DESCRIPTION", "NAME", "FINGERPRINT", "LAST ENDPOINT");
+                    println!(
+                        "{:<22}  {:<22}  {:<22}  DESCRIPTION",
+                        "NAME", "FINGERPRINT", "LAST ENDPOINT"
+                    );
                     for p in peers {
-                        let marker = if Some(&p.name) == default.as_ref() { "  [default]" } else { "" };
+                        let marker = if Some(&p.name) == default.as_ref() {
+                            "  [default]"
+                        } else {
+                            ""
+                        };
                         let endpoint = if !p.rendezvous_url.is_empty() {
                             format!("rendezvous ({})", p.rendezvous_url)
                         } else if !p.last_host.is_empty() {
@@ -591,7 +633,14 @@ async fn main() -> anyhow::Result<()> {
                         } else {
                             desc_line.to_string()
                         };
-                        println!("{:<22}  {:<22}  {:<22}  {}{}", p.name, p.fingerprint(), endpoint, short_desc, marker);
+                        println!(
+                            "{:<22}  {:<22}  {:<22}  {}{}",
+                            p.name,
+                            p.fingerprint(),
+                            endpoint,
+                            short_desc,
+                            marker
+                        );
                     }
                 }
                 PeersCommands::Remove { target } => {
@@ -697,25 +746,35 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::WslSetup { port, apply, undo } => {
             if undo {
-                println!("netsh interface portproxy delete v4tov4 listenport={port} listenaddress=0.0.0.0");
+                println!(
+                    "netsh interface portproxy delete v4tov4 listenport={port} listenaddress=0.0.0.0"
+                );
                 println!("Remove-NetFirewallRule -DisplayName 'opendesk inbound {port}'");
             } else {
-                println!("netsh interface portproxy add v4tov4 listenport={port} listenaddress=0.0.0.0 connectport={port} connectaddress=127.0.0.1");
-                println!("New-NetFirewallRule -DisplayName 'opendesk inbound {port}' -Direction Inbound -LocalPort {port} -Protocol TCP -Action Allow -Profile Private");
+                println!(
+                    "netsh interface portproxy add v4tov4 listenport={port} listenaddress=0.0.0.0 connectport={port} connectaddress=127.0.0.1"
+                );
+                println!(
+                    "New-NetFirewallRule -DisplayName 'opendesk inbound {port}' -Direction Inbound -LocalPort {port} -Protocol TCP -Action Allow -Profile Private"
+                );
             }
             if apply {
-                println!("Note: To apply, run the above commands in an elevated PowerShell prompt.");
+                println!(
+                    "Note: To apply, run the above commands in an elevated PowerShell prompt."
+                );
             }
         }
 
         Commands::Scheduler { scheduler_cmd, dir } => {
-            let project_dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+            let project_dir = dir
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
             match scheduler_cmd.as_str() {
                 "start" => {
                     opendesk_rs::automation::scheduler::run_scheduler_daemon(&project_dir).await?;
                 }
                 "list" => {
-                    let store = opendesk_rs::automation::scheduler::ScheduleStore::new(&project_dir);
+                    let store =
+                        opendesk_rs::automation::scheduler::ScheduleStore::new(&project_dir);
                     let entries = store.all();
                     if entries.is_empty() {
                         println!("No schedules.");
@@ -751,13 +810,21 @@ async fn main() -> anyhow::Result<()> {
                 rendezvous_token.as_deref(),
             ) {
                 Ok(result) => {
-                    println!("✓ Service installed ({}): {}", result.manager, result.path.display());
+                    println!(
+                        "✓ Service installed ({}): {}",
+                        result.manager,
+                        result.path.display()
+                    );
                     if result.started {
                         println!("  Started. It will also run automatically on next login.");
                     } else if no_start {
-                        println!("  Not started (--no-start). Activate manually or rerun without the flag.");
+                        println!(
+                            "  Not started (--no-start). Activate manually or rerun without the flag."
+                        );
                     } else {
-                        println!("  WARNING: Service registered but could not be started immediately.");
+                        println!(
+                            "  WARNING: Service registered but could not be started immediately."
+                        );
                     }
                 }
                 Err(e) => {
@@ -767,29 +834,34 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        Commands::UninstallService => {
-            match opendesk_rs::service::uninstall_service() {
-                Ok(removed) => {
-                    if removed {
-                        println!("✓ Service uninstalled.");
-                    } else {
-                        println!("No opendesk service was installed.");
-                    }
-                }
-                Err(e) => {
-                    eprintln!("ERROR: Failed to uninstall service: {e}");
-                    std::process::exit(1);
+        Commands::UninstallService => match opendesk_rs::service::uninstall_service() {
+            Ok(removed) => {
+                if removed {
+                    println!("✓ Service uninstalled.");
+                } else {
+                    println!("No opendesk service was installed.");
                 }
             }
-        }
+            Err(e) => {
+                eprintln!("ERROR: Failed to uninstall service: {e}");
+                std::process::exit(1);
+            }
+        },
     }
 
     Ok(())
 }
 
-async fn do_unpair(trusted: &TrustedPeers, target: &str, home: Option<&Path>) -> anyhow::Result<()> {
+async fn do_unpair(
+    trusted: &TrustedPeers,
+    target: &str,
+    home: Option<&Path>,
+) -> anyhow::Result<()> {
     let entry = trusted.find_by_name(target);
-    let peer_name_for_kick = entry.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| target.to_string());
+    let peer_name_for_kick = entry
+        .as_ref()
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| target.to_string());
     if !trusted.remove(target)? {
         eprintln!("No peer matched '{}'.", target);
         std::process::exit(1);
@@ -797,16 +869,17 @@ async fn do_unpair(trusted: &TrustedPeers, target: &str, home: Option<&Path>) ->
 
     let mut kicked = false;
     if let Ok(mut client) = opendesk_rs::remote::admin::AdminClient::connect(home).await
-        && let Ok(sessions) = client.list_sessions().await {
-            for s in sessions {
-                if s.peer_name == peer_name_for_kick {
-                    if client.kill(&s.id).await.unwrap_or(false) {
-                        kicked = true;
-                    }
-                    break;
+        && let Ok(sessions) = client.list_sessions().await
+    {
+        for s in sessions {
+            if s.peer_name == peer_name_for_kick {
+                if client.kill(&s.id).await.unwrap_or(false) {
+                    kicked = true;
                 }
+                break;
             }
         }
+    }
 
     if kicked {
         println!("Unpaired {} and disconnected the active session.", target);
@@ -826,7 +899,11 @@ fn cmd_install(scope: &str) -> anyhow::Result<()> {
     }
     let claude = claude_bin.unwrap();
     let current_exe = std::env::current_exe()?;
-    let mcp_bin = current_exe.with_file_name(if cfg!(windows) { "opendesk-mcp.exe" } else { "opendesk-mcp" });
+    let mcp_bin = current_exe.with_file_name(if cfg!(windows) {
+        "opendesk-mcp.exe"
+    } else {
+        "opendesk-mcp"
+    });
     let mcp_path = if mcp_bin.exists() {
         mcp_bin
     } else {

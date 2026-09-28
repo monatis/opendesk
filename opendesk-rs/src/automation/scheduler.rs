@@ -1,10 +1,10 @@
 //! Persistent storage and daemon for scheduled tasks.
 
-use std::fs::{create_dir_all, File};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::fs::{File, create_dir_all};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::info;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -109,10 +109,16 @@ pub async fn run_scheduler_daemon(project_dir: &Path) -> Result<()> {
     let store = ScheduleStore::new(project_dir);
     let entries = store.all();
     if entries.is_empty() {
-        println!("No schedules found in {}. Add one with the learn tool or schedule tool.", project_dir.display());
+        println!(
+            "No schedules found in {}. Add one with the learn tool or schedule tool.",
+            project_dir.display()
+        );
         println!("Waiting for schedules... (Ctrl-C to stop)");
     } else {
-        println!("Starting scheduler with {} task(s)... (Ctrl-C to stop)", entries.len());
+        println!(
+            "Starting scheduler with {} task(s)... (Ctrl-C to stop)",
+            entries.len()
+        );
     }
 
     loop {

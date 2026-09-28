@@ -1,7 +1,7 @@
-pub mod protocol;
+pub mod app;
+pub mod automation;
 pub mod computer;
 pub mod mcp;
-pub mod service;
+pub mod protocol;
 pub mod remote;
-pub mod automation;
-pub mod app;
+pub mod service;

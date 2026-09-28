@@ -2,24 +2,24 @@
 //!
 //! Provides embedded web UI and REST API for controlling and monitoring OpenDesk.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use axum::extract::{Path as AxumPath, Query, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::protocol::identity::generate_pairing_code;
 use crate::protocol::storage::{fingerprint, read_description, write_description};
-use crate::remote::client::{connect as client_connect, pair_with, RemoteComputer};
+use crate::remote::client::{RemoteComputer, connect as client_connect, pair_with};
 use crate::remote::discovery::discover;
 use crate::remote::server::OpendeskServer;
 
@@ -110,7 +110,9 @@ async fn get_state(State(state): State<AppState>) -> Json<Value> {
 
     let active_sessions = state.server.registry().list().await;
     let active_session = if let Some(s) = active_sessions.first() {
-        let pk_bytes = data_encoding::HEXLOWER.decode(s.peer_pubkey_hex.as_bytes()).unwrap_or_default();
+        let pk_bytes = data_encoding::HEXLOWER
+            .decode(s.peer_pubkey_hex.as_bytes())
+            .unwrap_or_default();
         Some(json!({
             "id": s.id,
             "peer_name": s.peer_name,
@@ -225,9 +227,19 @@ async fn do_disconnect(State(state): State<AppState>) -> Json<Value> {
     Json(json!({ "killed": killed }))
 }
 
-async fn do_unpair(State(state): State<AppState>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
-    let name = body.get("name").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
-    let peer = state.server.trusted().find_by_name(name).ok_or(StatusCode::NOT_FOUND)?;
+async fn do_unpair(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let peer = state
+        .server
+        .trusted()
+        .find_by_name(name)
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     // Kill active session if matched
     let active = state.server.registry().list().await;
@@ -241,7 +253,11 @@ async fn do_unpair(State(state): State<AppState>, Json(body): Json<Value>) -> Re
     // Drop outbound connection
     state.outbound.lock().await.remove(name);
 
-    let ok = state.server.trusted().remove(name).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let ok = state
+        .server
+        .trusted()
+        .remove(name)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "ok": ok })))
 }
 
@@ -257,14 +273,29 @@ async fn do_unpair_all(State(state): State<AppState>) -> Result<Json<Value>, Sta
     Ok(Json(json!({ "unpaired": count })))
 }
 
-async fn set_default_peer(State(state): State<AppState>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+async fn set_default_peer(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
     if body.get("clear").and_then(|v| v.as_bool()).unwrap_or(false) {
-        let cleared = state.server.trusted().clear_default().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let cleared = state
+            .server
+            .trusted()
+            .clear_default()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         return Ok(Json(json!({ "cleared": cleared, "default": Value::Null })));
     }
 
-    let name = body.get("name").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
-    if state.server.trusted().set_default(name).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    if state
+        .server
+        .trusted()
+        .set_default(name)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
         Ok(Json(json!({ "default": name })))
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -277,11 +308,19 @@ async fn set_peer_description(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
     if body.get("clear").and_then(|v| v.as_bool()).unwrap_or(false) {
-        let ok = state.server.trusted().clear_description_override(&name).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let ok = state
+            .server
+            .trusted()
+            .clear_description_override(&name)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         return Ok(Json(json!({ "ok": ok })));
     }
     let text = body.get("text").and_then(|v| v.as_str()).unwrap_or("");
-    let ok = state.server.trusted().set_description_override(&name, text).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let ok = state
+        .server
+        .trusted()
+        .set_description_override(&name, text)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if ok {
         Ok(Json(json!({ "ok": true })))
     } else {
@@ -289,13 +328,18 @@ async fn set_peer_description(
     }
 }
 
-async fn set_self_description(State(state): State<AppState>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+async fn set_self_description(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
     if body.get("clear").and_then(|v| v.as_bool()).unwrap_or(false) {
-        crate::protocol::storage::clear_description(state.home.as_deref()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        crate::protocol::storage::clear_description(state.home.as_deref())
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         return Ok(Json(json!({ "cleared": true })));
     }
     let text = body.get("text").and_then(|v| v.as_str()).unwrap_or("");
-    write_description(state.home.as_deref(), text).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    write_description(state.home.as_deref(), text)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -309,20 +353,24 @@ async fn do_discover(
     Query(q): Query<DiscoverQuery>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
     let timeout = Duration::from_secs_f64(q.timeout.unwrap_or(2.0));
-    let peers = discover(timeout).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    let peers = discover(timeout)
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
     let own_pk = state.server.identity().public_bytes();
 
     let list: Vec<Value> = peers
         .into_iter()
         .filter(|p| p.public_key != own_pk)
-        .map(|p| json!({
-            "name": p.name,
-            "host": p.host,
-            "port": p.port,
-            "fingerprint": p.fingerprint,
-            "description": p.description,
-            "public_key_hex": data_encoding::HEXLOWER.encode(&p.public_key),
-        }))
+        .map(|p| {
+            json!({
+                "name": p.name,
+                "host": p.host,
+                "port": p.port,
+                "fingerprint": p.fingerprint,
+                "description": p.description,
+                "public_key_hex": data_encoding::HEXLOWER.encode(&p.public_key),
+            })
+        })
         .collect();
 
     Ok(Json(json!({ "peers": list })))
@@ -332,10 +380,19 @@ async fn do_pair_with(
     State(state): State<AppState>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let host = body.get("host").and_then(|v| v.as_str()).ok_or((StatusCode::BAD_REQUEST, "missing 'host'".into()))?;
-    let code = body.get("code").and_then(|v| v.as_str()).ok_or((StatusCode::BAD_REQUEST, "missing 'code'".into()))?;
+    let host = body
+        .get("host")
+        .and_then(|v| v.as_str())
+        .ok_or((StatusCode::BAD_REQUEST, "missing 'host'".into()))?;
+    let code = body
+        .get("code")
+        .and_then(|v| v.as_str())
+        .ok_or((StatusCode::BAD_REQUEST, "missing 'code'".into()))?;
     let name = body.get("name").and_then(|v| v.as_str());
-    let desc = body.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let desc = body
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let port = body.get("port").and_then(|v| v.as_u64()).unwrap_or(8423) as u16;
 
     let (remote, server_pub) = pair_with(
@@ -352,16 +409,31 @@ async fn do_pair_with(
     .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     let peer_entry = state.server.trusted().find(&server_pub);
-    let peer_name = peer_entry.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| {
-        name.map(|n| n.to_string()).unwrap_or_else(|| format!("peer-{}", &data_encoding::HEXLOWER.encode(&server_pub)[..6]))
-    });
+    let peer_name = peer_entry
+        .as_ref()
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| {
+            name.map(|n| n.to_string()).unwrap_or_else(|| {
+                format!("peer-{}", &data_encoding::HEXLOWER.encode(&server_pub)[..6])
+            })
+        });
 
     if !desc.is_empty() {
-        let _ = state.server.trusted().set_description_override(&peer_name, desc);
+        let _ = state
+            .server
+            .trusted()
+            .set_description_override(&peer_name, desc);
     }
 
-    let fp = peer_entry.as_ref().map(|p| p.fingerprint()).unwrap_or_else(|| fingerprint(&server_pub));
-    state.outbound.lock().await.insert(peer_name.clone(), Arc::new(remote));
+    let fp = peer_entry
+        .as_ref()
+        .map(|p| p.fingerprint())
+        .unwrap_or_else(|| fingerprint(&server_pub));
+    state
+        .outbound
+        .lock()
+        .await
+        .insert(peer_name.clone(), Arc::new(remote));
 
     Ok(Json(json!({
         "ok": true,
@@ -374,7 +446,10 @@ async fn do_connect(
     State(state): State<AppState>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let peer = body.get("peer").and_then(|v| v.as_str()).ok_or((StatusCode::BAD_REQUEST, "missing 'peer'".into()))?;
+    let peer = body
+        .get("peer")
+        .and_then(|v| v.as_str())
+        .ok_or((StatusCode::BAD_REQUEST, "missing 'peer'".into()))?;
 
     {
         let outbound = state.outbound.lock().await;
@@ -387,7 +462,11 @@ async fn do_connect(
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
-    state.outbound.lock().await.insert(peer.to_string(), Arc::new(remote));
+    state
+        .outbound
+        .lock()
+        .await
+        .insert(peer.to_string(), Arc::new(remote));
     Ok(Json(json!({ "ok": true, "reused": false })))
 }
 
@@ -405,11 +484,19 @@ async fn peer_screenshot(
 ) -> Result<Response, (StatusCode, String)> {
     let remote = {
         let outbound = state.outbound.lock().await;
-        outbound.get(&name).cloned().ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
+        outbound
+            .get(&name)
+            .cloned()
+            .ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
     };
 
-    let b64 = remote.screenshot("png", None).await.map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
-    let bytes = data_encoding::BASE64.decode(b64.as_bytes()).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let b64 = remote
+        .screenshot("png", None)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    let bytes = data_encoding::BASE64
+        .decode(b64.as_bytes())
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
@@ -428,7 +515,10 @@ async fn peer_action(
 ) -> Result<Json<Value>, (StatusCode, String)> {
     let remote = {
         let outbound = state.outbound.lock().await;
-        outbound.get(&name).cloned().ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
+        outbound
+            .get(&name)
+            .cloned()
+            .ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
     };
 
     let kind = body.get("kind").and_then(|v| v.as_str()).unwrap_or("");
@@ -437,28 +527,48 @@ async fn peer_action(
             let x = body.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
             let y = body.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
             let button = body.get("button").and_then(|v| v.as_str());
-            remote.mouse_click(x, y, button).await.map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+            remote
+                .mouse_click(x, y, button)
+                .await
+                .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
         }
         "move" => {
             let x = body.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
             let y = body.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
-            remote.mouse_move(x, y).await.map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+            remote
+                .mouse_move(x, y)
+                .await
+                .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
         }
         "scroll" => {
             let x = body.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
             let y = body.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
             let dy = body.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
-            remote.mouse_scroll(x, y, dy).await.map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+            remote
+                .mouse_scroll(x, y, dy)
+                .await
+                .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
         }
         "type" => {
             let text = body.get("text").and_then(|v| v.as_str()).unwrap_or("");
-            remote.keyboard_type(text).await.map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+            remote
+                .keyboard_type(text)
+                .await
+                .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
         }
         "key" => {
             let key = body.get("keysym").and_then(|v| v.as_str()).unwrap_or("");
-            remote.keyboard_press(key).await.map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+            remote
+                .keyboard_press(key)
+                .await
+                .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
         }
-        _ => return Err((StatusCode::BAD_REQUEST, format!("unknown action kind: '{kind}'"))),
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("unknown action kind: '{kind}'"),
+            ));
+        }
     }
 
     Ok(Json(json!({ "ok": true })))
@@ -471,10 +581,7 @@ struct AuditQuery {
     limit: Option<usize>,
 }
 
-async fn get_audit(
-    State(state): State<AppState>,
-    Query(q): Query<AuditQuery>,
-) -> Json<Value> {
+async fn get_audit(State(state): State<AppState>, Query(q): Query<AuditQuery>) -> Json<Value> {
     let mut entries = state.server.audit().iter_entries(q.date.as_deref());
     if let Some(filter_peer) = q.peer.as_deref() {
         entries.retain(|e| {
@@ -509,30 +616,28 @@ fn get_local_ips() -> Vec<String> {
     let mut ips = Vec::new();
     if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0")
         && socket.connect("8.8.8.8:80").is_ok()
-            && let Ok(addr) = socket.local_addr() {
-                let ip = addr.ip().to_string();
-                if !ip.starts_with("127.") {
-                    ips.push(ip);
-                }
-            }
+        && let Ok(addr) = socket.local_addr()
+    {
+        let ip = addr.ip().to_string();
+        if !ip.starts_with("127.") {
+            ips.push(ip);
+        }
+    }
     if ips.is_empty() {
         ips.push("127.0.0.1".to_string());
     }
     ips
 }
 
-pub async fn run_app(
-    home: Option<&Path>,
-    host: &str,
-    port: u16,
-    open_browser: bool,
-) -> Result<()> {
+pub async fn run_app(home: Option<&Path>, host: &str, port: u16, open_browser: bool) -> Result<()> {
     // Check if UI port or WebSocket port is taken
     for (bind_host, bind_port, label) in [("0.0.0.0", 8423, "WebSocket"), (host, port, "UI")] {
         if std::net::TcpListener::bind(format!("{}:{}", bind_host, bind_port)).is_err() {
             return Err(anyhow!(
                 "opendesk: {} port {} on {} is already in use.\n  Another opendesk instance is probably running. Stop it and try again.",
-                label, bind_port, bind_host
+                label,
+                bind_port,
+                bind_host
             ));
         }
     }
@@ -558,7 +663,8 @@ pub async fn run_app(
 
     let router = create_router(app_state);
     let bind_addr = format!("{}:{}", host, port);
-    let listener = tokio::net::TcpListener::bind(&bind_addr).await
+    let listener = tokio::net::TcpListener::bind(&bind_addr)
+        .await
         .with_context(|| format!("Failed to bind web UI to {}", bind_addr))?;
 
     println!("opendesk UI running at http://{}:{}", host, port);

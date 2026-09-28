@@ -161,7 +161,11 @@ impl HelloFrame {
 }
 
 impl ReqFrame {
-    pub fn new(id: u64, method: impl Into<String>, params: HashMap<String, serde_json::Value>) -> Self {
+    pub fn new(
+        id: u64,
+        method: impl Into<String>,
+        params: HashMap<String, serde_json::Value>,
+    ) -> Self {
         Self {
             v: PROTOCOL_VERSION,
             id,

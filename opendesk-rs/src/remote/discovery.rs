@@ -2,10 +2,10 @@
 //!
 //! Service type: `_opendesk._tcp.local.`
 
+use anyhow::{Result, anyhow};
+use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use std::collections::HashMap;
 use std::time::Duration;
-use anyhow::{anyhow, Result};
-use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 
 use crate::protocol::storage::fingerprint;
 
@@ -62,15 +62,8 @@ pub fn advertise(
     }
 
     let host_name = format!("{}.local.", name);
-    let service_info = ServiceInfo::new(
-        SERVICE_TYPE,
-        name,
-        &host_name,
-        "",
-        port,
-        properties,
-    )
-    .map_err(|e| anyhow!("Failed to create ServiceInfo: {e}"))?;
+    let service_info = ServiceInfo::new(SERVICE_TYPE, name, &host_name, "", port, properties)
+        .map_err(|e| anyhow!("Failed to create ServiceInfo: {e}"))?;
 
     let fullname = service_info.get_fullname().to_string();
     daemon
@@ -97,13 +90,16 @@ pub async fn discover(timeout: Duration) -> Result<Vec<DiscoveredPeer>> {
         }
         let remaining = deadline - now;
 
-        match tokio::time::timeout(remaining, tokio::task::spawn_blocking({
-            let receiver = receiver.clone();
-            move || receiver.recv_timeout(Duration::from_millis(200))
-        }))
+        match tokio::time::timeout(
+            remaining,
+            tokio::task::spawn_blocking({
+                let receiver = receiver.clone();
+                move || receiver.recv_timeout(Duration::from_millis(200))
+            }),
+        )
         .await
         {
-            Ok(Ok(Ok(event))) => if let ServiceEvent::ServiceResolved(info) = event {
+            Ok(Ok(Ok(ServiceEvent::ServiceResolved(info)))) => {
                 let name = info
                     .get_fullname()
                     .trim_end_matches(&format!(".{SERVICE_TYPE}"))
@@ -154,7 +150,7 @@ pub async fn discover(timeout: Duration) -> Result<Vec<DiscoveredPeer>> {
                         },
                     );
                 }
-            },
+            }
             _ => {
                 // Timeout or receive error, continue until deadline
             }

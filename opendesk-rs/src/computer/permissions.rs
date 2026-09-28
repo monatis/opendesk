@@ -30,7 +30,10 @@ pub fn check_all() -> Vec<PermissionStatus> {
 #[cfg(target_os = "macos")]
 fn check_accessibility() -> PermissionStatus {
     let output = Command::new("osascript")
-        .args(["-e", "tell application \"System Events\" to get name of first process"])
+        .args([
+            "-e",
+            "tell application \"System Events\" to get name of first process",
+        ])
         .output();
 
     match output {

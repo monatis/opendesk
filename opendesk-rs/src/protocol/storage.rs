@@ -1,9 +1,9 @@
 //! On-disk store of trusted peers and default peer configuration.
 
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use super::identity::default_home;
 
@@ -128,12 +128,16 @@ impl TrustedPeers {
 
     pub fn contains(&self, public_key: &[u8; 32]) -> bool {
         let hex = data_encoding::HEXLOWER.encode(public_key);
-        self.list().iter().any(|p| p.public_key.eq_ignore_ascii_case(&hex))
+        self.list()
+            .iter()
+            .any(|p| p.public_key.eq_ignore_ascii_case(&hex))
     }
 
     pub fn find(&self, public_key: &[u8; 32]) -> Option<TrustedPeer> {
         let hex = data_encoding::HEXLOWER.encode(public_key);
-        self.list().into_iter().find(|p| p.public_key.eq_ignore_ascii_case(&hex))
+        self.list()
+            .into_iter()
+            .find(|p| p.public_key.eq_ignore_ascii_case(&hex))
     }
 
     pub fn find_by_name(&self, name: &str) -> Option<TrustedPeer> {
@@ -219,9 +223,10 @@ impl TrustedPeers {
 
         // Clear default if it was pointing to removed peer
         if let Some(def) = self.get_default()
-            && target_names.contains(&def) {
-                let _ = self.clear_default();
-            }
+            && target_names.contains(&def)
+        {
+            let _ = self.clear_default();
+        }
 
         Ok(true)
     }
@@ -262,7 +267,9 @@ impl TrustedPeers {
         let hex = data_encoding::HEXLOWER.encode(public_key);
         let mut peers = self.list();
         for p in &mut peers {
-            if p.public_key.eq_ignore_ascii_case(&hex) && (p.last_host != host || p.last_port != port) {
+            if p.public_key.eq_ignore_ascii_case(&hex)
+                && (p.last_host != host || p.last_port != port)
+            {
                 p.last_host = host.to_string();
                 p.last_port = port;
                 self.save(&peers)?;
@@ -341,7 +348,10 @@ pub fn read_description(home: Option<&Path>) -> String {
     let home = home.map(|p| p.to_path_buf()).unwrap_or_else(default_home);
     let path = home.join(DESCRIPTION_FILE);
     if path.exists() {
-        std::fs::read_to_string(path).unwrap_or_default().trim().to_string()
+        std::fs::read_to_string(path)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
     } else {
         String::new()
     }

@@ -1,10 +1,10 @@
-use std::sync::Arc;
 use anyhow::Result;
 use opendesk_rs::protocol::identity::Identity;
 use opendesk_rs::protocol::storage::TrustedPeers;
 use opendesk_rs::remote::client::{connect as remote_connect, pair_with};
 use opendesk_rs::remote::rendezvous::RendezvousServer;
 use opendesk_rs::remote::server::OpendeskServer;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_live_pairing_and_rpc() -> Result<()> {
@@ -14,18 +14,10 @@ async fn test_live_pairing_and_rpc() -> Result<()> {
     let port = 18423;
     let code = "987654";
 
-    let server = OpendeskServer::new(
-        "127.0.0.1",
-        port,
-        Some(server_dir.path()),
-        vec![],
-        None,
-    )?;
+    let server = OpendeskServer::new("127.0.0.1", port, Some(server_dir.path()), vec![], None)?;
 
     // Spawn server pair listener
-    let server_task = tokio::spawn(async move {
-        server.run_pair(code, 10).await
-    });
+    let server_task = tokio::spawn(async move { server.run_pair(code, 10).await });
 
     // Small delay to ensure server socket bound
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
@@ -87,23 +79,17 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
     )?);
 
     let s_clone = server.clone();
-    let server_task = tokio::spawn(async move {
-        s_clone.serve_forever().await
-    });
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
 
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
     // Connect via authenticated static keys
-    let remote = remote_connect(
-        Some("my-server"),
-        None,
-        None,
-        Some(client_dir.path()),
-    )
-    .await?;
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
 
     // Test remote clipboard write and read
-    remote.clipboard_write("OPENDESK_RUST_REMOTE_SUCCESS").await?;
+    remote
+        .clipboard_write("OPENDESK_RUST_REMOTE_SUCCESS")
+        .await?;
     let read_back = remote.clipboard_read().await?;
     assert_eq!(read_back, "OPENDESK_RUST_REMOTE_SUCCESS");
 
@@ -117,9 +103,7 @@ async fn test_live_rendezvous_signaling_and_relay() -> Result<()> {
     let r_port = 18426;
 
     let r_server = RendezvousServer::new("127.0.0.1", r_port, Some("test-token".to_string()));
-    let r_task = tokio::spawn(async move {
-        r_server.serve_forever().await
-    });
+    let r_task = tokio::spawn(async move { r_server.serve_forever().await });
 
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
@@ -148,9 +132,7 @@ async fn test_live_rendezvous_signaling_and_relay() -> Result<()> {
     )?);
 
     let s_clone = server.clone();
-    let server_task = tokio::spawn(async move {
-        s_clone.serve_forever().await
-    });
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
 
     // Wait for agent to connect and register on rendezvous
     tokio::time::sleep(std::time::Duration::from_millis(400)).await;

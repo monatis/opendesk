@@ -4,10 +4,10 @@
 //! 1. Pairing (pair_server / pair_client): 3-message PSK-authenticated flow.
 //! 2. Reconnect (auth_server / auth_client): 2-message static-key flow.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chacha20poly1305::{
-    aead::{Aead, KeyInit},
     ChaCha20Poly1305, Nonce,
+    aead::{Aead, KeyInit},
 };
 use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};
@@ -92,11 +92,7 @@ fn session_keys(
     c2s.copy_from_slice(&keys[0..32]);
     s2c.copy_from_slice(&keys[32..64]);
 
-    if is_server {
-        (s2c, c2s)
-    } else {
-        (c2s, s2c)
-    }
+    if is_server { (s2c, c2s) } else { (c2s, s2c) }
 }
 
 async fn send_msg<T: Transport + ?Sized>(conn: &mut T, msg: HandshakeMessage) -> Result<()> {
@@ -105,7 +101,10 @@ async fn send_msg<T: Transport + ?Sized>(conn: &mut T, msg: HandshakeMessage) ->
     conn.send(&packed).await
 }
 
-async fn recv_msg<T: Transport + ?Sized>(conn: &mut T, expected_kind: &str) -> Result<HandshakeMessage> {
+async fn recv_msg<T: Transport + ?Sized>(
+    conn: &mut T,
+    expected_kind: &str,
+) -> Result<HandshakeMessage> {
     let data = conn.recv().await?;
     let msg: HandshakeMessage = rmp_serde::from_slice(&data)
         .with_context(|| format!("malformed handshake message; expected {}", expected_kind))?;
@@ -128,7 +127,8 @@ async fn recv_msg<T: Transport + ?Sized>(conn: &mut T, expected_kind: &str) -> R
 }
 
 fn require_bytes_32(buf: Option<ByteBuf>, field_name: &str) -> Result<[u8; 32]> {
-    let bytes = buf.ok_or_else(|| anyhow!("missing field '{}' in handshake message", field_name))?;
+    let bytes =
+        buf.ok_or_else(|| anyhow!("missing field '{}' in handshake message", field_name))?;
     if bytes.len() != 32 {
         return Err(anyhow!(
             "field '{}' must be 32 bytes, got {}",
@@ -338,7 +338,9 @@ pub async fn auth_server<T: Transport + ?Sized>(
             },
         )
         .await;
-        return Err(anyhow!("untrusted_peer: client static key not in trusted-peers"));
+        return Err(anyhow!(
+            "untrusted_peer: client static key not in trusted-peers"
+        ));
     }
 
     let dh_chain = [
@@ -505,14 +507,12 @@ mod tests {
         let (mut server_conn, mut client_conn) = channel_pair();
 
         let s_id = server_id.clone();
-        let server_task = tokio::spawn(async move {
-            pair_server(&mut server_conn, &s_id, code).await
-        });
+        let server_task =
+            tokio::spawn(async move { pair_server(&mut server_conn, &s_id, code).await });
 
         let c_id = client_id.clone();
-        let client_task = tokio::spawn(async move {
-            pair_client(&mut client_conn, &c_id, code).await
-        });
+        let client_task =
+            tokio::spawn(async move { pair_client(&mut client_conn, &c_id, code).await });
 
         let (server_sess, client_sess) = tokio::try_join!(
             async { server_task.await.map_err(|e| anyhow!(e))? },
@@ -553,15 +553,13 @@ mod tests {
 
         let s_id = server_id.clone();
         let tr = trusted.clone();
-        let server_task = tokio::spawn(async move {
-            auth_server(&mut server_conn, &s_id, &tr).await
-        });
+        let server_task =
+            tokio::spawn(async move { auth_server(&mut server_conn, &s_id, &tr).await });
 
         let c_id = client_id.clone();
         let s_pub = server_id.public_bytes();
-        let client_task = tokio::spawn(async move {
-            auth_client(&mut client_conn, &c_id, &s_pub).await
-        });
+        let client_task =
+            tokio::spawn(async move { auth_client(&mut client_conn, &c_id, &s_pub).await });
 
         let (server_sess, client_sess) = tokio::try_join!(
             async { server_task.await.map_err(|e| anyhow!(e))? },

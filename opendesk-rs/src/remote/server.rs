@@ -1,28 +1,26 @@
 //! opendesk server implementation: pairing listener and long-lived daemon.
 
+use anyhow::{Context, Result, anyhow};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use anyhow::{anyhow, Context, Result};
-use serde_json::{json, Value};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
+use super::admin::{ActiveSessionEntry, AdminServer, SessionRegistry};
+use super::audit::AuditLog;
+use super::discovery::{Advertisement, advertise};
+use super::transport::WebSocketTransport;
 use crate::computer::local::LocalComputer;
 use crate::protocol::crypto::EncryptedChannel;
 use crate::protocol::frames::{Frame, HelloFrame, PushFrame, ResFrame};
-use crate::protocol::handshake::{auth_server, pair_server, Transport};
+use crate::protocol::handshake::{Transport, auth_server, pair_server};
 use crate::protocol::identity::Identity;
-use crate::protocol::storage::{
-    default_peer_name, fingerprint, read_description, TrustedPeers,
-};
-use super::admin::{ActiveSessionEntry, AdminServer, SessionRegistry};
-use super::audit::AuditLog;
-use super::discovery::{advertise, Advertisement};
-use super::transport::WebSocketTransport;
+use crate::protocol::storage::{TrustedPeers, default_peer_name, fingerprint, read_description};
 
 pub const DEFAULT_PORT: u16 = 8423;
 
@@ -158,7 +156,11 @@ impl OpendeskServer {
                         let peer_pub = session.peer_public;
                         let peer_name = default_peer_name(&peer_pub);
                         self.trusted.add(&peer_pub, &peer_name, "")?;
-                        self.trusted.cache_endpoint(&peer_pub, &peer_addr.ip().to_string(), peer_addr.port())?;
+                        self.trusted.cache_endpoint(
+                            &peer_pub,
+                            &peer_addr.ip().to_string(),
+                            peer_addr.port(),
+                        )?;
 
                         let peer_fp = fingerprint(&peer_pub);
                         println!("✓ Paired with {} ({})", peer_name, peer_fp);
@@ -202,9 +204,7 @@ impl OpendeskServer {
     /// Run long-lived server daemon, accepting connections from trusted peers.
     pub async fn serve_forever(&self) -> Result<()> {
         if self.trusted.list().is_empty() {
-            return Err(anyhow!(
-                "no trusted peers yet. Run `opendesk pair` first."
-            ));
+            return Err(anyhow!("no trusted peers yet. Run `opendesk pair` first."));
         }
 
         // Start AdminServer for local IPC
@@ -220,7 +220,12 @@ impl OpendeskServer {
             let machine_name = std::env::var("COMPUTERNAME")
                 .or_else(|_| std::env::var("HOSTNAME"))
                 .unwrap_or_else(|_| "opendesk".to_string());
-            match advertise(&machine_name, self.port, &self.identity.public_bytes(), &desc) {
+            match advertise(
+                &machine_name,
+                self.port,
+                &self.identity.public_bytes(),
+                &desc,
+            ) {
                 Ok(adv) => _ad = Some(adv),
                 Err(e) => warn!("mDNS advertisement failed: {}", e),
             }
@@ -297,6 +302,7 @@ impl OpendeskServer {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_inbound_connection(
     stream: tokio::net::TcpStream,
     remote_addr: SocketAddr,
@@ -321,7 +327,9 @@ pub(crate) async fn handle_inbound_connection(
     };
 
     let peer_entry = trusted.find(&session.peer_public);
-    let peer_name = peer_entry.map(|p| p.name).unwrap_or_else(|| default_peer_name(&session.peer_public));
+    let peer_name = peer_entry
+        .map(|p| p.name)
+        .unwrap_or_else(|| default_peer_name(&session.peer_public));
     let session_id = uuid_short();
     let start_ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -332,52 +340,76 @@ pub(crate) async fn handle_inbound_connection(
     let existing_sessions = registry.list().await;
     if !existing_sessions.is_empty() {
         let existing = &existing_sessions[0];
-        let existing_pub = data_encoding::HEXLOWER.decode(existing.peer_pubkey_hex.as_bytes()).unwrap_or_default();
+        let existing_pub = data_encoding::HEXLOWER
+            .decode(existing.peer_pubkey_hex.as_bytes())
+            .unwrap_or_default();
         if existing_pub != session.peer_public {
-            info!("Rejecting controller {} — busy with {}", peer_name, existing.peer_name);
+            info!(
+                "Rejecting controller {} — busy with {}",
+                peer_name, existing.peer_name
+            );
             if !no_audit {
-                audit.record_session_rejected(
-                    &session.peer_public,
-                    &peer_name,
-                    &remote_addr.to_string(),
-                    &format!("busy: active session {}", existing.peer_name),
-                ).await;
+                audit
+                    .record_session_rejected(
+                        &session.peer_public,
+                        &peer_name,
+                        &remote_addr.to_string(),
+                        &format!("busy: active session {}", existing.peer_name),
+                    )
+                    .await;
             }
             // Reject with busy
-            let reject_res = ResFrame::error(0, "busy", format!("server is busy: {} is the active controller", existing.peer_name));
+            let reject_res = ResFrame::error(
+                0,
+                "busy",
+                format!(
+                    "server is busy: {} is the active controller",
+                    existing.peer_name
+                ),
+            );
             let packed = rmp_serde::to_vec_named(&reject_res)?;
             let mut chan = session.channel;
             let ct = chan.encrypt(&packed)?;
             let _ = transport.send(&ct).await;
             return Ok(());
         } else {
-            info!("Same peer {} reconnecting; replacing previous session", peer_name);
+            info!(
+                "Same peer {} reconnecting; replacing previous session",
+                peer_name
+            );
             registry.kill_all("reconnected").await;
         }
     }
 
     let (evict_tx, mut evict_rx) = mpsc::channel(2);
-    registry.add(ActiveSessionEntry {
-        id: session_id.clone(),
-        peer_name: peer_name.clone(),
-        peer_public: session.peer_public,
-        remote_addr: remote_addr.to_string(),
-        started_at: start_ts,
-        mode: "direct".to_string(),
-        evict_tx,
-    }).await;
+    registry
+        .add(ActiveSessionEntry {
+            id: session_id.clone(),
+            peer_name: peer_name.clone(),
+            peer_public: session.peer_public,
+            remote_addr: remote_addr.to_string(),
+            started_at: start_ts,
+            mode: "direct".to_string(),
+            evict_tx,
+        })
+        .await;
 
     if !no_audit {
-        audit.record_session_opened(
-            &session.peer_public,
-            &peer_name,
-            &session_id,
-            &remote_addr.to_string(),
-            "direct",
-        ).await;
+        audit
+            .record_session_opened(
+                &session.peer_public,
+                &peer_name,
+                &session_id,
+                &remote_addr.to_string(),
+                "direct",
+            )
+            .await;
     }
 
-    info!("Session {} established with peer '{}' ({})", session_id, peer_name, remote_addr);
+    info!(
+        "Session {} established with peer '{}' ({})",
+        session_id, peer_name, remote_addr
+    );
 
     let start_time = Instant::now();
     let run_res = run_session_loop(
@@ -398,19 +430,22 @@ pub(crate) async fn handle_inbound_connection(
     registry.remove(&session_id).await;
 
     if !no_audit {
-        audit.record_session_closed(
-            &session.peer_public,
-            &peer_name,
-            &session_id,
-            duration,
-            if run_res.is_ok() { "normal" } else { "error" },
-        ).await;
+        audit
+            .record_session_closed(
+                &session.peer_public,
+                &peer_name,
+                &session_id,
+                duration,
+                if run_res.is_ok() { "normal" } else { "error" },
+            )
+            .await;
     }
 
     info!("Session {} closed for peer '{}'", session_id, peer_name);
     run_res
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     transport: &mut T,
     mut channel: EncryptedChannel,
@@ -523,38 +558,62 @@ pub(crate) async fn dispatch_call(
             Ok(json!({ "image_base64": b64, "format": "png", "data": b64 }))
         }
         "computer.mouse_move" => {
-            let x = params.get("x").and_then(|v| v.as_i64()).ok_or("missing 'x'")? as i32;
-            let y = params.get("y").and_then(|v| v.as_i64()).ok_or("missing 'y'")? as i32;
-            computer.mouse_move(x, y).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            let x = params
+                .get("x")
+                .and_then(|v| v.as_i64())
+                .ok_or("missing 'x'")? as i32;
+            let y = params
+                .get("y")
+                .and_then(|v| v.as_i64())
+                .ok_or("missing 'y'")? as i32;
+            computer
+                .mouse_move(x, y)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.mouse_click" => {
             let x = params.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let y = params.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let button = params.get("button").and_then(|v| v.as_str());
-            computer.mouse_click(x, y, button).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .mouse_click(x, y, button)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.mouse_double_click" => {
             let x = params.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let y = params.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            computer.mouse_double_click(x, y).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .mouse_double_click(x, y)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.mouse_right_click" => {
             let x = params.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let y = params.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            computer.mouse_click(x, y, Some("right")).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .mouse_click(x, y, Some("right"))
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.mouse_drag" => {
             let sx = params.get("start_x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let sy = params.get("start_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let ex = params.get("end_x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let ey = params.get("end_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            computer.mouse_drag(sx, sy, ex, ey).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .mouse_drag(sx, sy, ex, ey)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.mouse_scroll" => {
             let x = params.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let y = params.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let dy = params.get("delta_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            computer.mouse_scroll(x, y, dy).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .mouse_scroll(x, y, dy)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "input.pointer" => {
             let evt = params.get("event").unwrap_or(&Value::Null);
@@ -565,94 +624,157 @@ pub(crate) async fn dispatch_call(
             match action {
                 "click" => {
                     let btn = evt.get("button").and_then(|v| v.as_str());
-                    computer.mouse_click(x, y, btn).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+                    computer
+                        .mouse_click(x, y, btn)
+                        .map(|_| json!({ "status": "ok" }))
+                        .map_err(|e| e.to_string())
                 }
-                "move" => {
-                    computer.mouse_move(x, y).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
-                }
-                _ => {
-                    computer.mouse_click(x, y, None).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
-                }
+                "move" => computer
+                    .mouse_move(x, y)
+                    .map(|_| json!({ "status": "ok" }))
+                    .map_err(|e| e.to_string()),
+                _ => computer
+                    .mouse_click(x, y, None)
+                    .map(|_| json!({ "status": "ok" }))
+                    .map_err(|e| e.to_string()),
             }
         }
         "computer.keyboard_type" | "input.text" => {
-            let text = params.get("text")
+            let text = params
+                .get("text")
                 .and_then(|v| v.as_str())
                 .or_else(|| {
-                    params.get("text_input")
+                    params
+                        .get("text_input")
                         .and_then(|v| v.get("text"))
                         .and_then(|v| v.as_str())
                 })
                 .ok_or("missing 'text'")?;
-            computer.keyboard_type(text).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .keyboard_type(text)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.keyboard_press" | "input.key" => {
-            let key = params.get("key")
+            let key = params
+                .get("key")
                 .and_then(|v| v.as_str())
                 .or_else(|| {
-                    params.get("event")
+                    params
+                        .get("event")
                         .and_then(|v| v.get("keysym"))
                         .and_then(|v| v.as_str())
                 })
                 .ok_or("missing 'key'")?;
-            computer.keyboard_press(key).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .keyboard_press(key)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.keyboard_hotkey" => {
-            let keys_arr = params.get("keys").and_then(|v| v.as_array()).ok_or("missing 'keys'")?;
+            let keys_arr = params
+                .get("keys")
+                .and_then(|v| v.as_array())
+                .ok_or("missing 'keys'")?;
             let keys: Vec<&str> = keys_arr.iter().filter_map(|v| v.as_str()).collect();
-            computer.keyboard_hotkey(&keys).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .keyboard_hotkey(&keys)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.app_open" | "apps.open" => {
-            let path = params.get("path")
+            let path = params
+                .get("path")
                 .and_then(|v| v.as_str())
                 .or_else(|| params.get("name").and_then(|v| v.as_str()))
                 .ok_or("missing 'path'")?;
-            computer.app_open(path).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .app_open(path)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.app_focus" | "apps.focus" => {
-            let name = params.get("name").and_then(|v| v.as_str()).ok_or("missing 'name'")?;
-            computer.app_focus(name).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            let name = params
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'name'")?;
+            computer
+                .app_focus(name)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.app_close" | "apps.close" => {
-            let name = params.get("name").and_then(|v| v.as_str()).ok_or("missing 'name'")?;
-            computer.app_close(name).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            let name = params
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'name'")?;
+            computer
+                .app_close(name)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
-        "computer.app_list" | "apps.list" | "windows.list" => {
-            computer.app_list().map(|apps| json!({ "apps": apps, "windows": apps })).map_err(|e| e.to_string())
-        }
+        "computer.app_list" | "apps.list" | "windows.list" => computer
+            .app_list()
+            .map(|apps| json!({ "apps": apps, "windows": apps }))
+            .map_err(|e| e.to_string()),
         "computer.ui_tree" | "ui.tree" => {
             let app_name = params.get("app_name").and_then(|v| v.as_str());
-            let max_depth = params.get("max_depth").and_then(|v| v.as_u64()).map(|d| d as usize);
-            computer.ui_tree(app_name, max_depth).map(|tree| json!({ "tree": tree })).map_err(|e| e.to_string())
+            let max_depth = params
+                .get("max_depth")
+                .and_then(|v| v.as_u64())
+                .map(|d| d as usize);
+            computer
+                .ui_tree(app_name, max_depth)
+                .map(|tree| json!({ "tree": tree }))
+                .map_err(|e| e.to_string())
         }
         "computer.ui_click" => {
             let app_name = params.get("app_name").and_then(|v| v.as_str());
-            let selector = params.get("selector")
+            let selector = params
+                .get("selector")
                 .and_then(|v| v.as_str())
                 .or_else(|| params.get("name").and_then(|v| v.as_str()))
                 .ok_or("missing 'selector'")?;
-            computer.ui_click(app_name, selector).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            computer
+                .ui_click(app_name, selector)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         "computer.ui_type" => {
             let app_name = params.get("app_name").and_then(|v| v.as_str());
-            let selector = params.get("selector")
+            let selector = params
+                .get("selector")
                 .and_then(|v| v.as_str())
                 .or_else(|| params.get("name").and_then(|v| v.as_str()))
                 .ok_or("missing 'selector'")?;
-            let text = params.get("text").and_then(|v| v.as_str()).ok_or("missing 'text'")?;
-            computer.ui_type(app_name, selector, text).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            let text = params
+                .get("text")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'text'")?;
+            computer
+                .ui_type(app_name, selector, text)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
-        "computer.clipboard_read" | "clipboard.read" => {
-            computer.clipboard_read().map(|text| json!({ "text": text })).map_err(|e| e.to_string())
-        }
+        "computer.clipboard_read" | "clipboard.read" => computer
+            .clipboard_read()
+            .map(|text| json!({ "text": text }))
+            .map_err(|e| e.to_string()),
         "computer.clipboard_write" | "clipboard.write" => {
-            let text = params.get("text").and_then(|v| v.as_str()).ok_or("missing 'text'")?;
-            computer.clipboard_write(text).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+            let text = params
+                .get("text")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'text'")?;
+            computer
+                .clipboard_write(text)
+                .map(|_| json!({ "status": "ok" }))
+                .map_err(|e| e.to_string())
         }
         other => Err(format!("unknown method: {}", other)),
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_rendezvous_serve_agent(
     r_url: &str,
     token: Option<&str>,

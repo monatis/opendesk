@@ -1,7 +1,7 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use xa11y::{input_sim, App, AppExt, Key, Point, Rect, ScrollDelta};
+use xa11y::{App, AppExt, Key, Point, Rect, ScrollDelta, input_sim};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppInfo {
@@ -23,8 +23,12 @@ impl LocalComputer {
 
     pub fn screenshot(&self, region: Option<Rect>) -> Result<Vec<u8>> {
         let shot = match region {
-            Some(r) => xa11y::screenshot_region(r).context("region screenshot failed")?,
-            None => xa11y::screenshot().context("fullscreen screenshot failed")?,
+            Some(r) => {
+                xa11y::screenshot_region(r).map_err(|e| anyhow!("region screenshot failed: {e}"))?
+            }
+            None => {
+                xa11y::screenshot().map_err(|e| anyhow!("fullscreen screenshot failed: {e}"))?
+            }
         };
         shot.to_png().context("PNG encoding failed")
     }
@@ -35,7 +39,9 @@ impl LocalComputer {
 
     pub fn mouse_move(&self, x: i32, y: i32) -> Result<()> {
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
-        sim.mouse().move_to(Point { x, y }).map_err(|e| anyhow!("mouse_move failed: {e}"))
+        sim.mouse()
+            .move_to(Point { x, y })
+            .map_err(|e| anyhow!("mouse_move failed: {e}"))
     }
 
     pub fn mouse_click(&self, x: i32, y: i32, button: Option<&str>) -> Result<()> {
@@ -47,8 +53,12 @@ impl LocalComputer {
             "right" => mouse.right_click(target).map_err(|e| anyhow!("{e}"))?,
             "middle" => {
                 mouse.move_to(target).map_err(|e| anyhow!("{e}"))?;
-                mouse.down(xa11y::MouseButton::Middle).map_err(|e| anyhow!("{e}"))?;
-                mouse.up(xa11y::MouseButton::Middle).map_err(|e| anyhow!("{e}"))?;
+                mouse
+                    .down(xa11y::MouseButton::Middle)
+                    .map_err(|e| anyhow!("{e}"))?;
+                mouse
+                    .up(xa11y::MouseButton::Middle)
+                    .map_err(|e| anyhow!("{e}"))?;
             }
             _ => mouse.click(target).map_err(|e| anyhow!("{e}"))?,
         }
@@ -65,7 +75,13 @@ impl LocalComputer {
     pub fn mouse_drag(&self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> Result<()> {
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
         sim.mouse()
-            .drag(Point { x: from_x, y: from_y }, Point { x: to_x, y: to_y })
+            .drag(
+                Point {
+                    x: from_x,
+                    y: from_y,
+                },
+                Point { x: to_x, y: to_y },
+            )
             .map_err(|e| anyhow!("drag failed: {e}"))
     }
 
@@ -74,6 +90,67 @@ impl LocalComputer {
         sim.mouse()
             .scroll(Point { x, y }, ScrollDelta { dx: 0, dy })
             .map_err(|e| anyhow!("scroll failed: {e}"))
+    }
+
+    pub fn mouse_down(&self, button: Option<&str>) -> Result<()> {
+        let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
+        let btn = match button.unwrap_or("left").to_lowercase().as_str() {
+            "right" => xa11y::MouseButton::Right,
+            "middle" => xa11y::MouseButton::Middle,
+            _ => xa11y::MouseButton::Left,
+        };
+        sim.mouse()
+            .down(btn)
+            .map_err(|e| anyhow!("mouse_down failed: {e}"))
+    }
+
+    pub fn mouse_up(&self, button: Option<&str>) -> Result<()> {
+        let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
+        let btn = match button.unwrap_or("left").to_lowercase().as_str() {
+            "right" => xa11y::MouseButton::Right,
+            "middle" => xa11y::MouseButton::Middle,
+            _ => xa11y::MouseButton::Left,
+        };
+        sim.mouse()
+            .up(btn)
+            .map_err(|e| anyhow!("mouse_up failed: {e}"))
+    }
+
+    pub fn mouse_triple_click(&self, x: i32, y: i32) -> Result<()> {
+        let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
+        let mouse = sim.mouse();
+        let target = Point { x, y };
+        mouse.click(target).map_err(|e| anyhow!("{e}"))?;
+        mouse.click(target).map_err(|e| anyhow!("{e}"))?;
+        mouse.click(target).map_err(|e| anyhow!("{e}"))?;
+        Ok(())
+    }
+
+    pub fn cursor_position(&self) -> Result<(i32, i32)> {
+        #[cfg(target_os = "windows")]
+        {
+            #[allow(clippy::upper_case_acronyms)]
+            #[repr(C)]
+            struct POINT {
+                x: i32,
+                y: i32,
+            }
+            unsafe extern "system" {
+                fn GetCursorPos(lpPoint: *mut POINT) -> i32;
+            }
+            let mut pt = POINT { x: 0, y: 0 };
+            unsafe {
+                if GetCursorPos(&mut pt) != 0 {
+                    Ok((pt.x, pt.y))
+                } else {
+                    Err(anyhow!("GetCursorPos failed"))
+                }
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Ok((0, 0))
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -90,7 +167,9 @@ impl LocalComputer {
     pub fn keyboard_press(&self, key_str: &str) -> Result<()> {
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
         let key = parse_key(key_str).ok_or_else(|| anyhow!("unknown key: {key_str}"))?;
-        sim.keyboard().press(key).map_err(|e| anyhow!("press failed: {e}"))
+        sim.keyboard()
+            .press(key)
+            .map_err(|e| anyhow!("press failed: {e}"))
     }
 
     pub fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
@@ -107,6 +186,19 @@ impl LocalComputer {
         sim.keyboard()
             .chord(target.clone(), modifiers)
             .map_err(|e| anyhow!("chord failed: {e}"))
+    }
+
+    pub fn keyboard_hold(&self, key_str: &str, duration_secs: f64) -> Result<()> {
+        let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
+        let key = parse_key(key_str).ok_or_else(|| anyhow!("unknown key: {key_str}"))?;
+        sim.keyboard()
+            .down(key.clone())
+            .map_err(|e| anyhow!("down failed: {e}"))?;
+        std::thread::sleep(Duration::from_secs_f64(duration_secs.max(0.0)));
+        sim.keyboard()
+            .up(key)
+            .map_err(|e| anyhow!("up failed: {e}"))?;
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -141,13 +233,17 @@ impl LocalComputer {
     pub fn app_focus(&self, name: &str) -> Result<()> {
         let app = App::by_name(name, Duration::from_secs(3))
             .map_err(|e| anyhow!("app {name} not found: {e}"))?;
-        app.as_element().activate().map_err(|e| anyhow!("activate {name} failed: {e}"))
+        app.as_element()
+            .activate()
+            .map_err(|e| anyhow!("activate {name} failed: {e}"))
     }
 
     pub fn app_close(&self, name: &str) -> Result<()> {
         let app = App::by_name(name, Duration::from_secs(3))
             .map_err(|e| anyhow!("app {name} not found: {e}"))?;
-        app.as_element().close().map_err(|e| anyhow!("close {name} failed: {e}"))
+        app.as_element()
+            .close()
+            .map_err(|e| anyhow!("close {name} failed: {e}"))
     }
 
     pub fn app_list(&self) -> Result<Vec<AppInfo>> {
@@ -172,7 +268,8 @@ impl LocalComputer {
             None => App::foreground(Duration::from_secs(2))
                 .map_err(|e| anyhow!("no foreground app: {e}"))?,
         };
-        app.dump(max_depth).map_err(|e| anyhow!("dump tree failed: {e}"))
+        app.dump(max_depth)
+            .map_err(|e| anyhow!("dump tree failed: {e}"))
     }
 
     pub fn ui_click(&self, app_name: Option<&str>, selector: &str) -> Result<()> {
@@ -183,7 +280,9 @@ impl LocalComputer {
                 .map_err(|e| anyhow!("no foreground app: {e}"))?,
         };
         let locator = app.locator(selector);
-        locator.press().map_err(|e| anyhow!("locator press '{selector}' failed: {e}"))
+        locator
+            .press()
+            .map_err(|e| anyhow!("locator press '{selector}' failed: {e}"))
     }
 
     pub fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {
@@ -194,7 +293,9 @@ impl LocalComputer {
                 .map_err(|e| anyhow!("no foreground app: {e}"))?,
         };
         let locator = app.locator(selector);
-        locator.type_text(text).map_err(|e| anyhow!("locator type_text '{selector}' failed: {e}"))
+        locator
+            .type_text(text)
+            .map_err(|e| anyhow!("locator type_text '{selector}' failed: {e}"))
     }
 
     // -----------------------------------------------------------------------

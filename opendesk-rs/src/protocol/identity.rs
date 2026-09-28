@@ -1,8 +1,8 @@
 //! Long-lived peer identity — an X25519 keypair persisted on disk.
 
-use std::path::{Path, PathBuf};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rand::Rng;
+use std::path::{Path, PathBuf};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 pub const IDENTITY_FILE: &str = "identity.key";

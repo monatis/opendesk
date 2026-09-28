@@ -1,20 +1,20 @@
 //! RemoteComputer and client connection helpers: pair_with and connect.
 
+use anyhow::{Context, Result, anyhow};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use anyhow::{anyhow, Context, Result};
-use serde_json::{json, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
 use tokio_tungstenite::connect_async;
 
+use super::transport::WebSocketTransport;
 use crate::protocol::crypto::EncryptedChannel;
 use crate::protocol::frames::{Frame, HelloFrame, ReqFrame};
-use crate::protocol::handshake::{auth_client, pair_client, Transport};
+use crate::protocol::handshake::{Transport, auth_client, pair_client};
 use crate::protocol::identity::Identity;
-use crate::protocol::storage::{default_peer_name, TrustedPeers};
-use super::transport::WebSocketTransport;
+use crate::protocol::storage::{TrustedPeers, default_peer_name};
 
 pub struct RemoteComputer {
     transport: Arc<Mutex<WebSocketTransport>>,
@@ -79,7 +79,9 @@ impl RemoteComputer {
                         if res.error.is_none() {
                             return Ok(res.result.unwrap_or(Value::Null));
                         } else {
-                            let err_msg = res.error.map(|e| e.to_string())
+                            let err_msg = res
+                                .error
+                                .map(|e| e.to_string())
                                 .unwrap_or_else(|| "unknown remote error".to_string());
                             return Err(anyhow!(err_msg));
                         }
@@ -107,66 +109,92 @@ impl RemoteComputer {
     }
 
     pub async fn mouse_move(&self, x: i32, y: i32) -> Result<()> {
-        self.call("computer.mouse_move", json!({ "x": x, "y": y })).await?;
+        self.call("computer.mouse_move", json!({ "x": x, "y": y }))
+            .await?;
         Ok(())
     }
 
     pub async fn mouse_click(&self, x: i32, y: i32, button: Option<&str>) -> Result<()> {
-        self.call("computer.mouse_click", json!({ "x": x, "y": y, "button": button })).await?;
+        self.call(
+            "computer.mouse_click",
+            json!({ "x": x, "y": y, "button": button }),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn mouse_double_click(&self, x: i32, y: i32) -> Result<()> {
-        self.call("computer.mouse_double_click", json!({ "x": x, "y": y })).await?;
+        self.call("computer.mouse_double_click", json!({ "x": x, "y": y }))
+            .await?;
         Ok(())
     }
 
-    pub async fn mouse_drag(&self, start_x: i32, start_y: i32, end_x: i32, end_y: i32) -> Result<()> {
-        self.call("computer.mouse_drag", json!({
-            "start_x": start_x,
-            "start_y": start_y,
-            "end_x": end_x,
-            "end_y": end_y,
-        })).await?;
+    pub async fn mouse_drag(
+        &self,
+        start_x: i32,
+        start_y: i32,
+        end_x: i32,
+        end_y: i32,
+    ) -> Result<()> {
+        self.call(
+            "computer.mouse_drag",
+            json!({
+                "start_x": start_x,
+                "start_y": start_y,
+                "end_x": end_x,
+                "end_y": end_y,
+            }),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn mouse_scroll(&self, x: i32, y: i32, delta_y: i32) -> Result<()> {
-        self.call("computer.mouse_scroll", json!({
-            "x": x,
-            "y": y,
-            "delta_y": delta_y,
-        })).await?;
+        self.call(
+            "computer.mouse_scroll",
+            json!({
+                "x": x,
+                "y": y,
+                "delta_y": delta_y,
+            }),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn keyboard_type(&self, text: &str) -> Result<()> {
-        self.call("computer.keyboard_type", json!({ "text": text })).await?;
+        self.call("computer.keyboard_type", json!({ "text": text }))
+            .await?;
         Ok(())
     }
 
     pub async fn keyboard_press(&self, key: &str) -> Result<()> {
-        self.call("computer.keyboard_press", json!({ "key": key })).await?;
+        self.call("computer.keyboard_press", json!({ "key": key }))
+            .await?;
         Ok(())
     }
 
     pub async fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
-        self.call("computer.keyboard_hotkey", json!({ "keys": keys })).await?;
+        self.call("computer.keyboard_hotkey", json!({ "keys": keys }))
+            .await?;
         Ok(())
     }
 
     pub async fn app_open(&self, path: &str) -> Result<()> {
-        self.call("computer.app_open", json!({ "path": path })).await?;
+        self.call("computer.app_open", json!({ "path": path }))
+            .await?;
         Ok(())
     }
 
     pub async fn app_focus(&self, name: &str) -> Result<()> {
-        self.call("computer.app_focus", json!({ "name": name })).await?;
+        self.call("computer.app_focus", json!({ "name": name }))
+            .await?;
         Ok(())
     }
 
     pub async fn app_close(&self, name: &str) -> Result<()> {
-        self.call("computer.app_close", json!({ "name": name })).await?;
+        self.call("computer.app_close", json!({ "name": name }))
+            .await?;
         Ok(())
     }
 
@@ -178,11 +206,20 @@ impl RemoteComputer {
             .ok_or_else(|| anyhow!("missing 'apps' in response"))
     }
 
-    pub async fn ui_tree(&self, app_name: Option<&str>, max_depth: Option<usize>) -> Result<String> {
-        let res = self.call("computer.ui_tree", json!({
-            "app_name": app_name,
-            "max_depth": max_depth,
-        })).await?;
+    pub async fn ui_tree(
+        &self,
+        app_name: Option<&str>,
+        max_depth: Option<usize>,
+    ) -> Result<String> {
+        let res = self
+            .call(
+                "computer.ui_tree",
+                json!({
+                    "app_name": app_name,
+                    "max_depth": max_depth,
+                }),
+            )
+            .await?;
         res.get("tree")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
@@ -190,19 +227,27 @@ impl RemoteComputer {
     }
 
     pub async fn ui_click(&self, app_name: Option<&str>, selector: &str) -> Result<()> {
-        self.call("computer.ui_click", json!({
-            "app_name": app_name,
-            "selector": selector,
-        })).await?;
+        self.call(
+            "computer.ui_click",
+            json!({
+                "app_name": app_name,
+                "selector": selector,
+            }),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {
-        self.call("computer.ui_type", json!({
-            "app_name": app_name,
-            "selector": selector,
-            "text": text,
-        })).await?;
+        self.call(
+            "computer.ui_type",
+            json!({
+                "app_name": app_name,
+                "selector": selector,
+                "text": text,
+            }),
+        )
+        .await?;
         Ok(())
     }
 
@@ -215,12 +260,14 @@ impl RemoteComputer {
     }
 
     pub async fn clipboard_write(&self, text: &str) -> Result<()> {
-        self.call("computer.clipboard_write", json!({ "text": text })).await?;
+        self.call("computer.clipboard_write", json!({ "text": text }))
+            .await?;
         Ok(())
     }
 }
 
 /// Pair with a remote peer running `opendesk pair`.
+#[allow(clippy::too_many_arguments)]
 pub async fn pair_with(
     host: Option<&str>,
     port: Option<u16>,
@@ -237,7 +284,8 @@ pub async fn pair_with(
     let (mut transport, _server_pubkey) = if let Some(r_url) = rendezvous_url {
         let target_pk = target_pubkey
             .ok_or_else(|| anyhow!("target_pubkey is required when pairing via rendezvous"))?;
-        let pk_bytes = data_encoding::HEXLOWER.decode(target_pk.as_bytes())
+        let pk_bytes = data_encoding::HEXLOWER
+            .decode(target_pk.as_bytes())
             .or_else(|_| data_encoding::HEXUPPER.decode(target_pk.as_bytes()))
             .with_context(|| format!("invalid target_pubkey hex: {}", target_pk))?;
         if pk_bytes.len() != 32 {
@@ -246,7 +294,8 @@ pub async fn pair_with(
         let mut target_arr = [0u8; 32];
         target_arr.copy_from_slice(&pk_bytes);
 
-        let tr = super::rendezvous::connect_via_rendezvous(r_url, rendezvous_token, &target_arr).await?;
+        let tr =
+            super::rendezvous::connect_via_rendezvous(r_url, rendezvous_token, &target_arr).await?;
         (tr, target_arr)
     } else {
         let host = host.ok_or_else(|| anyhow!("host is required for direct pairing"))?;
@@ -290,9 +339,10 @@ pub async fn pair_with(
     let caps = match server_frame {
         Frame::Hello(h) => {
             if let Some(desc_val) = h.capabilities.get("description")
-                && let Some(desc) = desc_val.as_str() {
-                    let _ = trusted.cache_description(&verified_pubkey, desc);
-                }
+                && let Some(desc) = desc_val.as_str()
+            {
+                let _ = trusted.cache_description(&verified_pubkey, desc);
+            }
             h.capabilities
         }
         _ => HashMap::new(),
@@ -332,7 +382,8 @@ pub async fn connect(
             None
         }
     }) {
-        let mut tr = super::rendezvous::connect_via_rendezvous(r_url, rendezvous_token, &peer_pub).await?;
+        let mut tr =
+            super::rendezvous::connect_via_rendezvous(r_url, rendezvous_token, &peer_pub).await?;
         let session = auth_client(&mut tr, &identity, &peer_pub).await?;
         (tr, session.channel)
     } else {
@@ -368,9 +419,10 @@ pub async fn connect(
     let caps = match server_frame {
         Frame::Hello(h) => {
             if let Some(desc_val) = h.capabilities.get("description")
-                && let Some(desc) = desc_val.as_str() {
-                    let _ = trusted.cache_description(&peer_pub, desc);
-                }
+                && let Some(desc) = desc_val.as_str()
+            {
+                let _ = trusted.cache_description(&peer_pub, desc);
+            }
             h.capabilities
         }
         _ => HashMap::new(),

@@ -3,16 +3,16 @@
 //! A user-only channel — Unix domain socket at `~/.opendesk/admin.sock` (mode 0600),
 //! or localhost TCP on a file-recorded port on Windows (`~/.opendesk/admin.port`).
 
+use anyhow::{Context, Result, anyhow};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use anyhow::{anyhow, Context, Result};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 
 use crate::protocol::identity::default_home;
 
@@ -194,7 +194,8 @@ impl AdminServer {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&sock_path, std::fs::Permissions::from_mode(0o600));
+                let _ =
+                    std::fs::set_permissions(&sock_path, std::fs::Permissions::from_mode(0o600));
             }
 
             let (tx, mut rx) = tokio::sync::oneshot::channel::<()>();
@@ -254,10 +255,7 @@ where
             Err(_) => return Ok(()),
         };
 
-        let op = req
-            .get("op")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let op = req.get("op").and_then(|v| v.as_str()).unwrap_or("");
 
         let res = match op {
             "list" => {
@@ -320,7 +318,9 @@ impl AdminClient {
             }
             let port_str = std::fs::read_to_string(&port_path)
                 .with_context(|| format!("Failed to read {}", port_path.display()))?;
-            let port: u16 = port_str.trim().parse()
+            let port: u16 = port_str
+                .trim()
+                .parse()
                 .map_err(|e| anyhow!("Corrupt admin port file: {}", e))?;
 
             let stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
@@ -341,7 +341,9 @@ impl AdminClient {
             }
             let stream = tokio::net::UnixStream::connect(&sock_path)
                 .await
-                .with_context(|| format!("Failed to connect to admin socket {}", sock_path.display()))?;
+                .with_context(|| {
+                    format!("Failed to connect to admin socket {}", sock_path.display())
+                })?;
 
             Ok(Self { stream })
         }

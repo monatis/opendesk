@@ -1,23 +1,23 @@
 //! Internet Remote Transport — Rendezvous & Relay service, Agent, and Client.
 
+use anyhow::{Context, Result, anyhow};
+use futures_util::{SinkExt, StreamExt};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use anyhow::{anyhow, Context, Result};
-use futures_util::{SinkExt, StreamExt};
-use serde_json::{json, Value};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
 
+use super::server::{ActiveSession, run_session_loop};
+use super::transport::WebSocketTransport;
 use crate::computer::local::LocalComputer;
 use crate::protocol::identity::Identity;
-use crate::protocol::storage::{fingerprint, read_description, TrustedPeers};
-use super::server::{run_session_loop, ActiveSession};
-use super::transport::WebSocketTransport;
+use crate::protocol::storage::{TrustedPeers, fingerprint, read_description};
 
 pub const DEFAULT_RENDEZVOUS_PORT: u16 = 8424;
 
@@ -80,7 +80,9 @@ impl RendezvousServer {
             let sessions = self.sessions.clone();
 
             tokio::spawn(async move {
-                if let Err(e) = handle_rendezvous_ws(stream, remote_addr, token, agents, sessions).await {
+                if let Err(e) =
+                    handle_rendezvous_ws(stream, remote_addr, token, agents, sessions).await
+                {
                     warn!("Rendezvous connection error from {}: {}", remote_addr, e);
                 }
             });
@@ -106,14 +108,20 @@ async fn handle_rendezvous_ws(
         }
     };
 
-    let data: Value = serde_json::from_str(&first_msg)
-        .context("invalid JSON in rendezvous first message")?;
+    let data: Value =
+        serde_json::from_str(&first_msg).context("invalid JSON in rendezvous first message")?;
 
     // Token check
     if let Some(expected_token) = &auth_token {
         let given_token = data.get("token").and_then(|v| v.as_str());
         if given_token != Some(expected_token.as_str()) {
-            let _ = ws.send(Message::Text(json!({ "status": "error", "error": "unauthorized" }).to_string().into())).await;
+            let _ = ws
+                .send(Message::Text(
+                    json!({ "status": "error", "error": "unauthorized" })
+                        .to_string()
+                        .into(),
+                ))
+                .await;
             let _ = ws.close(None).await;
             return Ok(());
         }
@@ -123,31 +131,55 @@ async fn handle_rendezvous_ws(
 
     match action {
         "register" => {
-            let public_key = data.get("public_key").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("missing public_key"))?;
-            let name = data.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let description = data.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let public_key = data
+                .get("public_key")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing public_key"))?;
+            let name = data
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let description = data
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
 
             let (tx, mut rx) = mpsc::channel::<String>(32);
             {
                 let mut reg = agents.lock().await;
-                reg.insert(public_key.to_string(), RegisteredAgent {
-                    public_key: public_key.to_string(),
-                    name: name.clone(),
-                    description: description.clone(),
-                    remote_addr: remote_addr.to_string(),
-                    control_tx: tx,
-                });
+                reg.insert(
+                    public_key.to_string(),
+                    RegisteredAgent {
+                        public_key: public_key.to_string(),
+                        name: name.clone(),
+                        description: description.clone(),
+                        remote_addr: remote_addr.to_string(),
+                        control_tx: tx,
+                    },
+                );
             }
 
-            info!("Registered agent {} ({}) from {}", name, &public_key[..8.min(public_key.len())], remote_addr);
+            info!(
+                "Registered agent {} ({}) from {}",
+                name,
+                &public_key[..8.min(public_key.len())],
+                remote_addr
+            );
 
-            ws.send(Message::Text(json!({
-                "status": "ok",
-                "action": "registered",
-                "public_key": public_key,
-                "client_ip": remote_addr.ip().to_string(),
-                "client_port": remote_addr.port(),
-            }).to_string().into())).await?;
+            ws.send(Message::Text(
+                json!({
+                    "status": "ok",
+                    "action": "registered",
+                    "public_key": public_key,
+                    "client_ip": remote_addr.ip().to_string(),
+                    "client_port": remote_addr.port(),
+                })
+                .to_string()
+                .into(),
+            ))
+            .await?;
 
             // Agent loop: forward outbound messages and answer ping
             let pk_str = public_key.to_string();
@@ -156,7 +188,7 @@ async fn handle_rendezvous_ws(
             loop {
                 tokio::select! {
                     Some(to_agent) = rx.recv() => {
-                        if let Err(_) = ws.send(Message::Text(to_agent.into())).await {
+                        if ws.send(Message::Text(to_agent.into())).await.is_err() {
                             break;
                         }
                     }
@@ -182,8 +214,12 @@ async fn handle_rendezvous_ws(
             info!("Agent {} disconnected", pk_str);
         }
         "connect" => {
-            let target = data.get("target").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("missing target"))?;
-            let session_id = data.get("session_id")
+            let target = data
+                .get("target")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing target"))?;
+            let session_id = data
+                .get("session_id")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("{:08x}", rand::random::<u32>()));
@@ -196,11 +232,17 @@ async fn handle_rendezvous_ws(
             let control_tx = match agent_control {
                 Some(tx) => tx,
                 None => {
-                    let _ = ws.send(Message::Text(json!({
-                        "status": "error",
-                        "error": "target_offline",
-                        "message": "Target peer is not registered or offline",
-                    }).to_string().into())).await;
+                    let _ = ws
+                        .send(Message::Text(
+                            json!({
+                                "status": "error",
+                                "error": "target_offline",
+                                "message": "Target peer is not registered or offline",
+                            })
+                            .to_string()
+                            .into(),
+                        ))
+                        .await;
                     return Ok(());
                 }
             };
@@ -209,19 +251,27 @@ async fn handle_rendezvous_ws(
             let (ctrl_out_tx, mut ctrl_out_rx) = mpsc::channel::<Message>(64);
             {
                 let mut sess_map = sessions.lock().await;
-                sess_map.insert(session_id.clone(), PendingSession {
-                    session_id: session_id.clone(),
-                    target: target.to_string(),
-                    agent_tx: None,
-                    controller_tx: Some(ctrl_out_tx),
-                });
+                sess_map.insert(
+                    session_id.clone(),
+                    PendingSession {
+                        session_id: session_id.clone(),
+                        target: target.to_string(),
+                        agent_tx: None,
+                        controller_tx: Some(ctrl_out_tx),
+                    },
+                );
             }
 
             // Signal agent
-            let _ = control_tx.send(json!({
-                "action": "session_request",
-                "session_id": session_id,
-            }).to_string()).await;
+            let _ = control_tx
+                .send(
+                    json!({
+                        "action": "session_request",
+                        "session_id": session_id,
+                    })
+                    .to_string(),
+                )
+                .await;
 
             // Wait for agent to join or loop
             let mut agent_channel: Option<mpsc::Sender<Message>> = None;
@@ -229,7 +279,7 @@ async fn handle_rendezvous_ws(
             loop {
                 tokio::select! {
                     Some(out_msg) = ctrl_out_rx.recv() => {
-                        if let Err(_) = ws.send(out_msg).await {
+                        if ws.send(out_msg).await.is_err() {
                             break;
                         }
                     }
@@ -273,7 +323,10 @@ async fn handle_rendezvous_ws(
             sess_map.remove(&session_id);
         }
         "join" => {
-            let session_id = data.get("session_id").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("missing session_id"))?;
+            let session_id = data
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing session_id"))?;
             let (agent_out_tx, mut agent_out_rx) = mpsc::channel::<Message>(64);
             let ctrl_channel = {
                 let mut sess_map = sessions.lock().await;
@@ -281,28 +334,46 @@ async fn handle_rendezvous_ws(
                     s.agent_tx = Some(agent_out_tx);
                     s.controller_tx.clone()
                 } else {
-                    let _ = ws.send(Message::Text(json!({ "status": "error", "error": "session_not_found" }).to_string().into())).await;
+                    let _ = ws
+                        .send(Message::Text(
+                            json!({ "status": "error", "error": "session_not_found" })
+                                .to_string()
+                                .into(),
+                        ))
+                        .await;
                     return Ok(());
                 }
             };
 
             // Notify controller
             if let Some(c_tx) = &ctrl_channel {
-                let _ = c_tx.send(Message::Text(json!({
-                    "status": "joined",
-                    "session_id": session_id,
-                }).to_string().into())).await;
+                let _ = c_tx
+                    .send(Message::Text(
+                        json!({
+                            "status": "joined",
+                            "session_id": session_id,
+                        })
+                        .to_string()
+                        .into(),
+                    ))
+                    .await;
             }
 
-            let _ = ws.send(Message::Text(json!({
-                "status": "joined",
-                "session_id": session_id,
-            }).to_string().into())).await;
+            let _ = ws
+                .send(Message::Text(
+                    json!({
+                        "status": "joined",
+                        "session_id": session_id,
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .await;
 
             loop {
                 tokio::select! {
                     Some(out_msg) = agent_out_rx.recv() => {
-                        if let Err(_) = ws.send(out_msg).await {
+                        if ws.send(out_msg).await.is_err() {
                             break;
                         }
                     }
@@ -332,27 +403,44 @@ async fn handle_rendezvous_ws(
         }
         "list" => {
             let reg = agents.lock().await;
-            let list: Vec<Value> = reg.values().map(|a| {
-                let mut arr = [0u8; 32];
-                let decoded = data_encoding::HEXLOWER.decode(a.public_key.as_bytes()).unwrap_or_default();
-                if decoded.len() == 32 {
-                    arr.copy_from_slice(&decoded);
-                }
-                json!({
-                    "public_key": a.public_key,
-                    "name": a.name,
-                    "description": a.description,
-                    "fingerprint": fingerprint(&arr),
+            let list: Vec<Value> = reg
+                .values()
+                .map(|a| {
+                    let mut arr = [0u8; 32];
+                    let decoded = data_encoding::HEXLOWER
+                        .decode(a.public_key.as_bytes())
+                        .unwrap_or_default();
+                    if decoded.len() == 32 {
+                        arr.copy_from_slice(&decoded);
+                    }
+                    json!({
+                        "public_key": a.public_key,
+                        "name": a.name,
+                        "description": a.description,
+                        "fingerprint": fingerprint(&arr),
+                    })
                 })
-            }).collect();
+                .collect();
 
-            let _ = ws.send(Message::Text(json!({
-                "status": "ok",
-                "peers": list,
-            }).to_string().into())).await;
+            let _ = ws
+                .send(Message::Text(
+                    json!({
+                        "status": "ok",
+                        "peers": list,
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .await;
         }
         _ => {
-            let _ = ws.send(Message::Text(json!({ "status": "error", "error": "unknown_action" }).to_string().into())).await;
+            let _ = ws
+                .send(Message::Text(
+                    json!({ "status": "error", "error": "unknown_action" })
+                        .to_string()
+                        .into(),
+                ))
+                .await;
         }
     }
 
@@ -376,7 +464,10 @@ pub async fn run_rendezvous_agent(
         let (ws_stream, _) = match connect_async(rendezvous_url).await {
             Ok(res) => res,
             Err(e) => {
-                warn!("Cannot connect to rendezvous {}: {}. Retrying in 5s...", rendezvous_url, e);
+                warn!(
+                    "Cannot connect to rendezvous {}: {}. Retrying in 5s...",
+                    rendezvous_url, e
+                );
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 continue;
             }
@@ -464,6 +555,7 @@ pub async fn run_rendezvous_agent(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn join_rendezvous_session(
     rendezvous_url: &str,
     token: Option<&str>,
@@ -487,11 +579,14 @@ async fn join_rendezvous_session(
     transport.send_text(&join_msg.to_string()).await?;
 
     let _ = transport.recv_text().await?;
-    transport.send_text(&json!({ "action": "ready" }).to_string()).await?;
+    transport
+        .send_text(&json!({ "action": "ready" }).to_string())
+        .await?;
     let _ = transport.recv_text().await?;
 
     // Now transport is in binary relay mode!
-    let session = crate::protocol::handshake::auth_server(&mut transport, &identity, &trusted).await?;
+    let session =
+        crate::protocol::handshake::auth_server(&mut transport, &identity, &trusted).await?;
     let (_tx, mut rx) = tokio::sync::mpsc::channel(1);
     let audit = crate::remote::audit::AuditLog::new(home.as_deref());
     let peer_name = crate::protocol::storage::default_peer_name(&session.peer_public);
@@ -506,7 +601,8 @@ async fn join_rendezvous_session(
         session_id,
         &audit,
         false,
-    ).await
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -518,7 +614,8 @@ pub async fn connect_via_rendezvous(
     token: Option<&str>,
     target_pubkey: &[u8; 32],
 ) -> Result<WebSocketTransport> {
-    let (ws_stream, _) = connect_async(rendezvous_url).await
+    let (ws_stream, _) = connect_async(rendezvous_url)
+        .await
         .with_context(|| format!("failed to connect to rendezvous {}", rendezvous_url))?;
     let mut transport = WebSocketTransport::new_tls(ws_stream);
 
@@ -536,11 +633,16 @@ pub async fn connect_via_rendezvous(
     let resp = transport.recv_text().await?;
     let val: Value = serde_json::from_str(&resp)?;
     if val.get("status").and_then(|v| v.as_str()) != Some("joined") {
-        let err = val.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error");
+        let err = val
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown error");
         return Err(anyhow!("rendezvous error: {}", err));
     }
 
-    transport.send_text(&json!({ "action": "ready" }).to_string()).await?;
+    transport
+        .send_text(&json!({ "action": "ready" }).to_string())
+        .await?;
     let active_resp = transport.recv_text().await?;
     let active_val: Value = serde_json::from_str(&active_resp)?;
     if active_val.get("status").and_then(|v| v.as_str()) != Some("relay_active") {
@@ -563,7 +665,10 @@ impl RendezvousClient {
         }
     }
 
-    pub async fn list_peers(&self, timeout: std::time::Duration) -> Result<Vec<super::discovery::DiscoveredPeer>> {
+    pub async fn list_peers(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<super::discovery::DiscoveredPeer>> {
         let (ws_stream, _) = tokio::time::timeout(timeout, connect_async(&self.url))
             .await
             .map_err(|_| anyhow!("Connection timeout"))?
@@ -587,12 +692,26 @@ impl RendezvousClient {
         if let Some(arr) = val.get("peers").and_then(|v| v.as_array()) {
             for p in arr {
                 let pk_hex = p.get("public_key").and_then(|v| v.as_str()).unwrap_or("");
-                let pk_bytes = data_encoding::HEXLOWER.decode(pk_hex.as_bytes()).unwrap_or_default();
-                let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let desc = p.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let pk_bytes = data_encoding::HEXLOWER
+                    .decode(pk_hex.as_bytes())
+                    .unwrap_or_default();
+                let name = p
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let desc = p
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 let fp = crate::protocol::storage::fingerprint(&pk_bytes);
                 peers.push(super::discovery::DiscoveredPeer {
-                    name: if name.is_empty() { format!("peer-{}", &pk_hex[..6.min(pk_hex.len())]) } else { name },
+                    name: if name.is_empty() {
+                        format!("peer-{}", &pk_hex[..6.min(pk_hex.len())])
+                    } else {
+                        name
+                    },
                     host: "rendezvous".to_string(),
                     port: 0,
                     public_key: pk_bytes,
