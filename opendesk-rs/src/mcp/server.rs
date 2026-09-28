@@ -76,8 +76,12 @@ impl McpSession {
 
     pub fn use_peer(&mut self, name: Option<&str>) -> Result<()> {
         match name {
-            None | Some("local") => {
+            None | Some("auto") => {
                 self.current_peer = None;
+                Ok(())
+            }
+            Some("local") => {
+                self.current_peer = Some("local".to_string());
                 Ok(())
             }
             Some(p) => {
@@ -95,6 +99,9 @@ impl McpSession {
     pub fn disconnect(&mut self, name: Option<&str>) -> usize {
         if let Some(p) = name {
             if p == "local" {
+                if self.current_peer.as_deref() == Some("local") {
+                    self.current_peer = None;
+                }
                 return 0;
             }
             let removed = self.connections.remove(p).is_some();
@@ -1956,5 +1963,40 @@ mod tests {
             .await
             .unwrap();
         assert!(!res["isError"].as_bool().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_use_local_with_single_paired_peer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path().to_path_buf();
+        let trusted = TrustedPeers::new(Some(&home));
+        trusted
+            .add(&[1u8; 32], "old-pc", "wss://rendezvous.opendesk.io")
+            .unwrap();
+
+        let mut session = McpSession::new();
+        session.trusted = trusted;
+
+        // Initially with 1 peer and no explicit selection, implicit default is old-pc
+        let (eff, source) = session.effective_peer();
+        assert_eq!(eff.as_deref(), Some("old-pc"));
+        assert_eq!(source, "implicit");
+
+        // When use_peer(Some("local")) is called:
+        session.use_peer(Some("local")).unwrap();
+        let (eff, source) = session.effective_peer();
+        assert_eq!(eff.as_deref(), Some("local"));
+        assert_eq!(source, "explicit");
+
+        // Resolving None without peer param must resolve to local!
+        let (remote, name) = session.resolve(None).await.unwrap();
+        assert!(remote.is_none());
+        assert_eq!(name, "local");
+
+        // Calling use_peer(Some("auto")) reverts to implicit
+        session.use_peer(Some("auto")).unwrap();
+        let (eff, source) = session.effective_peer();
+        assert_eq!(eff.as_deref(), Some("old-pc"));
+        assert_eq!(source, "implicit");
     }
 }

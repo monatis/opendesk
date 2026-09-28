@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use xa11y::{App, AppExt, Key, Point, Rect, ScrollDelta, input_sim};
@@ -158,10 +158,40 @@ impl LocalComputer {
     // -----------------------------------------------------------------------
 
     pub fn keyboard_type(&self, text: &str) -> Result<()> {
+        if text.is_empty() {
+            return Ok(());
+        }
+
+        // For multiline text, strings with newlines, or longer text blocks (> 10 chars),
+        // use clipboard paste for maximum reliability and Unicode/formatting fidelity.
+        // This avoids key drops and buffer queue overflows in WinUI 3/XAML, web browsers,
+        // and modern desktop GUI frameworks (matching Python OpenDesk reference behavior).
+        if text.contains('\n') || text.contains('\r') || text.chars().count() > 10 {
+            self.clipboard_write(text)?;
+            std::thread::sleep(Duration::from_millis(50));
+            #[cfg(target_os = "macos")]
+            self.keyboard_hotkey(&["command", "v"])?;
+            #[cfg(not(target_os = "macos"))]
+            self.keyboard_hotkey(&["ctrl", "v"])?;
+            std::thread::sleep(Duration::from_millis(50));
+            return Ok(());
+        }
+
+        // For short single-line strings, type character-by-character with a small
+        // debounce/inter-key delay so input queues don't drop events.
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
-        sim.keyboard()
-            .type_text(text)
-            .map_err(|e| anyhow!("type_text failed: {e}"))
+        for ch in text.chars() {
+            if ch == '\n' || ch == '\r' {
+                self.keyboard_press("enter")?;
+            } else {
+                let s = ch.to_string();
+                sim.keyboard()
+                    .type_text(&s)
+                    .map_err(|e| anyhow!("type_text failed: {e}"))?;
+            }
+            std::thread::sleep(Duration::from_millis(15));
+        }
+        Ok(())
     }
 
     pub fn keyboard_press(&self, key_str: &str) -> Result<()> {
@@ -205,6 +235,24 @@ impl LocalComputer {
     // App management
     // -----------------------------------------------------------------------
 
+    fn find_app(name: &str) -> Result<App> {
+        if let Ok(app) = App::by_name(name, Duration::from_millis(800)) {
+            return Ok(app);
+        }
+        let lower = name.trim().to_lowercase();
+        let lower_no_exe = lower.strip_suffix(".exe").unwrap_or(&lower);
+        App::find(Duration::from_millis(800), |d| {
+            if let Some(ref n) = d.name {
+                let nl = n.to_lowercase();
+                let nl_no_exe = nl.strip_suffix(".exe").unwrap_or(&nl);
+                nl == lower || nl_no_exe == lower_no_exe || nl.contains(lower_no_exe)
+            } else {
+                false
+            }
+        })
+        .map_err(|e| anyhow!("app '{name}' not found: {e}"))
+    }
+
     pub fn app_open(&self, name: &str) -> Result<()> {
         #[cfg(target_os = "windows")]
         {
@@ -231,19 +279,118 @@ impl LocalComputer {
     }
 
     pub fn app_focus(&self, name: &str) -> Result<()> {
-        let app = App::by_name(name, Duration::from_secs(3))
-            .map_err(|e| anyhow!("app {name} not found: {e}"))?;
-        app.as_element()
-            .activate()
-            .map_err(|e| anyhow!("activate {name} failed: {e}"))
+        let app = Self::find_app(name)?;
+
+        // Top-level windows implement WindowPattern / activate on Windows/macOS/Linux.
+        // Trying to activate the root Application node directly fails on Windows UIA
+        // with "Action activate not supported on application".
+        if let Ok(windows) = app.windows() {
+            for win in windows {
+                if win.activate().is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
+        // Fallback: try activating the application element directly
+        if app.as_element().activate().is_ok() {
+            return Ok(());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(pid) = app.pid {
+                let script = format!(
+                    "$p = Get-Process -Id {} -ErrorAction SilentlyContinue; if ($p -and $p.MainWindowHandle -ne 0) {{ $w = Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd);' -Name W32 -Namespace W32 -PassThru; $w::SetForegroundWindow($p.MainWindowHandle) }}",
+                    pid
+                );
+                let _ = std::process::Command::new("powershell")
+                    .args(["-NoProfile", "-Command", &script])
+                    .output();
+                return Ok(());
+            }
+        }
+
+        bail!("could not activate application '{name}'")
     }
 
     pub fn app_close(&self, name: &str) -> Result<()> {
-        let app = App::by_name(name, Duration::from_secs(3))
-            .map_err(|e| anyhow!("app {name} not found: {e}"))?;
-        app.as_element()
-            .close()
-            .map_err(|e| anyhow!("close {name} failed: {e}"))
+        let app = Self::find_app(name)?;
+
+        // Gracefully attempt to close top-level windows first
+        let mut closed_any = false;
+        if let Ok(windows) = app.windows() {
+            for win in windows {
+                if win.close().is_ok() {
+                    closed_any = true;
+                }
+            }
+        }
+
+        if closed_any {
+            std::thread::sleep(Duration::from_millis(100));
+            return Ok(());
+        }
+
+        // If closing windows was not supported or failed, fallback to closing app element
+        if app.as_element().close().is_ok() {
+            return Ok(());
+        }
+
+        // Fallback to process termination (matching Python OpenDesk behavior)
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(pid) = app.pid {
+                let r = std::process::Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/F"])
+                    .output();
+                if let Ok(out) = r
+                    && out.status.success()
+                {
+                    return Ok(());
+                }
+            }
+            let im = if name.to_lowercase().ends_with(".exe") {
+                name.to_string()
+            } else {
+                format!("{name}.exe")
+            };
+            let r = std::process::Command::new("taskkill")
+                .args(["/IM", &im, "/F"])
+                .output();
+            if let Ok(out) = r
+                && out.status.success()
+            {
+                return Ok(());
+            }
+            bail!("could not close application '{name}'")
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(pid) = app.pid {
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", &pid.to_string()])
+                    .output();
+                return Ok(());
+            }
+            let _ = std::process::Command::new("killall").arg(name).output();
+            Ok(())
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(pid) = app.pid {
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", &pid.to_string()])
+                    .output();
+                return Ok(());
+            }
+            let _ = std::process::Command::new("pkill")
+                .args(["-f", name])
+                .output();
+            Ok(())
+        }
     }
 
     pub fn app_list(&self) -> Result<Vec<AppInfo>> {
