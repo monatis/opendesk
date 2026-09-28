@@ -8,11 +8,16 @@ Opendesk is a computer use framework that lets AI agents navigate your computer 
 
 **macOS · Linux · Windows**
 
-[![PyPI](https://img.shields.io/pypi/v/opendesk?label=pypi%20opendesk)](https://pypi.org/project/opendesk/)
+[![Fork of vitalops/opendesk](https://img.shields.io/badge/fork%20of-vitalops%2Fopendesk-orange)](https://github.com/vitalops/opendesk)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![MCP 2.x](https://img.shields.io/badge/MCP-2.x%20compatible-green)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-vitalops.github.io-blue)](https://vitalops.github.io/opendesk/docs/)
 
 </div>
+
+> [!NOTE]
+> **OpenDesk (Enhanced Python Fork)**: This repository is a hardened, Python-first fork of the original [vitalops/opendesk](https://github.com/vitalops/opendesk) project.
+> It introduces **Internet remote transport & NAT traversal** (rendezvous signaling and encrypted relay), **official MCP 2.x SDK compatibility**, **modern Windows (WinUI 3 / XAML Islands) UI automation**, **robust failsafe handling**, and **actionable leaf candidate ranking** for reliable autonomous agent execution.
 
 ---
 
@@ -41,8 +46,48 @@ https://github.com/user-attachments/assets/659c9e30-e8f6-4a5a-ab81-0fa7ccaf8fb8
 
 ---
 
+## 🌟 Fork Enhancements & Improvements
+
+This fork focuses on turning OpenDesk into a production-grade, highly resilient computer-use framework for autonomous AI agents across local and distributed environments. Key additions and fixes include:
+
+### 1. 🌐 Internet Remote Transport & NAT Traversal
+- **Beyond LAN**: Extends OpenDesk's encrypted WebSocket transport from LAN-only to public Internet reachability.
+- **NAT & Firewall Traversal**: Controlled endpoints establish outbound WebSocket tunnels to a rendezvous server, requiring **zero inbound port forwarding** or router reconfigurations.
+- **Rendezvous & Relay Server**: Built-in, lightweight standalone rendezvous server (`opendesk rendezvous`) managing peer presence, token authentication, and relay frame exchange.
+- **End-to-End Encryption Preserved**: The rendezvous relay handles strictly opaque encrypted packets. Session keys are negotiated directly between endpoints using **X25519** key exchange and authenticated with **ChaCha20-Poly1305 AEAD** — zero plaintext exposure to the relay.
+- 📖 Read the full guide: [docs/remote/internet-transport.md](docs/remote/internet-transport.md).
+
+### 2. 🐍 Pure Python Architecture
+- Stripped legacy JavaScript dependencies and build configs to provide a clean, modern Python-first codebase.
+- First-class support for fast modern package managers like [`uv`](https://github.com/astral-sh/uv) alongside `pip`.
+
+### 3. 🔌 Official MCP 2.x & 1.x Compatibility
+- **ServerRequestContext Alignment**: Resolved parameter inversion in MCP 2.x request handlers (`handle_call_tool(ctx, params)` vs `(params)`), eliminating runtime `AttributeError` exceptions when running on the latest official Python `mcp` SDK.
+- **Dual-Mode Execution**: Transparently supports both low-level handler protocols and decorator-based MCP servers.
+- **Structured Error Propagation**: Uncaught tool exceptions return structured MCP error responses (`is_error=True`) so AI agents receive clear diagnostics rather than silent dropouts.
+
+### 4. 🪟 Windows 11 & WinUI 3 Modern Accessibility
+- **Deep UIA Inspection**: Replaced superficial Win32 window enumeration with deep global UIAutomation traversal (`pywinauto` UIA backend), unlocking modern Windows 11 apps (WinUI 3 Notepad, Windows Terminal, Windows Settings, XAML Islands).
+- **Accessible Name Resolution**: Extracts accessible element names from `element_info.name` and UIA control types, eliminating empty accessibility trees in modern controls.
+- **Native Action Patterns**: Direct execution of native UIA action patterns (`invoke()`, `select()`, `toggle()`) in addition to bounding-box mouse clicks.
+- **Hierarchical Menu Navigation**: Added `_windows_invoke_menu_path` to reliably traverse and click multi-level menu paths (e.g., `File -> Save`).
+
+### 5. 🛡️ Agentic Robustness & Failsafe Hardening
+- **PyAutoGUI Failsafe Elimination**: Disabled PyAutoGUI failsafe (`FAILSAFE = False`) during mouse/keyboard operations, preventing origin `(0, 0)` crashes in multi-monitor and headless agent environments.
+- **OCR Tool Signature Alignment**: Aligned `ocr_image` signatures in `opendesk.computer.ocr` with thread-pool executor dispatches in `opendesk.tools.ocr`.
+- **Unified Target Resolution**: Both `app` and `ui` tools accept process filenames (`notepad.exe`), base stems (`notepad`), and window titles (`Notepad`, `Untitled - Notepad`) interchangeably.
+- **Scored Candidate Ranking**: Upgraded `ui(action='click', ...)` matching with heuristic candidate scoring (+100 exact, +60 prefix, +30 substring, +40 actionable leaf role, -40 container role), preventing agents from accidentally clicking outer window containers instead of internal buttons.
+
+---
+
 ## Installation
 
+Using [uv](https://github.com/astral-sh/uv) (recommended):
+```bash
+uv pip install 'opendesk[core,mcp]'
+```
+
+Or using standard `pip`:
 ```bash
 pip install 'opendesk[core,mcp]'
 ```
@@ -244,7 +289,32 @@ Subsequent connections use mutual static-key authentication. Every frame is
 ChaCha20-Poly1305 AEAD-encrypted with per-direction counters. No CA-signed
 certificates required — the keys ARE the trust.
 
-Full guide → [docs/remote.md](docs/remote.md)
+### Internet & NAT Remote Control (Rendezvous)
+
+When controller and controlled machines are on different networks or behind firewalls/NATs:
+
+**1. Run the rendezvous server** (on a server with a public IP or domain):
+```bash
+opendesk rendezvous --host 0.0.0.0 --port 8765 --token YOUR_SECRET_TOKEN
+```
+
+**2. On the machine being controlled** (maintains an outbound connection to the relay):
+```bash
+opendesk serve --rendezvous ws://rendezvous.example.com:8765 --rendezvous-token YOUR_SECRET_TOKEN
+```
+
+**3. On the controller**:
+```bash
+# Discover peers registered on the rendezvous server
+opendesk discover --rendezvous ws://rendezvous.example.com:8765 --rendezvous-token YOUR_SECRET_TOKEN
+
+# Pair with the remote machine
+opendesk pair-with <target-pubkey> <code> --rendezvous ws://rendezvous.example.com:8765 --rendezvous-token YOUR_SECRET_TOKEN
+```
+
+All traffic remains end-to-end encrypted with X25519 and ChaCha20-Poly1305. The relay never sees unencrypted commands or screenshots.
+
+Full guides → [docs/remote/index.md](docs/remote/index.md) · [docs/remote/internet-transport.md](docs/remote/internet-transport.md)
 
 ---
 
@@ -355,9 +425,11 @@ result = await adapter.run_loop(client, model="qwen2.5:72b", messages=messages)
 
 ---
 
-## Citation
+## Upstream & Citation
 
-If you use opendesk in your research or project, please cite it:
+This project is a fork of the open-source [vitalops/opendesk](https://github.com/vitalops/opendesk) project created by Abhigith Neil Abraham, Fariz Rahman, and Fadil Rahman.
+
+If you use OpenDesk in your research or project, please cite the upstream work:
 
 ```bibtex
 @software{opendesk,
