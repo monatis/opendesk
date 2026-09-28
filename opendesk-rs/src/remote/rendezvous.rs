@@ -163,11 +163,10 @@ async fn handle_rendezvous_ws(
                     msg = ws.next() => {
                         match msg {
                             Some(Ok(Message::Text(t))) => {
-                                if let Ok(val) = serde_json::from_str::<Value>(&t) {
-                                    if val.get("action").and_then(|v| v.as_str()) == Some("ping") {
+                                if let Ok(val) = serde_json::from_str::<Value>(&t)
+                                    && val.get("action").and_then(|v| v.as_str()) == Some("ping") {
                                         let _ = ws.send(Message::Text(json!({ "action": "pong" }).to_string().into())).await;
                                     }
-                                }
                             }
                             Some(Ok(Message::Ping(p))) => {
                                 let _ = ws.send(Message::Pong(p)).await;
@@ -423,9 +422,9 @@ pub async fn run_rendezvous_agent(
                 msg = transport.recv_text() => {
                     match msg {
                         Ok(text) => {
-                            if let Ok(val) = serde_json::from_str::<Value>(&text) {
-                                if val.get("action").and_then(|v| v.as_str()) == Some("session_request") {
-                                    if let Some(session_id) = val.get("session_id").and_then(|v| v.as_str()) {
+                            if let Ok(val) = serde_json::from_str::<Value>(&text)
+                                && val.get("action").and_then(|v| v.as_str()) == Some("session_request")
+                                    && let Some(session_id) = val.get("session_id").and_then(|v| v.as_str()) {
                                         info!("Incoming session request from rendezvous: {}", session_id);
                                         let r_url = rendezvous_url.to_string();
                                         let tok = token.map(|t| t.to_string());
@@ -451,8 +450,6 @@ pub async fn run_rendezvous_agent(
                                             }
                                         });
                                     }
-                                }
-                            }
                         }
                         Err(_) => break,
                     }
@@ -495,9 +492,21 @@ async fn join_rendezvous_session(
 
     // Now transport is in binary relay mode!
     let session = crate::protocol::handshake::auth_server(&mut transport, &identity, &trusted).await?;
-    info!("Rendezvous session {} authenticated with peer", session_id);
-
-    run_session_loop(&mut transport, session.channel, computer, home.as_deref()).await
+    let (_tx, mut rx) = tokio::sync::mpsc::channel(1);
+    let audit = crate::remote::audit::AuditLog::new(home.as_deref());
+    let peer_name = crate::protocol::storage::default_peer_name(&session.peer_public);
+    run_session_loop(
+        &mut transport,
+        session.channel,
+        computer,
+        home.as_deref(),
+        &mut rx,
+        &session.peer_public,
+        &peer_name,
+        session_id,
+        &audit,
+        false,
+    ).await
 }
 
 // ---------------------------------------------------------------------------
@@ -539,4 +548,59 @@ pub async fn connect_via_rendezvous(
     }
 
     Ok(transport)
+}
+
+pub struct RendezvousClient {
+    pub url: String,
+    pub token: Option<String>,
+}
+
+impl RendezvousClient {
+    pub fn new(url: &str, token: Option<&str>) -> Self {
+        Self {
+            url: url.to_string(),
+            token: token.map(|s| s.to_string()),
+        }
+    }
+
+    pub async fn list_peers(&self, timeout: std::time::Duration) -> Result<Vec<super::discovery::DiscoveredPeer>> {
+        let (ws_stream, _) = tokio::time::timeout(timeout, connect_async(&self.url))
+            .await
+            .map_err(|_| anyhow!("Connection timeout"))?
+            .with_context(|| format!("failed to connect to rendezvous {}", self.url))?;
+        let mut transport = WebSocketTransport::new_tls(ws_stream);
+
+        let mut list_msg = json!({
+            "action": "list",
+        });
+        if let Some(tok) = &self.token {
+            list_msg["token"] = json!(tok);
+        }
+
+        transport.send_text(&list_msg.to_string()).await?;
+        let resp = tokio::time::timeout(timeout, transport.recv_text())
+            .await
+            .map_err(|_| anyhow!("Response timeout"))??;
+        let val: Value = serde_json::from_str(&resp)?;
+
+        let mut peers = Vec::new();
+        if let Some(arr) = val.get("peers").and_then(|v| v.as_array()) {
+            for p in arr {
+                let pk_hex = p.get("public_key").and_then(|v| v.as_str()).unwrap_or("");
+                let pk_bytes = data_encoding::HEXLOWER.decode(pk_hex.as_bytes()).unwrap_or_default();
+                let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let desc = p.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let fp = crate::protocol::storage::fingerprint(&pk_bytes);
+                peers.push(super::discovery::DiscoveredPeer {
+                    name: if name.is_empty() { format!("peer-{}", &pk_hex[..6.min(pk_hex.len())]) } else { name },
+                    host: "rendezvous".to_string(),
+                    port: 0,
+                    public_key: pk_bytes,
+                    fingerprint: fp,
+                    description: desc,
+                });
+            }
+        }
+        Ok(peers)
+    }
 }

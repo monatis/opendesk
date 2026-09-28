@@ -289,11 +289,10 @@ pub async fn pair_with(
 
     let caps = match server_frame {
         Frame::Hello(h) => {
-            if let Some(desc_val) = h.capabilities.get("description") {
-                if let Some(desc) = desc_val.as_str() {
+            if let Some(desc_val) = h.capabilities.get("description")
+                && let Some(desc) = desc_val.as_str() {
                     let _ = trusted.cache_description(&verified_pubkey, desc);
                 }
-            }
             h.capabilities
         }
         _ => HashMap::new(),
@@ -326,7 +325,7 @@ pub async fn connect(
 
     let peer_pub = peer.public_bytes()?;
 
-    let (mut transport, mut channel) = if let Some(r_url) = rendezvous_url.or_else(|| {
+    let (mut transport, mut channel) = if let Some(r_url) = rendezvous_url.or({
         if !peer.rendezvous_url.is_empty() {
             Some(peer.rendezvous_url.as_str())
         } else {
@@ -368,11 +367,10 @@ pub async fn connect(
 
     let caps = match server_frame {
         Frame::Hello(h) => {
-            if let Some(desc_val) = h.capabilities.get("description") {
-                if let Some(desc) = desc_val.as_str() {
+            if let Some(desc_val) = h.capabilities.get("description")
+                && let Some(desc) = desc_val.as_str() {
                     let _ = trusted.cache_description(&peer_pub, desc);
                 }
-            }
             h.capabilities
         }
         _ => HashMap::new(),

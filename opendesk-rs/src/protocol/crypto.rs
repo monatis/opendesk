@@ -20,8 +20,8 @@ pub struct KeyPair {
 
 impl KeyPair {
     pub fn generate() -> Self {
-        let mut rng = rand::rngs::OsRng;
-        let secret = StaticSecret::random_from_rng(&mut rng);
+        let rng = rand::rngs::OsRng;
+        let secret = StaticSecret::random_from_rng(rng);
         let public = PublicKey::from(&secret);
         Self { secret, public }
     }

@@ -118,6 +118,16 @@ pub struct PushFrame {
     pub payload: HashMap<String, serde_json::Value>,
 }
 
+impl PushFrame {
+    pub fn new(topic: &str, payload: HashMap<String, serde_json::Value>) -> Self {
+        Self {
+            v: PROTOCOL_VERSION,
+            topic: topic.to_string(),
+            payload,
+        }
+    }
+}
+
 fn default_protocol_version() -> u32 {
     PROTOCOL_VERSION
 }

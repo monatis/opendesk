@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use super::identity::default_home;
+pub use super::identity::default_home;
 
 pub const TRUSTED_PEERS_FILE: &str = "trusted-peers.json";
 pub const DEFAULT_PEER_FILE: &str = "default-peer";
@@ -13,7 +13,7 @@ pub const DESCRIPTION_FILE: &str = "description.txt";
 
 /// Eight colon-separated groups of four hex digits — matches Python's fingerprint function:
 /// `":".join(h[i : i + 4] for i in range(0, 16, 4))`
-pub fn fingerprint(public_key: &[u8; 32]) -> String {
+pub fn fingerprint(public_key: &[u8]) -> String {
     let hex = data_encoding::HEXLOWER.encode(public_key);
     let mut parts = Vec::new();
     for i in (0..16).step_by(4) {
@@ -218,11 +218,10 @@ impl TrustedPeers {
         self.save(&peers)?;
 
         // Clear default if it was pointing to removed peer
-        if let Some(def) = self.get_default() {
-            if target_names.contains(&def) {
+        if let Some(def) = self.get_default()
+            && target_names.contains(&def) {
                 let _ = self.clear_default();
             }
-        }
 
         Ok(true)
     }

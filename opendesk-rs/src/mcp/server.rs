@@ -269,23 +269,19 @@ impl McpServer {
         let peer_arg = args.get("peer").and_then(|v| v.as_str());
         if peer_arg != Some("local") {
             let default_peer = self.trusted.get_default();
-            if let Some(target) = peer_arg.or_else(|| default_peer.as_deref()) {
+            if let Some(target) = peer_arg.or(default_peer.as_deref()) {
                 return self.call_remote_tool(target, name, args).await;
             }
         }
 
         match name {
             "screenshot" => {
-                let region = if let Some(r) = args.get("region") {
-                    Some(xa11y::Rect {
+                let region = args.get("region").map(|r| xa11y::Rect {
                         x: r.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
                         y: r.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
                         width: r.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                         height: r.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                    })
-                } else {
-                    None
-                };
+                    });
 
                 let png_bytes = self.computer.screenshot(region)?;
                 let b64 = BASE64.encode(&png_bytes);

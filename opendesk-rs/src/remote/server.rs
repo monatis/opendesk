@@ -4,25 +4,29 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use anyhow::{anyhow, Context, Result};
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 use crate::computer::local::LocalComputer;
 use crate::protocol::crypto::EncryptedChannel;
-use crate::protocol::frames::{Frame, HelloFrame, ResFrame};
+use crate::protocol::frames::{Frame, HelloFrame, PushFrame, ResFrame};
 use crate::protocol::handshake::{auth_server, pair_server, Transport};
 use crate::protocol::identity::Identity;
 use crate::protocol::storage::{
     default_peer_name, fingerprint, read_description, TrustedPeers,
 };
+use super::admin::{ActiveSessionEntry, AdminServer, SessionRegistry};
+use super::audit::AuditLog;
+use super::discovery::{advertise, Advertisement};
 use super::transport::WebSocketTransport;
 
 pub const DEFAULT_PORT: u16 = 8423;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ActiveSession {
     pub session_id: String,
     pub peer_public: [u8; 32],
@@ -37,7 +41,10 @@ pub struct OpendeskServer {
     identity: Identity,
     trusted: TrustedPeers,
     computer: Arc<LocalComputer>,
-    active_session: Arc<Mutex<Option<ActiveSession>>>,
+    registry: SessionRegistry,
+    audit: AuditLog,
+    advertise_mdns: bool,
+    no_audit: bool,
     rendezvous_urls: Vec<String>,
     rendezvous_token: Option<String>,
 }
@@ -53,6 +60,8 @@ impl OpendeskServer {
         let identity = Identity::load_or_create(home)?;
         let trusted = TrustedPeers::new(home);
         let computer = Arc::new(LocalComputer::new());
+        let registry = SessionRegistry::new();
+        let audit = AuditLog::new(home);
 
         Ok(Self {
             host: host.to_string(),
@@ -61,10 +70,59 @@ impl OpendeskServer {
             identity,
             trusted,
             computer,
-            active_session: Arc::new(Mutex::new(None)),
+            registry,
+            audit,
+            advertise_mdns: true,
+            no_audit: false,
             rendezvous_urls,
             rendezvous_token,
         })
+    }
+
+    pub fn set_advertise_mdns(&mut self, advertise: bool) {
+        self.advertise_mdns = advertise;
+    }
+
+    pub fn set_no_audit(&mut self, no_audit: bool) {
+        self.no_audit = no_audit;
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn registry(&self) -> &SessionRegistry {
+        &self.registry
+    }
+
+    pub fn audit(&self) -> &AuditLog {
+        &self.audit
+    }
+
+    pub fn trusted(&self) -> &TrustedPeers {
+        &self.trusted
+    }
+
+    pub fn identity(&self) -> &Identity {
+        &self.identity
+    }
+
+    pub fn home(&self) -> Option<&Path> {
+        self.home.as_deref()
+    }
+
+    /// Enable pairing for a given code and timeout, returning the newly paired peer's public key.
+    pub async fn enable_pairing(&self, code: &str, timeout_secs: f64) -> Result<Option<[u8; 32]>> {
+        match tokio::time::timeout(
+            Duration::from_secs_f64(timeout_secs),
+            self.run_pair(code, timeout_secs as u64),
+        )
+        .await
+        {
+            Ok(Ok(pubkey)) => Ok(Some(pubkey)),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Ok(None),
+        }
     }
 
     /// Run one-shot pairing mode: accepts exactly one peer who proves the code, then terminates.
@@ -107,8 +165,23 @@ impl OpendeskServer {
 
                         let comp = self.computer.clone();
                         let home = self.home.clone();
+                        let audit = self.audit.clone();
+                        let no_audit = self.no_audit;
                         tokio::spawn(async move {
-                            let _ = run_session_loop(&mut transport, session.channel, comp, home.as_deref()).await;
+                            let (_tx, mut rx) = mpsc::channel(1);
+                            let _ = run_session_loop(
+                                &mut transport,
+                                session.channel,
+                                comp,
+                                home.as_deref(),
+                                &mut rx,
+                                &peer_pub,
+                                &peer_name,
+                                "pairing-session",
+                                &audit,
+                                no_audit,
+                            )
+                            .await;
                         });
 
                         return Ok(peer_pub);
@@ -120,7 +193,7 @@ impl OpendeskServer {
             }
         };
 
-        match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), pair_future).await {
+        match tokio::time::timeout(Duration::from_secs(timeout_secs), pair_future).await {
             Ok(res) => res,
             Err(_) => Err(anyhow!("pairing timed out after {} seconds", timeout_secs)),
         }
@@ -132,6 +205,25 @@ impl OpendeskServer {
             return Err(anyhow!(
                 "no trusted peers yet. Run `opendesk pair` first."
             ));
+        }
+
+        // Start AdminServer for local IPC
+        let mut admin_server = AdminServer::new(self.registry.clone(), self.home.as_deref());
+        if let Err(e) = admin_server.start().await {
+            warn!("Failed to start AdminServer: {}", e);
+        }
+
+        // Advertise via mDNS if enabled
+        let mut _ad: Option<Advertisement> = None;
+        if self.advertise_mdns {
+            let desc = read_description(self.home.as_deref());
+            let machine_name = std::env::var("COMPUTERNAME")
+                .or_else(|_| std::env::var("HOSTNAME"))
+                .unwrap_or_else(|_| "opendesk".to_string());
+            match advertise(&machine_name, self.port, &self.identity.public_bytes(), &desc) {
+                Ok(adv) => _ad = Some(adv),
+                Err(e) => warn!("mDNS advertisement failed: {}", e),
+            }
         }
 
         let bind_addr = format!("{}:{}", self.host, self.port);
@@ -150,17 +242,21 @@ impl OpendeskServer {
             let identity = self.identity.clone();
             let trusted = self.trusted.clone();
             let computer = self.computer.clone();
-            let active = self.active_session.clone();
             let home = self.home.clone();
+            let registry = self.registry.clone();
+            let audit = self.audit.clone();
+            let no_audit = self.no_audit;
 
             tokio::spawn(async move {
-                if let Err(e) = super::rendezvous::run_rendezvous_agent(
+                if let Err(e) = run_rendezvous_serve_agent(
                     &r_url,
                     token.as_deref(),
                     identity,
                     trusted,
                     computer,
-                    active,
+                    registry,
+                    audit,
+                    no_audit,
                     home,
                 )
                 .await
@@ -175,7 +271,9 @@ impl OpendeskServer {
             let identity = self.identity.clone();
             let trusted = self.trusted.clone();
             let computer = self.computer.clone();
-            let active_session = self.active_session.clone();
+            let registry = self.registry.clone();
+            let audit = self.audit.clone();
+            let no_audit = self.no_audit;
             let home = self.home.clone();
 
             tokio::spawn(async move {
@@ -185,7 +283,9 @@ impl OpendeskServer {
                     identity,
                     trusted,
                     computer,
-                    active_session,
+                    registry,
+                    audit,
+                    no_audit,
                     home,
                 )
                 .await
@@ -203,7 +303,9 @@ pub(crate) async fn handle_inbound_connection(
     identity: Identity,
     trusted: TrustedPeers,
     computer: Arc<LocalComputer>,
-    active_session: Arc<Mutex<Option<ActiveSession>>>,
+    registry: SessionRegistry,
+    audit: AuditLog,
+    no_audit: bool,
     home: Option<PathBuf>,
 ) -> Result<()> {
     let ws_stream = tokio_tungstenite::accept_async(stream).await?;
@@ -221,51 +323,88 @@ pub(crate) async fn handle_inbound_connection(
     let peer_entry = trusted.find(&session.peer_public);
     let peer_name = peer_entry.map(|p| p.name).unwrap_or_else(|| default_peer_name(&session.peer_public));
     let session_id = uuid_short();
+    let start_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
 
     // Enforce single controller
-    {
-        let mut active = active_session.lock().await;
-        if let Some(existing) = active.as_ref() {
-            if existing.peer_public != session.peer_public {
-                info!("Rejecting controller {} — busy with {}", peer_name, existing.peer_name);
-                // Reject with busy
-                let reject_res = ResFrame::error(0, "busy", format!("server is busy: {} is the active controller", existing.peer_name));
-                let packed = rmp_serde::to_vec_named(&reject_res)?;
-                let mut chan = session.channel;
-                let ct = chan.encrypt(&packed)?;
-                let _ = transport.send(&ct).await;
-                return Ok(());
-            } else {
-                info!("Same peer {} reconnecting; replacing previous session", peer_name);
+    let existing_sessions = registry.list().await;
+    if !existing_sessions.is_empty() {
+        let existing = &existing_sessions[0];
+        let existing_pub = data_encoding::HEXLOWER.decode(existing.peer_pubkey_hex.as_bytes()).unwrap_or_default();
+        if existing_pub != session.peer_public {
+            info!("Rejecting controller {} — busy with {}", peer_name, existing.peer_name);
+            if !no_audit {
+                audit.record_session_rejected(
+                    &session.peer_public,
+                    &peer_name,
+                    &remote_addr.to_string(),
+                    &format!("busy: active session {}", existing.peer_name),
+                ).await;
             }
+            // Reject with busy
+            let reject_res = ResFrame::error(0, "busy", format!("server is busy: {} is the active controller", existing.peer_name));
+            let packed = rmp_serde::to_vec_named(&reject_res)?;
+            let mut chan = session.channel;
+            let ct = chan.encrypt(&packed)?;
+            let _ = transport.send(&ct).await;
+            return Ok(());
+        } else {
+            info!("Same peer {} reconnecting; replacing previous session", peer_name);
+            registry.kill_all("reconnected").await;
         }
-        *active = Some(ActiveSession {
-            session_id: session_id.clone(),
-            peer_public: session.peer_public,
-            peer_name: peer_name.clone(),
-            remote_addr: remote_addr.to_string(),
-        });
+    }
+
+    let (evict_tx, mut evict_rx) = mpsc::channel(2);
+    registry.add(ActiveSessionEntry {
+        id: session_id.clone(),
+        peer_name: peer_name.clone(),
+        peer_public: session.peer_public,
+        remote_addr: remote_addr.to_string(),
+        started_at: start_ts,
+        mode: "direct".to_string(),
+        evict_tx,
+    }).await;
+
+    if !no_audit {
+        audit.record_session_opened(
+            &session.peer_public,
+            &peer_name,
+            &session_id,
+            &remote_addr.to_string(),
+            "direct",
+        ).await;
     }
 
     info!("Session {} established with peer '{}' ({})", session_id, peer_name, remote_addr);
 
-    // Session worker
+    let start_time = Instant::now();
     let run_res = run_session_loop(
         &mut transport,
         session.channel,
         computer,
         home.as_deref(),
+        &mut evict_rx,
+        &session.peer_public,
+        &peer_name,
+        &session_id,
+        &audit,
+        no_audit,
     )
     .await;
 
-    // Clear active session
-    {
-        let mut active = active_session.lock().await;
-        if let Some(s) = active.as_ref() {
-            if s.session_id == session_id {
-                *active = None;
-            }
-        }
+    let duration = start_time.elapsed().as_secs_f64();
+    registry.remove(&session_id).await;
+
+    if !no_audit {
+        audit.record_session_closed(
+            &session.peer_public,
+            &peer_name,
+            &session_id,
+            duration,
+            if run_res.is_ok() { "normal" } else { "error" },
+        ).await;
     }
 
     info!("Session {} closed for peer '{}'", session_id, peer_name);
@@ -277,6 +416,12 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     mut channel: EncryptedChannel,
     computer: Arc<LocalComputer>,
     home: Option<&Path>,
+    evict_rx: &mut mpsc::Receiver<String>,
+    peer_public: &[u8; 32],
+    peer_name: &str,
+    session_id: &str,
+    audit: &AuditLog,
+    no_audit: bool,
 ) -> Result<()> {
     // 1. Send HelloFrame with capabilities and description
     let mut caps = HashMap::new();
@@ -297,45 +442,70 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     let hello_ct = channel.encrypt(&hello_bytes)?;
     transport.send(&hello_ct).await?;
 
-    // 2. Request / Response loop
+    // 2. Request / Response loop with eviction support
     loop {
-        let encrypted_frame = match transport.recv().await {
-            Ok(b) => b,
-            Err(_) => {
-                // Normal close or disconnection
+        tokio::select! {
+            eviction_reason = evict_rx.recv() => {
+                let reason = eviction_reason.unwrap_or_else(|| "admin_disconnect".to_string());
+                info!("Session {} evicted: {}", session_id, reason);
+                let mut payload = HashMap::new();
+                payload.insert("reason".to_string(), json!(reason));
+                let push = Frame::Push(PushFrame::new("session.evicted", payload));
+                if let Ok(bytes) = push.to_msgpack()
+                    && let Ok(ct) = channel.encrypt(&bytes) {
+                        let _ = transport.send(&ct).await;
+                    }
                 return Ok(());
             }
-        };
-
-        let decrypted_bytes = channel.decrypt(&encrypted_frame)
-            .context("failed to decrypt incoming frame")?;
-
-        let frame = Frame::from_msgpack(&decrypted_bytes)
-            .context("malformed frame msgpack")?;
-
-        match frame {
-            Frame::Req(req) => {
-                let res = dispatch_call(&computer, &req.method, &req.params).await;
-                let res_frame = match res {
-                    Ok(val) => ResFrame::ok(req.id, val),
-                    Err(err) => ResFrame::error(req.id, "error", err),
+            res = transport.recv() => {
+                let encrypted_frame = match res {
+                    Ok(b) => b,
+                    Err(_) => return Ok(()),
                 };
 
-                let res_bytes = Frame::Res(res_frame).to_msgpack()?;
-                let ct = channel.encrypt(&res_bytes)?;
-                transport.send(&ct).await?;
-            }
-            Frame::Hello(_) => {
-                // Client hello received
-            }
-            Frame::Push(push) => {
-                info!("Received push event: {}", push.topic);
-            }
-            Frame::Cancel(c) => {
-                info!("Request cancelled: {}", c.id);
-            }
-            Frame::Res(_) => {
-                warn!("Server received unexpected ResFrame");
+                let decrypted_bytes = channel.decrypt(&encrypted_frame)
+                    .context("failed to decrypt incoming frame")?;
+
+                let frame = Frame::from_msgpack(&decrypted_bytes)
+                    .context("malformed frame msgpack")?;
+
+                match frame {
+                    Frame::Req(req) => {
+                        let res = dispatch_call(&computer, &req.method, &req.params).await;
+                        let (res_frame, outcome, err_code, err_msg) = match res {
+                            Ok(val) => (ResFrame::ok(req.id, val), "ok", None, None),
+                            Err(err) => (ResFrame::error(req.id, "error", err.clone()), "error", Some("error"), Some(err)),
+                        };
+
+                        if !no_audit {
+                            let params_val = serde_json::to_value(&req.params).unwrap_or(Value::Null);
+                            audit.record_call(
+                                peer_public,
+                                peer_name,
+                                session_id,
+                                &req.method,
+                                &params_val,
+                                outcome,
+                                err_code,
+                                err_msg.as_deref(),
+                            ).await;
+                        }
+
+                        let res_bytes = Frame::Res(res_frame).to_msgpack()?;
+                        let ct = channel.encrypt(&res_bytes)?;
+                        transport.send(&ct).await?;
+                    }
+                    Frame::Hello(_) => {}
+                    Frame::Push(push) => {
+                        info!("Received push event: {}", push.topic);
+                    }
+                    Frame::Cancel(c) => {
+                        info!("Request cancelled: {}", c.id);
+                    }
+                    Frame::Res(_) => {
+                        warn!("Server received unexpected ResFrame");
+                    }
+                }
             }
         }
     }
@@ -347,10 +517,10 @@ pub(crate) async fn dispatch_call(
     params: &HashMap<String, Value>,
 ) -> Result<Value, String> {
     match method {
-        "computer.screenshot" => {
+        "computer.screenshot" | "display.capture" => {
             let bytes = computer.screenshot(None).map_err(|e| e.to_string())?;
             let b64 = data_encoding::BASE64.encode(&bytes);
-            Ok(json!({ "image_base64": b64, "format": "png" }))
+            Ok(json!({ "image_base64": b64, "format": "png", "data": b64 }))
         }
         "computer.mouse_move" => {
             let x = params.get("x").and_then(|v| v.as_i64()).ok_or("missing 'x'")? as i32;
@@ -386,12 +556,45 @@ pub(crate) async fn dispatch_call(
             let dy = params.get("delta_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             computer.mouse_scroll(x, y, dy).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
-        "computer.keyboard_type" => {
-            let text = params.get("text").and_then(|v| v.as_str()).ok_or("missing 'text'")?;
+        "input.pointer" => {
+            let evt = params.get("event").unwrap_or(&Value::Null);
+            let pt = evt.get("point").unwrap_or(&Value::Null);
+            let action = evt.get("action").and_then(|v| v.as_str()).unwrap_or("move");
+            let x = pt.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
+            let y = pt.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
+            match action {
+                "click" => {
+                    let btn = evt.get("button").and_then(|v| v.as_str());
+                    computer.mouse_click(x, y, btn).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+                }
+                "move" => {
+                    computer.mouse_move(x, y).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+                }
+                _ => {
+                    computer.mouse_click(x, y, None).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
+                }
+            }
+        }
+        "computer.keyboard_type" | "input.text" => {
+            let text = params.get("text")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    params.get("text_input")
+                        .and_then(|v| v.get("text"))
+                        .and_then(|v| v.as_str())
+                })
+                .ok_or("missing 'text'")?;
             computer.keyboard_type(text).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
-        "computer.keyboard_press" => {
-            let key = params.get("key").and_then(|v| v.as_str()).ok_or("missing 'key'")?;
+        "computer.keyboard_press" | "input.key" => {
+            let key = params.get("key")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    params.get("event")
+                        .and_then(|v| v.get("keysym"))
+                        .and_then(|v| v.as_str())
+                })
+                .ok_or("missing 'key'")?;
             computer.keyboard_press(key).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
         "computer.keyboard_hotkey" => {
@@ -399,25 +602,25 @@ pub(crate) async fn dispatch_call(
             let keys: Vec<&str> = keys_arr.iter().filter_map(|v| v.as_str()).collect();
             computer.keyboard_hotkey(&keys).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
-        "computer.app_open" => {
+        "computer.app_open" | "apps.open" => {
             let path = params.get("path")
                 .and_then(|v| v.as_str())
                 .or_else(|| params.get("name").and_then(|v| v.as_str()))
                 .ok_or("missing 'path'")?;
             computer.app_open(path).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
-        "computer.app_focus" => {
+        "computer.app_focus" | "apps.focus" => {
             let name = params.get("name").and_then(|v| v.as_str()).ok_or("missing 'name'")?;
             computer.app_focus(name).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
-        "computer.app_close" => {
+        "computer.app_close" | "apps.close" => {
             let name = params.get("name").and_then(|v| v.as_str()).ok_or("missing 'name'")?;
             computer.app_close(name).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
-        "computer.app_list" => {
-            computer.app_list().map(|apps| json!({ "apps": apps })).map_err(|e| e.to_string())
+        "computer.app_list" | "apps.list" | "windows.list" => {
+            computer.app_list().map(|apps| json!({ "apps": apps, "windows": apps })).map_err(|e| e.to_string())
         }
-        "computer.ui_tree" => {
+        "computer.ui_tree" | "ui.tree" => {
             let app_name = params.get("app_name").and_then(|v| v.as_str());
             let max_depth = params.get("max_depth").and_then(|v| v.as_u64()).map(|d| d as usize);
             computer.ui_tree(app_name, max_depth).map(|tree| json!({ "tree": tree })).map_err(|e| e.to_string())
@@ -439,15 +642,32 @@ pub(crate) async fn dispatch_call(
             let text = params.get("text").and_then(|v| v.as_str()).ok_or("missing 'text'")?;
             computer.ui_type(app_name, selector, text).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
-        "computer.clipboard_read" => {
+        "computer.clipboard_read" | "clipboard.read" => {
             computer.clipboard_read().map(|text| json!({ "text": text })).map_err(|e| e.to_string())
         }
-        "computer.clipboard_write" => {
+        "computer.clipboard_write" | "clipboard.write" => {
             let text = params.get("text").and_then(|v| v.as_str()).ok_or("missing 'text'")?;
             computer.clipboard_write(text).map(|_| json!({ "status": "ok" })).map_err(|e| e.to_string())
         }
         other => Err(format!("unknown method: {}", other)),
     }
+}
+
+pub(crate) async fn run_rendezvous_serve_agent(
+    r_url: &str,
+    token: Option<&str>,
+    identity: Identity,
+    trusted: TrustedPeers,
+    computer: Arc<LocalComputer>,
+    _registry: SessionRegistry,
+    _audit: AuditLog,
+    _no_audit: bool,
+    home: Option<PathBuf>,
+) -> Result<()> {
+    use super::rendezvous::run_rendezvous_agent;
+    // We bridge into the existing rendezvous agent
+    let active = Arc::new(tokio::sync::Mutex::new(None));
+    run_rendezvous_agent(r_url, token, identity, trusted, computer, active, home).await
 }
 
 fn uuid_short() -> String {
