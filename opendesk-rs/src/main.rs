@@ -42,6 +42,23 @@ enum Commands {
         #[arg(long)]
         token: Option<String>,
     },
+
+    /// Install opendesk serve as a user-scoped OS service (systemd, launchd, or Task Scheduler)
+    #[command(alias = "install")]
+    InstallService {
+        #[arg(long, default_value_t = 8423)]
+        port: u16,
+        #[arg(long)]
+        no_start: bool,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+    },
+
+    /// Uninstall the user-scoped opendesk OS service
+    #[command(alias = "uninstall")]
+    UninstallService,
 }
 
 #[tokio::main]
@@ -104,6 +121,51 @@ async fn main() -> anyhow::Result<()> {
                 println!("  Token authentication enabled.");
             }
             println!("(Rendezvous signaling & relay loop will listen here)");
+        }
+
+        Commands::InstallService {
+            port,
+            no_start,
+            rendezvous,
+            rendezvous_token,
+        } => {
+            match opendesk_rs::service::install_service(
+                port,
+                !no_start,
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            ) {
+                Ok(result) => {
+                    println!("✓ Service installed ({}): {}", result.manager, result.path.display());
+                    if result.started {
+                        println!("  Started. It will also run automatically on next login.");
+                    } else if no_start {
+                        println!("  Not started (--no-start). Activate manually or rerun without the flag.");
+                    } else {
+                        println!("  WARNING: Service registered but could not be started immediately.");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("ERROR: Failed to install service: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        Commands::UninstallService => {
+            match opendesk_rs::service::uninstall_service() {
+                Ok(removed) => {
+                    if removed {
+                        println!("✓ Service uninstalled.");
+                    } else {
+                        println!("No opendesk service was installed.");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("ERROR: Failed to uninstall service: {e}");
+                    std::process::exit(1);
+                }
+            }
         }
     }
 
