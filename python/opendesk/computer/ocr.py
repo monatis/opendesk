@@ -26,7 +26,7 @@ from pathlib import Path
 _PLATFORM = platform.system()
 
 
-def ocr_image(png_bytes: bytes, *, width: int = 0, height: int = 0) -> str:
+def ocr_image(png_bytes: bytes, width: int = 0, height: int = 0) -> str:
     """Run OCR on a PNG byte buffer using the best available backend.
 
     Tries pytesseract, then platform-native OCR (Vision on macOS, WinRT on

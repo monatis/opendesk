@@ -33,6 +33,9 @@ core = [
     "mss>=9.0",
     "Pillow>=10.0",
     "pyautogui>=0.9",
+    "pywinauto; sys_platform == 'win32'",
+    "pygetwindow; sys_platform == 'win32'",
+    "pyperclip; sys_platform == 'win32'",
 ]
 
 # MCP server — expose all tools as an MCP server
@@ -52,7 +55,7 @@ langchain = [
 
 # Linux accessibility (AT-SPI2)
 linux = [
-    "pyatspi",
+    "pyatspi; sys_platform == 'linux'",
 ]
 
 # Windows accessibility (UI Automation)
@@ -94,7 +97,7 @@ app = [
 
 # Everything
 all = [
-    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule,remote,app]",
+    "opendesk[core,mcp,openai,langchain,ocr,learn,schedule,remote,app,windows]",
 ]
 
 [project.scripts]

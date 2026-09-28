@@ -57,6 +57,7 @@ _PLATFORM = platform.system()
 def _pyautogui() -> Any:
     try:
         import pyautogui  # type: ignore[import-not-found]
+        pyautogui.FAILSAFE = False
         return pyautogui
     except ImportError as exc:
         raise ImportError(
@@ -300,7 +301,7 @@ class LocalComputer(Computer):
     def _pointer_sync(self, event: PointerEvent) -> None:
         _check_macos_accessibility()
         pag = _pyautogui()
-        pag.FAILSAFE = True
+        pag.FAILSAFE = False
         x, y = int(event.point.x), int(event.point.y)
 
         if event.action is PointerAction.MOVE:
@@ -714,48 +715,149 @@ end tell
 
         return walk(target_app, 0)
 
+    def _find_windows_dlg(self, target: Optional[str]) -> Any:
+        """Locate a top-level window matching `target` using UIA across all desktop processes."""
+        import pywinauto  # type: ignore[import-not-found]
+        from pywinauto import Desktop
+
+        desktop = Desktop(backend="uia")
+        if not target:
+            import ctypes
+            hwnd = ctypes.windll.user32.GetForegroundWindow()
+            if hwnd:
+                try:
+                    return desktop.window(handle=hwnd)
+                except Exception:
+                    pass
+            try:
+                return desktop.top_from_point()
+            except Exception:
+                return None
+
+        target_l = target.lower().strip()
+        target_stem = target_l[:-4] if target_l.endswith(".exe") else target_l
+
+        # 1. Match by window title (case-insensitive substring) across desktop
+        try:
+            windows = desktop.windows()
+        except Exception:
+            windows = []
+
+        for w in windows:
+            try:
+                title = (w.window_text() or getattr(w.element_info, "name", "") or "").strip()
+                if target_l in title.lower() or target_stem in title.lower():
+                    return w
+            except Exception:
+                continue
+
+        # 2. Match by process / module name
+        try:
+            import win32process, win32api
+            for w in windows:
+                pid = getattr(w.element_info, "process_id", None)
+                if not pid:
+                    continue
+                try:
+                    hproc = win32api.OpenProcess(0x0400 | 0x0010, False, pid)
+                    mod_name = win32process.GetModuleFileNameEx(hproc, 0).lower()
+                    if target_stem in mod_name or target_l in mod_name:
+                        return w
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # 3. Fallback to pywinauto Application connect with case-insensitive regex
+        try:
+            import re
+            app_conn = pywinauto.Application(backend="uia").connect(
+                title_re=rf"(?i).*{re.escape(target_stem)}.*", timeout=2,
+            )
+            return app_conn.top_window()
+        except Exception:
+            pass
+
+        # 4. Fallback to Win32 backend for legacy GDI/USER32 apps
+        try:
+            import re
+            app_conn_win32 = pywinauto.Application(backend="win32").connect(
+                title_re=rf"(?i).*{re.escape(target_stem)}.*", timeout=2,
+            )
+            return app_conn_win32.top_window()
+        except Exception:
+            pass
+
+        return None
+
     def _windows_ui_tree(self, target: Optional[str], max_depth: int) -> UIElement:
         try:
             import pywinauto  # type: ignore[import-not-found]
         except ImportError:
             return UIElement(role="root", name="(pywinauto not installed)")
-        try:
-            if target:
-                app = pywinauto.Application(backend="uia").connect(
-                    title_re=f".*{target}.*", timeout=3,
-                )
-            else:
-                import ctypes
-                hwnd = ctypes.windll.user32.GetForegroundWindow()
-                app = pywinauto.Application(backend="uia").connect(handle=hwnd)
-            dlg = app.top_window()
-        except Exception as exc:
-            return UIElement(role="root", name=f"(connect failed: {exc})")
+
+        dlg = self._find_windows_dlg(target)
+        if dlg is None:
+            err_msg = f"Cannot find window for {target!r}" if target else "No active window found"
+            return UIElement(role="root", name=f"(connect failed: {err_msg})")
 
         children: list[UIElement] = []
         try:
             for ctrl in dlg.descendants():
                 try:
                     rect = ctrl.rectangle()
+                    # In UIA, element_info.name contains the accessible name (critical for WinUI 3 / XAML)
+                    name = (
+                        getattr(ctrl.element_info, "name", None)
+                        or (ctrl.window_text() if hasattr(ctrl, "window_text") else None)
+                        or getattr(ctrl.element_info, "automation_id", None)
+                        or ""
+                    ).strip()[:120]
+
+                    role = (
+                        getattr(ctrl.element_info, "control_type", None)
+                        or (ctrl.friendly_class_name() if hasattr(ctrl, "friendly_class_name") else None)
+                        or "element"
+                    ).lower()
+
+                    # Omit completely anonymous container panes
+                    if not name and role in ("pane", "group", "custom", "window", "element"):
+                        continue
+
+                    w = rect.right - rect.left
+                    h = rect.bottom - rect.top
+                    bounds = Rect(x=rect.left, y=rect.top, width=w, height=h) if (w > 0 and h > 0) else None
+
+                    actions = ["click"]
+                    if role in ("edit", "document"):
+                        actions = ["click", "type"]
+                    elif role in ("checkbox", "radiobutton", "togglebutton"):
+                        actions = ["click", "toggle"]
+
                     children.append(
                         UIElement(
-                            role=ctrl.friendly_class_name(),
-                            name=(ctrl.window_text() or "").strip()[:120],
-                            bounds=Rect(
-                                x=rect.left, y=rect.top,
-                                width=rect.right - rect.left,
-                                height=rect.bottom - rect.top,
-                            ),
-                            actions=["click"],
+                            role=role,
+                            name=name,
+                            bounds=bounds,
+                            actions=actions,
                         )
                     )
                 except Exception:
                     pass
         except Exception:
             pass
+
+        win_title = ""
+        try:
+            win_title = dlg.window_text() or getattr(dlg.element_info, "name", "")
+        except Exception:
+            win_title = target or ""
+
         return UIElement(
-            role="window", name=dlg.window_text(),
-            children=children, metadata={"app": target or ""},
+            role="window",
+            name=win_title,
+            children=children,
+            metadata={"app": target or ""},
         )
 
     async def perform_ui_action(
@@ -971,47 +1073,143 @@ end tell
         except ImportError as exc:
             raise CapabilityUnsupported(Capability.UI_ACTIONS, backend=self.BACKEND) from exc
 
-        try:
-            if app:
-                pa = pywinauto.Application(backend="uia").connect(
-                    title_re=f".*{app}.*", timeout=3,
-                )
-            else:
-                import ctypes
-                hwnd = ctypes.windll.user32.GetForegroundWindow()
-                pa = pywinauto.Application(backend="uia").connect(handle=hwnd)
-            dlg = pa.top_window()
-        except Exception as exc:
-            raise RuntimeError(f"Could not connect to {app!r}: {exc}") from exc
+        target_app = app or element.metadata.get("app")
+        dlg = self._find_windows_dlg(target_app)
+        if dlg is None:
+            raise RuntimeError(f"Could not connect to {target_app!r} window.")
 
         menu_path = element.metadata.get("menu_path")
         if menu_path:
-            try:
-                dlg.menu_select("->".join(menu_path))
-                return
-            except Exception as exc:
-                raise RuntimeError(f"menu_select({menu_path!r}) failed: {exc}") from exc
+            self._windows_invoke_menu_path(dlg, menu_path)
+            return
 
-        kwargs: dict[str, Any] = {}
-        if element.name:
-            kwargs["title"] = element.name
-        if element.role:
-            kwargs["control_type"] = element.role
-        if not kwargs:
+        if not element.name and not element.role:
             raise ValueError("UIElement must have name or role to locate.")
 
-        try:
-            ctrl = dlg.child_window(**kwargs)
-            if action in ("click", "press", "activate") or action.lower() == "click":
-                ctrl.click_input()
-            elif action == "toggle":
-                ctrl.toggle()
-            else:
-                ctrl.click_input()
-        except Exception as exc:
+        match_name = (element.name or "").lower().strip()
+        match_role = (element.role or "").lower().strip()
+
+        target_ctrl = None
+        for ctrl in dlg.descendants():
+            try:
+                name = (
+                    getattr(ctrl.element_info, "name", None)
+                    or (ctrl.window_text() if hasattr(ctrl, "window_text") else None)
+                    or getattr(ctrl.element_info, "automation_id", None)
+                    or ""
+                ).lower().strip()
+
+                role = (
+                    getattr(ctrl.element_info, "control_type", None)
+                    or (ctrl.friendly_class_name() if hasattr(ctrl, "friendly_class_name") else None)
+                    or ""
+                ).lower().strip()
+
+                if (not match_role or match_role in role) and (not match_name or match_name in name):
+                    if element.bounds is not None:
+                        rect = ctrl.rectangle()
+                        if abs(rect.left - element.bounds.x) < 15 and abs(rect.top - element.bounds.y) < 15:
+                            target_ctrl = ctrl
+                            break
+                    else:
+                        target_ctrl = ctrl
+                        break
+            except Exception:
+                continue
+
+        if target_ctrl is None:
             raise RuntimeError(
-                f"Could not invoke {action!r} on {element.role}:{element.name!r} in {app!r}: {exc}"
-            ) from exc
+                f"Could not find matching control role={element.role!r} name={element.name!r} in {target_app!r}."
+            )
+
+        action_l = action.lower()
+        if action_l in ("click", "press", "activate"):
+            # Prefer native UIA invocation (works without mouse movement or failsafe triggers)
+            if hasattr(target_ctrl, "invoke"):
+                try:
+                    target_ctrl.invoke()
+                    return
+                except Exception:
+                    pass
+            if hasattr(target_ctrl, "select"):
+                try:
+                    target_ctrl.select()
+                    return
+                except Exception:
+                    pass
+            try:
+                target_ctrl.click_input()
+                return
+            except Exception as exc:
+                raise RuntimeError(
+                    f"click on {element.role}:{element.name!r} in {target_app!r} failed: {exc}"
+                ) from exc
+        elif action_l == "toggle":
+            if hasattr(target_ctrl, "toggle"):
+                try:
+                    target_ctrl.toggle()
+                    return
+                except Exception as exc:
+                    raise RuntimeError(f"toggle failed: {exc}") from exc
+            try:
+                target_ctrl.click_input()
+            except Exception as exc:
+                raise RuntimeError(f"toggle (via click) failed: {exc}") from exc
+        else:
+            raise CapabilityUnsupported(Capability.UI_ACTIONS, backend=self.BACKEND)
+
+    def _windows_invoke_menu_path(self, dlg: Any, menu_path: list[str]) -> None:
+        """Invoke a hierarchical menu sequence (e.g. ['File', 'Save']) in Win32 or WinUI 3."""
+        if not menu_path:
+            return
+
+        # 1. Try classic Win32 menu_select first
+        try:
+            dlg.menu_select("->".join(menu_path))
+            return
+        except Exception:
+            pass
+
+        # 2. Modern WinUI 3 / XAML UIA menu traversal
+        from pywinauto import Desktop
+        desktop = Desktop(backend="uia")
+
+        for item_name in menu_path:
+            target_item = None
+            item_l = item_name.lower().strip()
+
+            candidates = list(dlg.descendants())
+            for w in desktop.windows():
+                if w != dlg:
+                    try:
+                        candidates.extend(w.descendants())
+                    except Exception:
+                        pass
+
+            for c in candidates:
+                try:
+                    role = (getattr(c.element_info, "control_type", None) or "").lower()
+                    name = (
+                        getattr(c.element_info, "name", None)
+                        or (c.window_text() if hasattr(c, "window_text") else None)
+                        or ""
+                    ).lower().strip()
+                    if role in ("menuitem", "button") and item_l == name:
+                        target_item = c
+                        break
+                except Exception:
+                    continue
+
+            if target_item is None:
+                raise RuntimeError(f"Menu item {item_name!r} not found in path {menu_path!r}.")
+
+            if hasattr(target_item, "invoke"):
+                target_item.invoke()
+            elif hasattr(target_item, "expand"):
+                target_item.expand()
+            else:
+                target_item.click_input()
+            time.sleep(0.3)
 
     # ------------------------------------------------------------------
     # Clipboard
