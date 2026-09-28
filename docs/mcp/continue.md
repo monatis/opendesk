@@ -16,21 +16,6 @@ Edit `.continue/config.json`:
 }
 ```
 
-## JavaScript / TypeScript
-
-```json
-{
-  "mcpServers": [
-    {
-      "name": "opendesk",
-      "command": "node",
-      "args": ["/path/to/node_modules/@vitalops/opendesk-sdk/bin/opendesk-mcp.js"],
-      "transport": "stdio"
-    }
-  ]
-}
-```
-
 ---
 
 ## Any other MCP client

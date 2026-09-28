@@ -15,13 +15,6 @@ pip install 'opendesk[core,mcp]'
 opendesk install
 ```
 
-Or with JavaScript:
-
-```bash
-npm install @vitalops/opendesk-sdk
-npx opendesk-js install
-```
-
 ### 2. Set Up TaskFlow (the Example App)
 
 ```bash

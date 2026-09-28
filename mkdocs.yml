@@ -65,7 +65,6 @@ nav:
   - Getting Started:
     - getting-started/index.md
     - Python: getting-started/python.md
-    - JavaScript / TypeScript: getting-started/javascript.md
   - MCP:
     - mcp/index.md
     - Install: mcp/install.md
@@ -80,7 +79,6 @@ nav:
     - Anthropic SDK: integrations/anthropic.md
     - OpenAI: integrations/openai.md
     - LangChain: integrations/langchain.md
-    - JavaScript SDK: integrations/javascript.md
     - Custom: integrations/custom.md
   - Tools:
     - tools/index.md
@@ -114,10 +112,11 @@ nav:
     - Frames & Errors: protocol/frames.md
     - Session & Methods: protocol/session.md
     - Discovery & Admin: protocol/discovery.md
-  - Remote — Python:
+  - Remote:
     - remote/index.md
     - Setup: remote/setup.md
     - Running: remote/running.md
+    - Internet Remote Transport: remote/internet-transport.md
     - MCP Integration: remote/mcp.md
     - Security: remote/security.md
     - CLI Reference: remote/cli.md
@@ -125,14 +124,3 @@ nav:
     - Concurrency: remote/concurrency.md
     - Programmatic Use: remote/programmatic.md
     - Troubleshooting: remote/troubleshooting.md
-  - Remote — JS/TS:
-    - remote-js/index.md
-    - Setup: remote-js/setup.md
-    - Running: remote-js/running.md
-    - MCP Integration: remote-js/mcp.md
-    - Audit Log: remote-js/audit.md
-    - Security: remote-js/security.md
-    - CLI Reference: remote-js/cli.md
-    - Concurrency: remote-js/concurrency.md
-    - Programmatic Use: remote-js/programmatic.md
-    - Troubleshooting: remote-js/troubleshooting.md

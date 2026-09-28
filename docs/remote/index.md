@@ -25,10 +25,11 @@ flowchart LR
 
 - [Setup](setup.md) — one-time pairing
 - [Running](running.md) — `opendesk serve` and `opendesk connect`
+- [Internet Remote Transport](internet-transport.md) — zero-inbound rendezvous & relay across NATs/firewalls
 - [MCP Integration](mcp.md) — peer resolution, admin tools, agent example
 - [Security](security.md) — threat model, files on disk
 - [CLI Reference](cli.md)
 - [Service Install](service.md) — survive reboots
 - [Concurrency](concurrency.md) — single-controller policy, disconnect vs unpair
-- [Programmatic Use](programmatic.md) — Python and JS APIs
+- [Programmatic Use](programmatic.md) — Python API
 - [Troubleshooting](troubleshooting.md)

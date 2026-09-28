@@ -19,19 +19,6 @@ To remove it later:
 claude mcp remove opendesk
 ```
 
-## JavaScript / TypeScript
-
-```bash
-npm install @vitalops/opendesk-sdk
-npx opendesk-js install
-```
-
-To remove:
-
-```bash
-npx opendesk-js uninstall
-```
-
 ---
 
 Now start a conversation in Claude Code and ask:

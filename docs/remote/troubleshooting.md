@@ -29,7 +29,3 @@ That's deliberate. Run `opendesk_use <name>` from the agent (or pass `peer: <nam
 **Permissions on macOS.**
 
 `opendesk serve` needs Accessibility + Screen Recording permission to drive mouse/keyboard and capture the screen — same as the local CLI. Grant them to the Python / terminal binary running `opendesk serve`.
-
----
-
-Using the JavaScript SDK instead? The [Remote JS/TS guide →](../remote-js/index.md) mirrors this flow with JS-native tooling.

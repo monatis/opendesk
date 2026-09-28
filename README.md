@@ -9,7 +9,6 @@ Opendesk is a computer use framework that lets AI agents navigate your computer 
 **macOS · Linux · Windows**
 
 [![PyPI](https://img.shields.io/pypi/v/opendesk?label=pypi%20opendesk)](https://pypi.org/project/opendesk/)
-[![npm](https://img.shields.io/npm/v/@vitalops/opendesk-sdk?label=npm%20opendesk-sdk)](https://www.npmjs.com/package/@vitalops/opendesk-sdk)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-vitalops.github.io-blue)](https://vitalops.github.io/opendesk/docs/)
 
@@ -42,14 +41,13 @@ https://github.com/user-attachments/assets/659c9e30-e8f6-4a5a-ab81-0fa7ccaf8fb8
 
 ---
 
-## SDKs
+## Installation
 
-| Language | Location | Package | Install |
-|----------|----------|---------|---------|
-| Python | [`python/`](python/) | `opendesk` (PyPI) | `pip install 'opendesk[core,mcp]'` |
-| JavaScript / TypeScript | [`js/`](js/) | `@vitalops/opendesk-sdk` (npm) | `npm install @vitalops/opendesk-sdk` |
+```bash
+pip install 'opendesk[core,mcp]'
+```
 
-More SDKs can be added to this repo following the same pattern.
+> Requires Python 3.10+
 
 ---
 
@@ -57,23 +55,13 @@ More SDKs can be added to this repo following the same pattern.
 
 opendesk works as an MCP server with any MCP-compatible client — Claude Code, Claude Desktop, Cursor, Windsurf, Continue, or any custom tool.
 
-### Python
+### Quick Setup (Claude Code)
 
 ```bash
-pip install 'opendesk[core,mcp]'
 opendesk install        # shortcut for Claude Code
 ```
 
-> Requires Python 3.10+
-
-### JavaScript / TypeScript
-
-```bash
-npm install @vitalops/opendesk-sdk
-npx opendesk-js install        # shortcut for Claude Code
-```
-
-### Other MCP clients (Cursor, Windsurf, Continue, custom)
+### Other MCP clients (Claude Desktop, Cursor, Windsurf, Continue, custom)
 
 Point your client at the `opendesk-mcp` binary:
 
@@ -81,19 +69,6 @@ Point your client at the `opendesk-mcp` binary:
 {
   "mcpServers": {
     "opendesk": { "command": "opendesk-mcp" }
-  }
-}
-```
-
-For JS:
-
-```json
-{
-  "mcpServers": {
-    "opendesk": {
-      "command": "node",
-      "args": ["/path/to/node_modules/@vitalops/opendesk-sdk/bin/opendesk-mcp.js"]
-    }
   }
 }
 ```
@@ -110,11 +85,9 @@ Replay everything from this session
 
 ---
 
-## SDK usage
+## Python SDK usage
 
-Use opendesk programmatically in your own agent or app.
-
-### Python
+Use opendesk programmatically in your own agent or app:
 
 ```python
 from opendesk import create_registry, allow_all_context
@@ -123,16 +96,6 @@ registry = create_registry()
 ctx = allow_all_context()
 
 result = await registry.get("screenshot").execute(ctx, ...)
-```
-
-### JavaScript / TypeScript
-
-```typescript
-import { OpenDeskClient } from "@vitalops/opendesk-sdk";
-
-const client = new OpenDeskClient();
-await client.screenshot({ marks: true });
-await client.ui({ action: "click", app: "Safari", title: "Go" });
 ```
 
 ---
@@ -290,7 +253,7 @@ Full guide → [docs/remote.md](docs/remote.md)
 ```bash
 pip install opendesk                              # core framework only
 pip install 'opendesk[core,mcp]'                  # + screen capture + MCP server (recommended)
-pip install 'opendesk[core,mcp,remote]'           # + control another machine over LAN
+pip install 'opendesk[core,mcp,remote]'           # + control another machine over LAN & Internet
 pip install 'opendesk[core,mcp,learn]'            # + task recording and replay
 pip install 'opendesk[core,mcp,learn,schedule]'   # + scheduled tasks
 pip install 'opendesk[all]'                       # everything
@@ -310,7 +273,8 @@ pip install 'opendesk[all]'                       # everything
 | App control | `open -a` | `xdg-open` | `start` |
 | Task recording | ✓ | ✓ | ✓ |
 | Scheduled tasks | ✓ | ✓ | ✓ |
-| Remote control (LAN) | ✓ | ✓ | ✓ |
+| Remote control (LAN & Internet / NAT) | ✓ | ✓ | ✓ |
+| Rendezvous signaling & relay | ✓ | ✓ | ✓ |
 | LAN discovery (mDNS) | ✓ | ✓ | ✓ |
 
 ---

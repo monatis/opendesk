@@ -20,88 +20,57 @@ asyncio.run(main())
 `remote` is a full `Computer` — drop it into any existing opendesk
 `ToolContext` and every tool transparently targets the remote machine.
 
-## JavaScript / TypeScript
+## Over the Internet (Rendezvous & Direct P2P)
 
-Install the SDK:
+```python
+import asyncio
+from opendesk.remote import connect
 
-```bash
-npm install @vitalops/opendesk-sdk
+async def main():
+    # Connects over the Internet using stored rendezvous URL or explicit URL
+    remote = await connect(
+        "cloud-vm",
+        rendezvous="ws://rendezvous.example.com:8424",
+        rendezvous_token="secret",
+        enable_p2p=True,  # tries direct P2P first, falls back to relay
+    )
+    try:
+        pix = await remote.capture()
+        print(f"Captured screen: {pix.width}x{pix.height}")
+    finally:
+        await remote.aclose()
+
+asyncio.run(main())
 ```
 
-Connect to a paired peer by name:
+## Running an Outbound Server (Python)
 
-```typescript
-import { connect } from "@vitalops/opendesk-sdk";
+```python
+import asyncio
+from pathlib import Path
+from opendesk.computer.local import LocalComputer
+from opendesk.protocol.auth import Identity, TrustedPeers
+from opendesk.remote.server import OpendeskServer
 
-const remote = await connect("mini");         // looks up ~/.opendesk/trusted-peers.json
-const shot   = await remote.capture();
-console.log(shot.width, shot.height);
-await remote.close();
-```
+async def run_server():
+    computer = LocalComputer()
+    home = Path.home() / ".opendesk"
+    identity = Identity.load_or_create(home)
+    trusted = TrustedPeers(home)
 
-Or connect to a `DiscoveredPeer` from `discover()`:
+    server = OpendeskServer(
+        computer,
+        identity,
+        trusted,
+        home=home,
+        listen=False,  # Zero inbound open ports
+        rendezvous="ws://rendezvous.example.com:8424",
+        rendezvous_token="secret",
+    )
+    await server.start()
+    await server.serve_forever()
 
-```typescript
-import { discover, connect } from "@vitalops/opendesk-sdk";
-
-const [peer] = await discover(2000);
-const remote = await connect(peer);           // { host, port, publicKey }
-```
-
-Or by explicit URL (useful without a paired key store):
-
-```typescript
-const remote = await connect("ws://192.168.1.42:8423#<pubkey-hex>");
-```
-
-`RemoteComputer` exposes the same surface as the local computer — `capture()`,
-`cursor()`, `pointer()`, `key()`, `windows()`, `clipboard()`, `uiTree()`,
-`shell()`, and more. Auto-reconnect with exponential back-off is on by default.
-
-### Serve from Node.js
-
-```typescript
-import { OpendeskServer, Identity, TrustedPeers } from "@vitalops/opendesk-sdk";
-import { createRegistry, allowAllContext } from "@vitalops/opendesk-sdk";
-
-const identity = Identity.loadOrCreate();           // ~/.opendesk/identity.key
-const trusted  = new TrustedPeers();                // ~/.opendesk/trusted-peers.json
-const registry = createRegistry();
-const ctx      = allowAllContext();
-
-const server = new OpendeskServer(identity, trusted, {
-  dispatcherFactory: () => registry.makeDispatcher(ctx),
-});
-await server.start();
-console.log("Listening on port", server.port);
-```
-
-### Pairing from Node.js
-
-```typescript
-import { pairWith } from "@vitalops/opendesk-sdk";
-
-const { remote, serverPubkey } = await pairWith(
-  "192.168.1.42", 8423, "428901",
-  { name: "mini" },
-);
-// remote is a connected RemoteComputer; serverPubkey is a Buffer
-```
-
-### Identity and peer storage
-
-Both Python and JS share `~/.opendesk/trusted-peers.json` (same snake_case keys),
-so pairing done with the Python CLI is immediately usable from the JS SDK and vice versa.
-
-```typescript
-import { Identity, TrustedPeers, fingerprint } from "@vitalops/opendesk-sdk";
-
-const identity = Identity.loadOrCreate();
-console.log(fingerprint(identity.publicBytes));     // e.g. 9c2f:1abc:b3d4:8870
-
-const peers = new TrustedPeers();
-console.log(peers.list());
-peers.setDefault("mini");
+asyncio.run(run_server())
 ```
 
 ---

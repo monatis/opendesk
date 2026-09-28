@@ -27,7 +27,3 @@ async def strict_policy(tool: str, argument: str, description: str) -> None:
 ctx = ToolContext(session_id="langchain", permission_handler=strict_policy)
 tools = as_langchain_tools(create_registry(), ctx=ctx)
 ```
-
----
-
-Working in Node.js? The [JavaScript SDK →](javascript.md) covers Vercel AI SDK, LangChain.js, and native MCP.

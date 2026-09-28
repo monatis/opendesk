@@ -15,7 +15,7 @@ Thanks for your interest in contributing!
 
 ## Getting started
 
-### Python SDK
+### Development Setup
 
 ```bash
 git clone https://github.com/vitalops/opendesk
@@ -27,14 +27,6 @@ Run tests:
 
 ```bash
 pytest
-```
-
-### JavaScript / TypeScript SDK
-
-```bash
-cd opendesk/js
-npm install
-npm run build
 ```
 
 ---
@@ -52,7 +44,7 @@ npm run build
 
 Please include:
 - OS and version
-- Python or Node.js version
+- Python version
 - Steps to reproduce
 - What you expected vs what happened
 

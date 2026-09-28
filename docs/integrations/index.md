@@ -8,5 +8,4 @@ opendesk tools can be used with any agentic harness.
 | Anthropic SDK | [Anthropic SDK](anthropic.md) |
 | OpenAI / compatible | [OpenAI](openai.md) |
 | LangChain / LangGraph | [LangChain](langchain.md) |
-| JavaScript / TypeScript SDK | [JavaScript SDK](javascript.md) |
 | Custom / generic | [Custom](custom.md) |

@@ -26,19 +26,6 @@ If `opendesk-mcp` is not on your PATH (e.g. in a virtualenv), use the full path:
 }
 ```
 
-## JavaScript / TypeScript
-
-```json
-{
-  "mcpServers": {
-    "opendesk": {
-      "command": "node",
-      "args": ["/path/to/node_modules/@vitalops/opendesk-sdk/bin/opendesk-mcp.js"]
-    }
-  }
-}
-```
-
 Restart Claude Desktop. The tools appear in the toolbar.
 
 ---

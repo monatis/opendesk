@@ -8,7 +8,6 @@
 
 getting-started/index
 getting-started/python
-getting-started/javascript
 ```
 
 ```{toctree}
@@ -33,7 +32,6 @@ integrations/index
 integrations/anthropic
 integrations/openai
 integrations/langchain
-integrations/javascript
 integrations/custom
 ```
 
@@ -91,11 +89,12 @@ protocol/discovery
 
 ```{toctree}
 :maxdepth: 2
-:caption: Remote — Python
+:caption: Remote
 
 remote/index
 remote/setup
 remote/running
+remote/internet-transport
 remote/mcp
 remote/security
 remote/cli
@@ -103,20 +102,4 @@ remote/service
 remote/concurrency
 remote/programmatic
 remote/troubleshooting
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: Remote — JS/TS
-
-remote-js/index
-remote-js/setup
-remote-js/running
-remote-js/mcp
-remote-js/audit
-remote-js/security
-remote-js/cli
-remote-js/concurrency
-remote-js/programmatic
-remote-js/troubleshooting
 ```
