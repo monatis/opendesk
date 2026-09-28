@@ -91,7 +91,7 @@ def _systemd_unit_path() -> Path:
 
 
 def _render_systemd_unit(python: str, port: int, home: Optional[Path]) -> str:
-    home_arg = f" --home {home}" if home else ""
+    home_arg = f" --home {home.as_posix()}" if home else ""
     return f"""[Unit]
 Description=opendesk serve — control this machine from a paired controller
 After=network-online.target
@@ -146,7 +146,7 @@ def _render_launchd_plist(python: str, port: int, home: Optional[Path]) -> str:
     home_dir = Path(home) if home else Path.home() / ".opendesk"
     args = [python, "-m", "opendesk.cli", "serve", "--port", str(port)]
     if home is not None:
-        args.extend(["--home", str(home)])
+        args.extend(["--home", home.as_posix()])
     args_xml = "\n        ".join(f"<string>{_xml(a)}</string>" for a in args)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

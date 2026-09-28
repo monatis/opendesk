@@ -9,6 +9,7 @@ passphrase is a v2 concern.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 import tempfile
@@ -117,8 +118,12 @@ def _atomic_write_secret(path: Path, data: bytes) -> None:
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
     try:
         os.write(fd, data)
-        os.fchmod(fd, 0o600)
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
         os.close(fd)
+        if not hasattr(os, "fchmod"):
+            with contextlib.suppress(OSError):
+                os.chmod(tmp, 0o600)
         os.replace(tmp, path)
     except BaseException:
         try:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -37,6 +38,7 @@ class TestIdentity:
         # Second call must load the existing key, not generate a new one.
         assert a.public_bytes == b.public_bytes
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions do not apply on Windows")
     def test_file_is_owner_only(self, tmp_path: Path):
         Identity.load_or_create(tmp_path)
         path = tmp_path / "identity.key"

@@ -64,6 +64,7 @@ class TrustedPeer:
     description_override: str = ""
     last_host: str = ""
     last_port: int = 0
+    rendezvous_url: str = ""
 
     @property
     def public_bytes(self) -> bytes:
@@ -107,6 +108,7 @@ class TrustedPeers:
                     description_override=item.get("description_override", "") or "",
                     last_host=item.get("last_host", "") or "",
                     last_port=int(item.get("last_port") or 0),
+                    rendezvous_url=item.get("rendezvous_url", "") or "",
                 ))
             except (KeyError, ValueError, TypeError):
                 continue
@@ -139,28 +141,37 @@ class TrustedPeers:
                 return p
         return None
 
-    def add(self, public_key: bytes, *, name: str = "") -> TrustedPeer:
+    def add(
+        self,
+        public_key: bytes,
+        *,
+        name: str = "",
+        rendezvous_url: str = "",
+    ) -> TrustedPeer:
         """Add or update a trusted peer.  Returns the stored entry."""
         peers = self._load()
         hex_key = public_key.hex()
         for i, p in enumerate(peers):
             if p.public_key == hex_key:
-                if name and p.name != name:
+                new_name = name or p.name
+                new_r_url = rendezvous_url or p.rendezvous_url
+                if new_name != p.name or new_r_url != p.rendezvous_url:
                     peers[i] = TrustedPeer(
-                        public_key=hex_key, name=name, paired_at=p.paired_at,
+                        public_key=hex_key, name=new_name, paired_at=p.paired_at,
                         description=p.description,
                         description_override=p.description_override,
                         last_host=p.last_host, last_port=p.last_port,
+                        rendezvous_url=new_r_url,
                     )
                     self._save(peers)
                 return peers[i]
-        peer = TrustedPeer(public_key=hex_key, name=name)
+        peer = TrustedPeer(public_key=hex_key, name=name, rendezvous_url=rendezvous_url)
         peers.append(peer)
         self._save(peers)
         return peer
 
     # ------------------------------------------------------------------
-    # Descriptions
+    # Descriptions & Endpoints
     # ------------------------------------------------------------------
 
     def cache_description(self, public_key: bytes, description: str) -> bool:
@@ -178,6 +189,7 @@ class TrustedPeers:
                     description=description,
                     description_override=p.description_override,
                     last_host=p.last_host, last_port=p.last_port,
+                    rendezvous_url=p.rendezvous_url,
                 )
                 self._save(peers)
                 return True
@@ -199,6 +211,24 @@ class TrustedPeers:
                     description=p.description,
                     description_override=p.description_override,
                     last_host=host, last_port=int(port),
+                    rendezvous_url=p.rendezvous_url,
+                )
+                self._save(peers)
+                return True
+        return False
+
+    def cache_rendezvous(self, public_key: bytes, url: str) -> bool:
+        """Update the cached rendezvous URL for cross-network connectivity."""
+        peers = self._load()
+        hex_key = public_key.hex()
+        for i, p in enumerate(peers):
+            if p.public_key == hex_key and p.rendezvous_url != url:
+                peers[i] = TrustedPeer(
+                    public_key=p.public_key, name=p.name, paired_at=p.paired_at,
+                    description=p.description,
+                    description_override=p.description_override,
+                    last_host=p.last_host, last_port=p.last_port,
+                    rendezvous_url=url,
                 )
                 self._save(peers)
                 return True
@@ -213,6 +243,7 @@ class TrustedPeers:
                     public_key=p.public_key, name=p.name, paired_at=p.paired_at,
                     description=p.description, description_override=text,
                     last_host=p.last_host, last_port=p.last_port,
+                    rendezvous_url=p.rendezvous_url,
                 )
                 self._save(peers)
                 return True
@@ -230,7 +261,12 @@ class TrustedPeers:
         peers = self._load()
         for i, p in enumerate(peers):
             if p.public_key == public_key_or_name or p.name == public_key_or_name:
-                peers[i] = TrustedPeer(public_key=p.public_key, name=new_name, paired_at=p.paired_at)
+                peers[i] = TrustedPeer(
+                    public_key=p.public_key, name=new_name, paired_at=p.paired_at,
+                    description=p.description, description_override=p.description_override,
+                    last_host=p.last_host, last_port=p.last_port,
+                    rendezvous_url=p.rendezvous_url,
+                )
                 self._save(peers)
                 return True
         return False

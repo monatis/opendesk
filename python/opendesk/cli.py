@@ -189,6 +189,34 @@ def cmd_pair(args) -> None:
         sys.exit(130)
 
 
+def cmd_rendezvous(args) -> None:
+    """Run standalone OpenDesk Rendezvous & Relay Server."""
+    from opendesk.remote.rendezvous import RendezvousServer
+
+    _configure_logging(getattr(args, "log_file", None))
+    server = RendezvousServer(
+        host=args.host,
+        port=args.port,
+        token=args.token,
+    )
+
+    async def _run() -> None:
+        await server.start()
+        print(f"opendesk rendezvous listening on {args.host}:{server.port}")
+        if args.token:
+            print("  Token authentication required")
+        try:
+            await server.serve_forever()
+        finally:
+            await server.aclose()
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        print("\nShutting down.")
+        sys.exit(0)
+
+
 def cmd_pair_with(args) -> None:
     """Master-side counterpart: connect to a peer running ``opendesk pair`` and exchange keys."""
     Identity, TrustedPeers, _, _, _ = _remote_imports()
@@ -197,8 +225,21 @@ def cmd_pair_with(args) -> None:
     home = Path(args.home).expanduser() if args.home else None
 
     async def _run() -> None:
+        rendezvous = getattr(args, "rendezvous", None)
+        target_pubkey = getattr(args, "target_pubkey", None)
+        r_token = getattr(args, "rendezvous_token", None)
+        enable_p2p = not getattr(args, "no_p2p", False)
+
         remote, server_pub = await pair_with(
-            args.host, args.port, args.code, home=home, name=args.name,
+            getattr(args, "host", None),
+            getattr(args, "port", None),
+            args.code,
+            rendezvous=rendezvous,
+            target_pubkey=target_pubkey,
+            rendezvous_token=r_token,
+            enable_p2p=enable_p2p,
+            home=home,
+            name=args.name,
         )
         await remote.aclose()
         fp = ":".join(server_pub.hex()[i : i + 4] for i in range(0, 16, 4))
@@ -254,21 +295,38 @@ def cmd_serve(args) -> None:
         from opendesk.remote.policy import AllowAllPolicy, ConsolePolicy
         policy = AllowAllPolicy() if args.approve == "auto" else ConsolePolicy()
 
+        rendezvous_urls = getattr(args, "rendezvous", None)
+        listen = not getattr(args, "no_listen", False)
+        enable_p2p = not getattr(args, "no_p2p", False)
+        r_token = getattr(args, "rendezvous_token", None)
+
         server = OpendeskServer(
             LocalComputer(), identity, trusted,
             host=args.host, port=args.port,
-            advertise_mdns=not args.no_mdns,
+            advertise_mdns=not args.no_mdns if listen else False,
             home=home,
             policy=policy,
             enable_audit=not args.no_audit,
+            rendezvous=rendezvous_urls,
+            rendezvous_token=r_token,
+            listen=listen,
+            enable_p2p=enable_p2p,
         )
         await server.start()
         fp = ":".join(identity.public_bytes.hex()[i : i + 4] for i in range(0, 16, 4))
         approve_suffix = "" if args.approve == "auto" else f"  approve={args.approve}"
-        print(
-            f"opendesk serve listening on {args.host}:{server.port}  "
-            f"fp={fp}{approve_suffix}"
-        )
+        if listen:
+            print(
+                f"opendesk serve listening on {args.host}:{server.port}  "
+                f"fp={fp}{approve_suffix}"
+            )
+        else:
+            print(
+                f"opendesk serve running outbound-only (no inbound port)  "
+                f"fp={fp}{approve_suffix}"
+            )
+        if rendezvous_urls:
+            print(f"  Connected to rendezvous: {', '.join(rendezvous_urls)}")
         try:
             await server.serve_forever()
         finally:
@@ -282,14 +340,36 @@ def cmd_serve(args) -> None:
 
 
 def cmd_discover(args) -> None:
-    """List opendesk peers visible on the LAN."""
+    """List opendesk peers visible on the LAN or registered with a Rendezvous server."""
+    from opendesk.wsl import print_advisory_if_wsl
+    print_advisory_if_wsl()
+
+    rendezvous = getattr(args, "rendezvous", None)
+    if rendezvous:
+        from opendesk.remote.rendezvous import RendezvousClient
+        client = RendezvousClient(rendezvous, token=getattr(args, "rendezvous_token", None))
+
+        async def _run_rendezvous():
+            peers = await client.list_peers(timeout=args.timeout)
+            if not peers:
+                print(f"No online opendesk peers found on rendezvous {rendezvous}.")
+                return
+            print(f"{'NAME':<24}  {'ADDR':<22}  {'FINGERPRINT':<22}  DESCRIPTION")
+            for p in peers:
+                desc = (p.description or "")[:80]
+                print(
+                    f"{p.name:<24}  {'rendezvous':<22}  "
+                    f"{p.fingerprint:<22}  {desc}"
+                )
+
+        asyncio.run(_run_rendezvous())
+        return
+
     try:
         from opendesk.remote.discovery import discover
     except ImportError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(2)
-    from opendesk.wsl import print_advisory_if_wsl
-    print_advisory_if_wsl()
 
     async def _run():
         peers = await discover(timeout=args.timeout)
@@ -317,7 +397,17 @@ def cmd_connect(args) -> None:
 
     async def _run():
         home = Path(args.home).expanduser() if args.home else None
-        remote = await connect(args.peer, home=home)
+        rendezvous = getattr(args, "rendezvous", None)
+        r_token = getattr(args, "rendezvous_token", None)
+        enable_p2p = not getattr(args, "no_p2p", False)
+
+        remote = await connect(
+            args.peer,
+            home=home,
+            rendezvous=rendezvous,
+            rendezvous_token=r_token,
+            enable_p2p=enable_p2p,
+        )
         peer_label = args.peer or "default"
         try:
             caps = remote.capabilities()
@@ -808,7 +898,12 @@ def cmd_peers(args) -> None:
         print(f"{'NAME':<22}  {'FINGERPRINT':<22}  {'LAST ENDPOINT':<22}  DESCRIPTION")
         for p in peers:
             marker = "  [default]" if p.name == default else ""
-            endpoint = f"{p.last_host}:{p.last_port}" if p.last_host else "(unknown)"
+            if p.rendezvous_url:
+                endpoint = f"rendezvous ({p.rendezvous_url})"
+            elif p.last_host:
+                endpoint = f"{p.last_host}:{p.last_port}"
+            else:
+                endpoint = "(unknown)"
             desc = p.effective_description.splitlines()[0] if p.effective_description else ""
             desc = desc[:60] + "…" if len(desc) > 60 else desc
             print(
@@ -822,6 +917,19 @@ def cmd_peers(args) -> None:
         else:
             print(f"No peer matched {args.target!r}.", file=sys.stderr)
             sys.exit(1)
+    elif action == "rendezvous":
+        peer = store.find_by_name(args.name)
+        if peer is None:
+            print(f"No trusted peer named {args.name!r}.", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "url", None):
+            store.cache_rendezvous(peer.public_bytes, args.url)
+            print(f"Rendezvous URL for {args.name} set to: {args.url}")
+        else:
+            if peer.rendezvous_url:
+                print(peer.rendezvous_url)
+            else:
+                print("(no rendezvous URL set)")
     elif action == "describe":
         cmd_peers_describe(args)
         return
@@ -921,6 +1029,22 @@ def main() -> None:
     serve_p.add_argument("--home", default=None)
     serve_p.add_argument("--no-mdns", action="store_true")
     serve_p.add_argument(
+        "--rendezvous", action="append", default=[],
+        help="Rendezvous / relay server URL for Internet control (can be given multiple times)",
+    )
+    serve_p.add_argument(
+        "--rendezvous-token", default=None,
+        help="Authentication token for the rendezvous server",
+    )
+    serve_p.add_argument(
+        "--no-listen", action="store_true",
+        help="Run outbound-only without opening an inbound listening port",
+    )
+    serve_p.add_argument(
+        "--no-p2p", action="store_true",
+        help="Force relay-only transport; disable direct P2P connection attempts",
+    )
+    serve_p.add_argument(
         "--approve",
         choices=["auto", "console"],
         default="auto",
@@ -952,20 +1076,29 @@ def main() -> None:
         "pair-with",
         help="Pair this machine with a peer running `opendesk pair`",
     )
-    pw_p.add_argument("host", help="Hostname or IP of the controlled machine")
+    pw_p.add_argument("host", nargs="?", default="", help="Hostname or IP of the controlled machine")
     pw_p.add_argument("code", help="6-digit code shown on the peer")
     pw_p.add_argument("--port", type=int, default=8423)
     pw_p.add_argument("--name", default="", help="Friendly name for the new peer")
+    pw_p.add_argument("--rendezvous", default=None, help="Rendezvous server URL for Internet pairing")
+    pw_p.add_argument("--target-pubkey", default=None, help="Peer public key (hex) when pairing via rendezvous")
+    pw_p.add_argument("--rendezvous-token", default=None)
+    pw_p.add_argument("--no-p2p", action="store_true")
     pw_p.add_argument("--home", default=None)
 
-    disc_p = sub.add_parser("discover", help="List opendesk peers on the LAN")
+    disc_p = sub.add_parser("discover", help="List opendesk peers on the LAN or rendezvous")
     disc_p.add_argument("--timeout", type=float, default=2.0)
+    disc_p.add_argument("--rendezvous", default=None, help="Rendezvous server URL to query")
+    disc_p.add_argument("--rendezvous-token", default=None)
 
     conn_p = sub.add_parser("connect", help="Open a paired peer and confirm it works")
     conn_p.add_argument(
         "peer", nargs="?",
         help="Friendly name from `opendesk peers list`.  Omit to use the persistent default.",
     )
+    conn_p.add_argument("--rendezvous", default=None, help="Rendezvous server URL to connect across the Internet")
+    conn_p.add_argument("--rendezvous-token", default=None)
+    conn_p.add_argument("--no-p2p", action="store_true", help="Force relay-only transport")
     conn_p.add_argument("--screenshot", default=None, help="Path to save a captured screenshot")
     conn_p.add_argument("--home", default=None)
 
@@ -1115,6 +1248,22 @@ def main() -> None:
     pdesc_p.add_argument("text", nargs="?", help="New override; omit to show current.")
     pdesc_p.add_argument("--clear", action="store_true", help="Remove the override.")
     pdesc_p.add_argument("--home", default=None)
+    prend_p = peers_sub.add_parser(
+        "rendezvous",
+        help="Get / set the rendezvous server URL for a trusted peer.",
+    )
+    prend_p.add_argument("name", help="Peer name from `opendesk peers list`")
+    prend_p.add_argument("url", nargs="?", help="Rendezvous URL; omit to show current.")
+    prend_p.add_argument("--home", default=None)
+
+    rendezvous_p = sub.add_parser(
+        "rendezvous",
+        help="Run a self-hosted OpenDesk Rendezvous & Relay Server for Internet remote connectivity",
+    )
+    rendezvous_p.add_argument("--host", default="0.0.0.0", help="Interface to bind (default 0.0.0.0)")
+    rendezvous_p.add_argument("--port", type=int, default=8424, help="WebSocket port (default 8424)")
+    rendezvous_p.add_argument("--token", default=None, help="Optional authentication token required for clients")
+    rendezvous_p.add_argument("--log-file", default=None, help="Path to a rotating log file")
 
     args = parser.parse_args()
 
@@ -1130,6 +1279,8 @@ def main() -> None:
         cmd_pair_with(args)
     elif args.command == "serve":
         cmd_serve(args)
+    elif args.command == "rendezvous":
+        cmd_rendezvous(args)
     elif args.command == "discover":
         cmd_discover(args)
     elif args.command == "connect":

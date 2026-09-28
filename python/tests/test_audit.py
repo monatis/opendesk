@@ -14,6 +14,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -33,6 +34,7 @@ from tests._fakes import FakeComputer
 
 
 class TestAuditLogFile:
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions do not apply on Windows")
     @pytest.mark.asyncio
     async def test_creates_directory_with_secure_mode(self, tmp_path: Path):
         AuditLog(home=tmp_path)
@@ -129,6 +131,7 @@ class TestAuditLogFile:
             obj = json.loads(line)
             assert obj["type"] == "call"
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions do not apply on Windows")
     @pytest.mark.asyncio
     async def test_file_mode_0600(self, tmp_path: Path):
         log = AuditLog(home=tmp_path)

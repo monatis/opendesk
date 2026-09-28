@@ -233,6 +233,10 @@ class OpendeskServer:
         policy: Optional[Policy] = None,
         audit: Optional[AuditLog] = None,
         enable_audit: bool = True,
+        rendezvous: Optional[Union[str, list[str]]] = None,
+        rendezvous_token: Optional[str] = None,
+        listen: bool = True,
+        enable_p2p: bool = True,
     ) -> None:
         self._computer = computer
         self._identity = identity
@@ -252,6 +256,18 @@ class OpendeskServer:
         else:
             self._audit = None
             self._owns_audit = False
+
+        if rendezvous is None:
+            self._rendezvous_urls: list[str] = []
+        elif isinstance(rendezvous, str):
+            self._rendezvous_urls = [u.strip() for u in rendezvous.split(",") if u.strip()]
+        else:
+            self._rendezvous_urls = list(rendezvous)
+        self._rendezvous_token = rendezvous_token
+        self._listen = listen
+        self._enable_p2p = enable_p2p
+        self._rendezvous_agents: list[Any] = []
+        self._stop_event = asyncio.Event()
 
         self._sessions = SessionRegistry()
         self._ws_server: Optional[WebSocketServer] = None
@@ -286,25 +302,44 @@ class OpendeskServer:
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
-        """Bind the WebSocket listener and start mDNS advertisement + admin IPC."""
-        if self._ws_server is not None:
+        """Bind the WebSocket listener and/or start outbound Rendezvous agents, mDNS + admin IPC."""
+        if self._ws_server is not None or self._rendezvous_agents:
             return
-        self._ws_server = await serve_websocket(
-            self._handle_connection, host=self._host, port=self._port,
-        )
-        if self._advertise_mdns:
+        if self._listen:
+            self._ws_server = await serve_websocket(
+                self._handle_connection, host=self._host, port=self._port,
+            )
+            if self._advertise_mdns:
+                try:
+                    from opendesk.remote.discovery import advertise
+                    self._mdns_handle = await advertise(
+                        name=self._service_name or _default_service_name(self._identity),
+                        port=self._ws_server.port,
+                        public_key=self._identity.public_bytes,
+                        description=read_description(self._home),
+                    )
+                except ImportError:
+                    log.warning("zeroconf not installed; mDNS advertisement disabled")
+                except Exception as exc:
+                    log.warning("mDNS advertisement failed: %s", exc)
+
+        for r_url in self._rendezvous_urls:
             try:
-                from opendesk.remote.discovery import advertise
-                self._mdns_handle = await advertise(
+                from opendesk.remote.rendezvous import RendezvousAgent
+                agent = RendezvousAgent(
+                    r_url,
+                    self._identity,
+                    self._handle_connection,
+                    token=self._rendezvous_token,
                     name=self._service_name or _default_service_name(self._identity),
-                    port=self._ws_server.port,
-                    public_key=self._identity.public_bytes,
-                    description=read_description(self._home),
+                    description_getter=lambda: read_description(self._home),
+                    enable_p2p=self._enable_p2p,
                 )
-            except ImportError:
-                log.warning("zeroconf not installed; mDNS advertisement disabled")
+                await agent.start()
+                self._rendezvous_agents.append(agent)
             except Exception as exc:
-                log.warning("mDNS advertisement failed: %s", exc)
+                log.warning("failed to connect to rendezvous %s: %s", r_url, exc)
+
         try:
             from opendesk.remote.admin import AdminServer
             self._admin_server = AdminServer(self, home=self._home)
@@ -314,7 +349,13 @@ class OpendeskServer:
             self._admin_server = None
 
     async def aclose(self) -> None:
-        """Stop accepting new connections, kill all sessions, release mDNS + admin + audit."""
+        """Stop accepting new connections, kill all sessions, release rendezvous + mDNS + admin + audit."""
+        self._stop_event.set()
+        for agent in self._rendezvous_agents:
+            with contextlib.suppress(Exception):
+                await agent.aclose()
+        self._rendezvous_agents.clear()
+
         if self._admin_server is not None:
             with contextlib.suppress(Exception):
                 await self._admin_server.aclose()
@@ -332,9 +373,12 @@ class OpendeskServer:
                 await self._audit.aclose()
 
     async def serve_forever(self) -> None:
-        if self._ws_server is None:
+        if self._ws_server is None and not self._rendezvous_agents:
             await self.start()
-        await self._ws_server.wait_closed()  # type: ignore[union-attr]
+        if self._ws_server is not None:
+            await self._ws_server.wait_closed()
+        else:
+            await self._stop_event.wait()
 
     async def __aenter__(self) -> "OpendeskServer":
         await self.start()
@@ -566,6 +610,10 @@ async def serve(
     pairing_timeout: Optional[float] = None,
     policy: Optional[Policy] = None,
     enable_audit: bool = True,
+    rendezvous: Optional[Union[str, list[str]]] = None,
+    rendezvous_token: Optional[str] = None,
+    listen: bool = True,
+    enable_p2p: bool = True,
 ) -> None:
     """Run opendesk serve until the process is interrupted.
 
@@ -582,6 +630,8 @@ async def serve(
         computer, identity, trusted,
         host=host, port=port, advertise_mdns=advertise_mdns, home=home,
         policy=policy, enable_audit=enable_audit,
+        rendezvous=rendezvous, rendezvous_token=rendezvous_token,
+        listen=listen, enable_p2p=enable_p2p,
     )
     await server.start()
     try:

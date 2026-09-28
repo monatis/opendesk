@@ -26,6 +26,13 @@ from opendesk.remote.policy import (
     OBSERVATION_METHODS,
     Policy,
 )
+from opendesk.remote.rendezvous import (
+    DirectSocketConnection,
+    RelayConnection,
+    RendezvousAgent,
+    RendezvousClient,
+    RendezvousServer,
+)
 from opendesk.remote.server import (
     OpendeskServer,
     ServerMode,
@@ -47,4 +54,9 @@ __all__ = [
     "ConsolePolicy",
     "OBSERVATION_METHODS",
     "AuditLog",
+    "RendezvousServer",
+    "RendezvousAgent",
+    "RendezvousClient",
+    "RelayConnection",
+    "DirectSocketConnection",
 ]
