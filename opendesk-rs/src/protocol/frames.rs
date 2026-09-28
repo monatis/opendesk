@@ -26,6 +26,28 @@ pub struct ErrorInfo {
     pub details: HashMap<String, serde_json::Value>,
 }
 
+impl std::fmt::Display for ErrorInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.message.is_empty() {
+            write!(f, "{}", self.code)
+        } else {
+            write!(f, "{}: {}", self.code, self.message)
+        }
+    }
+}
+
+impl std::error::Error for ErrorInfo {}
+
+impl ErrorInfo {
+    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+            details: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Frame {
@@ -102,6 +124,66 @@ fn default_protocol_version() -> u32 {
 
 fn default_true() -> bool {
     true
+}
+
+impl HelloFrame {
+    pub fn server(capabilities: HashMap<String, serde_json::Value>) -> Self {
+        Self {
+            v: PROTOCOL_VERSION,
+            role: "server".to_string(),
+            principal: String::new(),
+            auth: HashMap::new(),
+            capabilities,
+            error: None,
+        }
+    }
+
+    pub fn client() -> Self {
+        Self {
+            v: PROTOCOL_VERSION,
+            role: "client".to_string(),
+            principal: String::new(),
+            auth: HashMap::new(),
+            capabilities: HashMap::new(),
+            error: None,
+        }
+    }
+}
+
+impl ReqFrame {
+    pub fn new(id: u64, method: impl Into<String>, params: HashMap<String, serde_json::Value>) -> Self {
+        Self {
+            v: PROTOCOL_VERSION,
+            id,
+            method: method.into(),
+            stream: false,
+            params,
+        }
+    }
+}
+
+impl ResFrame {
+    pub fn ok(id: u64, result: serde_json::Value) -> Self {
+        Self {
+            v: PROTOCOL_VERSION,
+            id,
+            seq: 0,
+            end: true,
+            result: Some(result),
+            error: None,
+        }
+    }
+
+    pub fn error(id: u64, code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            v: PROTOCOL_VERSION,
+            id,
+            seq: 0,
+            end: true,
+            result: None,
+            error: Some(ErrorInfo::new(code, message)),
+        }
+    }
 }
 
 impl Frame {
