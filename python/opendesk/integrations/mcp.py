@@ -78,6 +78,7 @@ class ToolEntry:
 @dataclass
 class TextResult:
     text: str
+    is_error: bool = False
 
 
 @dataclass
@@ -129,14 +130,14 @@ class MCPDispatcher:
         if admin is not None:
             try:
                 text = await admin(self._session, dict(arguments))
+                return [TextResult(text)]
             except (MCPSessionError, Exception) as exc:
-                text = f"ERROR: {exc}"
-            return [TextResult(text)]
+                return [TextResult(f"ERROR: {exc}", is_error=True)]
 
         try:
             tool = self._registry.get(name)
         except KeyError:
-            return [TextResult(f"ERROR: unknown tool {name!r}")]
+            return [TextResult(f"ERROR: unknown tool {name!r}", is_error=True)]
 
         peer_arg: Optional[str] = None
         arguments = dict(arguments)
@@ -147,7 +148,7 @@ class MCPDispatcher:
         try:
             computer, computer_name = await self._session.resolve(peer_arg)
         except MCPSessionError as exc:
-            return [TextResult(f"ERROR: {exc}")]
+            return [TextResult(f"ERROR: {exc}", is_error=True)]
 
         ctx = ToolContext(
             session_id=f"mcp-{computer_name}",
@@ -157,14 +158,14 @@ class MCPDispatcher:
         try:
             params = tool.parse_params(arguments)
         except Exception as exc:
-            return [TextResult(f"ERROR: invalid arguments: {exc}")]
+            return [TextResult(f"ERROR: invalid arguments: {exc}", is_error=True)]
 
         result = await tool.execute(ctx, params)
 
         out: ToolResult = []
         prefix = "" if computer_name == LOCAL else f"[on {computer_name}] "
         if result.output:
-            out.append(TextResult(prefix + result.output))
+            out.append(TextResult(prefix + result.output, is_error=result.error))
         for att in result.attachments:
             if att.media_type.startswith("image/"):
                 out.append(ImageResult(att.to_base64(), att.media_type))
@@ -230,16 +231,25 @@ def create_mcp_server(
                     ))
             return converted
     else:
-        # mcp 2.x low-level Server API
-        async def handle_list_tools(params: Any, req: Any) -> mcp_types.ListToolsResult:
+        # mcp 2.x low-level Server API: entry.handler(ctx, typed_params)
+        async def handle_list_tools(ctx: Any, params: Any = None) -> mcp_types.ListToolsResult:
             tools = [
                 mcp_types.Tool(name=e.name, description=e.description, inputSchema=e.schema)
                 for e in await dispatcher.list_tools()
             ]
             return mcp_types.ListToolsResult(tools=tools)
 
-        async def handle_call_tool(params: Any, req: Any) -> mcp_types.CallToolResult:
-            out = await dispatcher.call_tool(params.name, params.arguments or {})
+        async def handle_call_tool(ctx: Any, params: Any = None) -> mcp_types.CallToolResult:
+            # MCP 2.x passes (ctx: ServerRequestContext, params: CallToolRequestParams)
+            actual_params = params if (params is not None and hasattr(params, "name")) else ctx
+            tool_name = getattr(actual_params, "name", "")
+            tool_args = getattr(actual_params, "arguments", None) or {}
+
+            try:
+                out = await dispatcher.call_tool(tool_name, tool_args)
+            except Exception as exc:
+                out = [TextResult(f"ERROR: {exc}", is_error=True)]
+
             converted: list[Any] = []
             for item in out:
                 if isinstance(item, TextResult):
@@ -248,7 +258,11 @@ def create_mcp_server(
                     converted.append(mcp_types.ImageContent(
                         type="image", data=item.data_base64, mimeType=item.mime_type,
                     ))
-            return mcp_types.CallToolResult(content=converted)
+            is_error = any(
+                isinstance(item, TextResult) and (item.is_error or item.text.startswith("ERROR:"))
+                for item in out
+            )
+            return mcp_types.CallToolResult(content=converted, isError=is_error)
 
         param_type_list = getattr(mcp_types, "PaginatedRequestParams", None)
         param_type_call = getattr(mcp_types, "CallToolRequestParams", None)

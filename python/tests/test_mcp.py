@@ -373,3 +373,26 @@ class TestCreateMCPServer:
         server = create_mcp_server(registry, session)
         assert server is not None
         assert hasattr(server, "_opendesk_dispatcher")
+
+    @pytest.mark.asyncio
+    async def test_server_call_tool_mcp2_signature(self, tmp_path: Path):
+        """Verify MCP 2.x handler(ctx, params) signature works without AttributeError."""
+        from types import SimpleNamespace
+        registry = create_registry()
+        session = MCPSession(home=tmp_path)
+        server = create_mcp_server(registry, session)
+
+        # If MCP 2.x low-level server handlers are registered:
+        handlers = getattr(server, "_request_handlers", None)
+        if handlers and "tools/call" in handlers:
+            entry = handlers["tools/call"]
+            # ctx is ServerRequestContext (does NOT have .name)
+            ctx = SimpleNamespace(client_id="test-client")
+            # params is CallToolRequestParams (has .name and .arguments)
+            params = SimpleNamespace(name="opendesk_status", arguments={})
+
+            res = await entry.handler(ctx, params)
+            assert res is not None
+            assert hasattr(res, "content")
+            assert len(res.content) > 0
+            assert "Default peer" in res.content[0].text
