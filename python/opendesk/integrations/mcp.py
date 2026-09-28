@@ -206,27 +206,54 @@ def create_mcp_server(
     dispatcher = MCPDispatcher(registry, session, permission_handler)
     server = Server("opendesk")
 
-    @server.list_tools()
-    async def list_tools() -> list[mcp_types.Tool]:
-        return [
-            mcp_types.Tool(name=e.name, description=e.description, inputSchema=e.schema)
-            for e in await dispatcher.list_tools()
-        ]
+    if hasattr(server, "list_tools"):
+        # mcp 1.x Server decorator API
+        @server.list_tools()
+        async def list_tools() -> list[mcp_types.Tool]:
+            return [
+                mcp_types.Tool(name=e.name, description=e.description, inputSchema=e.schema)
+                for e in await dispatcher.list_tools()
+            ]
 
-    @server.call_tool()
-    async def call_tool(
-        name: str, arguments: dict[str, Any],
-    ) -> list[Any]:
-        out = await dispatcher.call_tool(name, arguments)
-        converted: list[Any] = []
-        for item in out:
-            if isinstance(item, TextResult):
-                converted.append(mcp_types.TextContent(type="text", text=item.text))
-            elif isinstance(item, ImageResult):
-                converted.append(mcp_types.ImageContent(
-                    type="image", data=item.data_base64, mimeType=item.mime_type,
-                ))
-        return converted
+        @server.call_tool()
+        async def call_tool(
+            name: str, arguments: dict[str, Any],
+        ) -> list[Any]:
+            out = await dispatcher.call_tool(name, arguments)
+            converted: list[Any] = []
+            for item in out:
+                if isinstance(item, TextResult):
+                    converted.append(mcp_types.TextContent(type="text", text=item.text))
+                elif isinstance(item, ImageResult):
+                    converted.append(mcp_types.ImageContent(
+                        type="image", data=item.data_base64, mimeType=item.mime_type,
+                    ))
+            return converted
+    else:
+        # mcp 2.x low-level Server API
+        async def handle_list_tools(params: Any, req: Any) -> mcp_types.ListToolsResult:
+            tools = [
+                mcp_types.Tool(name=e.name, description=e.description, inputSchema=e.schema)
+                for e in await dispatcher.list_tools()
+            ]
+            return mcp_types.ListToolsResult(tools=tools)
+
+        async def handle_call_tool(params: Any, req: Any) -> mcp_types.CallToolResult:
+            out = await dispatcher.call_tool(params.name, params.arguments or {})
+            converted: list[Any] = []
+            for item in out:
+                if isinstance(item, TextResult):
+                    converted.append(mcp_types.TextContent(type="text", text=item.text))
+                elif isinstance(item, ImageResult):
+                    converted.append(mcp_types.ImageContent(
+                        type="image", data=item.data_base64, mimeType=item.mime_type,
+                    ))
+            return mcp_types.CallToolResult(content=converted)
+
+        param_type_list = getattr(mcp_types, "PaginatedRequestParams", None)
+        param_type_call = getattr(mcp_types, "CallToolRequestParams", None)
+        server.add_request_handler("tools/list", param_type_list, handle_list_tools)
+        server.add_request_handler("tools/call", param_type_call, handle_call_tool)
 
     # Allow callers to access state.
     server._opendesk_dispatcher = dispatcher  # type: ignore[attr-defined]

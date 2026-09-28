@@ -19,6 +19,7 @@ from opendesk.integrations.mcp import (
     PEER_AWARE_TOOLS,
     TextResult,
     ImageResult,
+    create_mcp_server,
 )
 from opendesk.integrations.mcp_session import LOCAL, MCPSession, MCPSessionError
 from opendesk.protocol.auth import Identity, TrustedPeers
@@ -363,3 +364,12 @@ def _session_with_remote(
     # without trying to discover + connect.
     session._connections[name] = remote  # type: ignore[attr-defined]
     return session
+
+
+class TestCreateMCPServer:
+    def test_create_server_succeeds(self, tmp_path: Path):
+        registry = create_registry()
+        session = MCPSession(home=tmp_path)
+        server = create_mcp_server(registry, session)
+        assert server is not None
+        assert hasattr(server, "_opendesk_dispatcher")
