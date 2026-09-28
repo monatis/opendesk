@@ -1,0 +1,846 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Internet Remote Transport (Rendezvous &amp; Relay) &#8212; opendesk</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../_static/documentation_options.js?v=7f7c277e"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'remote/internet-transport';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://vitalops.github.io/opendesk/docs/remote/internet-transport.html" />
+    <link rel="icon" href="../_static/logo.png"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="MCP Integration" href="mcp.html" />
+    <link rel="prev" title="Running" href="running.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+<aside class="bd-header-announcement" aria-label="Announcement">
+  <div class="bd-header-announcement__content">opendesk — Open Computer Use Agent for any AI framework</div>
+</aside>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt="opendesk - Home"/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt="opendesk - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/python.html">Python Quickstart</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">MCP</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../mcp/index.html">MCP Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/claude-code.html">Claude Code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../integrations/index.html">Integrations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/anthropic.html">Anthropic SDK</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/openai.html">OpenAI Function Calling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/langchain.html">LangChain / LangGraph</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/custom.html">Custom / Generic Integration</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tools</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../tools/index.html">Tools Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/ui.html"><code class="docutils literal notranslate"><span class="pre">ui</span></code> — Accessibility-based UI Interaction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/screenshot.html"><code class="docutils literal notranslate"><span class="pre">screenshot</span></code> — Screen Capture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/mouse.html"><code class="docutils literal notranslate"><span class="pre">mouse</span></code> — Mouse Control</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/keyboard.html"><code class="docutils literal notranslate"><span class="pre">keyboard</span></code> — Keyboard Input</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../automation/index.html">Automation — Learn, Replay &amp; Schedule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../automation/claude-code.html">Automation in Claude Code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../automation/python-api.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../automation/scheduler.html">Scheduler</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Architecture</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/layers.html">Computer &amp; Tools Layers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/protocol-layer.html">Protocol Layer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/remote-layer.html">Remote &amp; Integrations Layers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data-flow.html">Data Flow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/custom-tools.html">Adding a Custom Tool</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Protocol</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../protocol/index.html">Protocol Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/transport.html">Transport &amp; Encoding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/encryption.html">Encryption &amp; Identity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/pairing.html">Pairing Handshake</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/auth.html">Auth Handshake</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/frames.html">Frames &amp; Errors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/session.html">Session Lifecycle &amp; Method Namespace</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/discovery.html">Discovery, Admin IPC &amp; Cryptographic Summary</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="setup.html">One-time Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="running.html">Running</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp.html">MCP Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security.html">Trust &amp; Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="service.html">Service Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concurrency.html">Concurrency: One Controller at a Time</a></li>
+<li class="toctree-l1"><a class="reference internal" href="programmatic.html">Programmatic Use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/vitalops/opendesk" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/vitalops/opendesk/issues/new?title=Issue%20on%20page%20%2Fremote/internet-transport.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/remote/internet-transport.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Internet Remote Transport (Rendezvous & Relay)</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#core-capabilities">Core Capabilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deploying-the-rendezvous-server">1. Deploying the Rendezvous Server</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#controlled-machine-setup">2. Controlled Machine Setup</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-outbound-only">Running Outbound-Only</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#persistent-unattended-service">Persistent Unattended Service</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#one-time-pairing-across-the-internet">3. One-Time Pairing Across the Internet</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-to-the-remote-machine">4. Connecting to the Remote Machine</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-cli">Via CLI</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-python-api">Via Python API</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-mcp-for-ai-agents">Via MCP for AI Agents</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#security-model">Security Model</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="internet-remote-transport-rendezvous-relay">
+<h1>Internet Remote Transport (Rendezvous &amp; Relay)<a class="headerlink" href="#internet-remote-transport-rendezvous-relay" title="Link to this heading">#</a></h1>
+<p>Control any machine across the Internet — behind NATs, CGNAT, and corporate firewalls — with <strong>zero inbound ports</strong> open on the controlled machine.</p>
+<div class="highlight-mermaid notranslate"><div class="highlight"><pre><span></span>sequenceDiagram
+    autonumber
+    participant Controller as Controller (Agent / CLI)
+    participant Rendezvous as Rendezvous Server (Signaling &amp; Relay)
+    participant Target as Controlled Machine (Behind NAT / Firewall)
+
+    Note over Target,Rendezvous: Outbound-Only Agent Registration (No inbound ports)
+    Target-&gt;&gt;Rendezvous: Outbound WebSocket: {"action": "register", "public_key": "...", "token": "..."}
+    Rendezvous--&gt;&gt;Target: Registered ACK + Public reflexive IP:Port
+
+    Note over Controller,Target: 1. Session Negotiation
+    Controller-&gt;&gt;Rendezvous: Outbound WebSocket: {"action": "connect", "target": "&lt;target_pubkey&gt;"}
+    Rendezvous-&gt;&gt;Target: Forward: {"action": "session_request", "session_id": "..."}
+    Target-&gt;&gt;Rendezvous: Outbound WebSocket: {"action": "join", "candidates": [...]}
+    Rendezvous--&gt;&gt;Controller: Forward Agent Candidates
+
+    alt Direct P2P Available (LAN or Hole-Punched NAT)
+        Controller-&gt;&gt;Target: Direct TCP Handshake (OPENDESK-P2P:&lt;session_id&gt;)
+        Target--&gt;&gt;Controller: OK (Direct Socket Established)
+    else Symmetric NAT / Strict Firewall
+        Note over Controller,Target: Seamless Fallback to Relay
+        Controller-&gt;&gt;Rendezvous: Stream binary frames
+        Rendezvous-&gt;&gt;Target: Forward binary frames
+    end
+
+    Note over Controller,Target: End-to-End Noise Handshake (ChaCha20-Poly1305 AEAD + X25519)
+    Controller-&gt;&gt;Target: auth_hello (E2E Encrypted &amp; Signed)
+    Target--&gt;&gt;Controller: auth_response
+    Note over Controller,Target: Normal OpenDesk Computer / MCP Session Active
+</pre></div>
+</div>
+<hr class="docutils" />
+<section id="core-capabilities">
+<h2>Core Capabilities<a class="headerlink" href="#core-capabilities" title="Link to this heading">#</a></h2>
+<ol class="arabic simple">
+<li><p><strong>Zero Inbound Ports (<code class="docutils literal notranslate"><span class="pre">--no-listen</span></code>)</strong>:
+The controlled machine does not open any local listening TCP port. It initiates an outbound-only persistent WebSocket connection to your self-hosted rendezvous server.</p></li>
+<li><p><strong>Direct P2P Traversal</strong>:
+When host or reflexive candidates can reach each other (same LAN, port-mapped router, or hole-punchable NAT), the controller and controlled agent establish a direct TCP stream.</p></li>
+<li><p><strong>Seamless Relay Fallback</strong>:
+If direct connection is blocked by symmetric NATs or strict stateful firewalls, the rendezvous server acts as an opaque binary relay.</p></li>
+<li><p><strong>End-to-End Encryption Preserved</strong>:
+The Noise protocol (X25519 DH + ChaCha20-Poly1305 AEAD) operates end-to-end between controller and agent <em>over</em> the relay or direct socket. The relay forwards opaque ciphertext and cannot inspect keystrokes, display captures, or commands.</p></li>
+<li><p><strong>Persistent Unattended Reconnection</strong>:
+The controlled agent continuously monitors the rendezvous link and automatically reconnects with exponential backoff if the network or rendezvous server restarts.</p></li>
+</ol>
+</section>
+<hr class="docutils" />
+<section id="deploying-the-rendezvous-server">
+<h2>1. Deploying the Rendezvous Server<a class="headerlink" href="#deploying-the-rendezvous-server" title="Link to this heading">#</a></h2>
+<p>The rendezvous service is lightweight, stateless in storage, and self-hosted with a single command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>rendezvous<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">8424</span><span class="w"> </span>--token<span class="w"> </span><span class="s2">"your-auth-token"</span>
+</pre></div>
+</div>
+<section id="options">
+<h3>Options<a class="headerlink" href="#options" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Flag</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--host</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.0.0.0</span></code></p></td>
+<td><p>Bind IP interface</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--port</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">8424</span></code></p></td>
+<td><p>Listening port</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--token</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Optional pre-shared authentication token required by agents and controllers</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--log-file</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Path to append structured log entries</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Behind TLS reverse proxies (Caddy, Nginx, Cloudflare), terminate SSL at the proxy and point traffic to the rendezvous port:</p>
+<div class="highlight-caddy notranslate"><div class="highlight"><pre><span></span>rendezvous.example.com<span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">reverse_proxy</span><span class="w"> </span>localhost:8424
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="controlled-machine-setup">
+<h2>2. Controlled Machine Setup<a class="headerlink" href="#controlled-machine-setup" title="Link to this heading">#</a></h2>
+<section id="running-outbound-only">
+<h3>Running Outbound-Only<a class="headerlink" href="#running-outbound-only" title="Link to this heading">#</a></h3>
+<p>To run the controlled machine with no open listening ports:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>serve<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--no-listen<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--rendezvous<span class="w"> </span>ws://rendezvous.example.com:8424<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--rendezvous-token<span class="w"> </span><span class="s2">"your-auth-token"</span>
+</pre></div>
+</div>
+<p>The server:</p>
+<ul class="simple">
+<li><p>Refuses to bind local TCP port 8420 (<code class="docutils literal notranslate"><span class="pre">listen=False</span></code>).</p></li>
+<li><p>Connects outbound to <code class="docutils literal notranslate"><span class="pre">rendezvous.example.com</span></code>.</p></li>
+<li><p>Registers its static public identity key.</p></li>
+<li><p>Awaits incoming session notifications.</p></li>
+</ul>
+</section>
+<section id="persistent-unattended-service">
+<h3>Persistent Unattended Service<a class="headerlink" href="#persistent-unattended-service" title="Link to this heading">#</a></h3>
+<p>To keep the controlled machine accessible 24/7 across reboots:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>service<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--no-listen<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--rendezvous<span class="w"> </span>ws://rendezvous.example.com:8424<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--rendezvous-token<span class="w"> </span><span class="s2">"your-auth-token"</span>
+</pre></div>
+</div>
+<p>This registers an OS-level daemon (systemd on Linux, launchd on macOS, or Windows Task Scheduler).</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="one-time-pairing-across-the-internet">
+<h2>3. One-Time Pairing Across the Internet<a class="headerlink" href="#one-time-pairing-across-the-internet" title="Link to this heading">#</a></h2>
+<p>Mutual trust is established using a 6-digit one-time code over the rendezvous channel:</p>
+<ol class="arabic">
+<li><p><strong>On the controlled machine</strong>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>pair<span class="w"> </span><span class="m">987654</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--rendezvous<span class="w"> </span>ws://rendezvous.example.com:8424<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--rendezvous-token<span class="w"> </span><span class="s2">"your-auth-token"</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>On the controller machine</strong>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>pair-with<span class="w"> </span><span class="m">987654</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--rendezvous<span class="w"> </span>ws://rendezvous.example.com:8424<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--rendezvous-token<span class="w"> </span><span class="s2">"your-auth-token"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span><span class="s2">"cloud-vm"</span>
+</pre></div>
+</div>
+</li>
+</ol>
+<p>Upon completion:</p>
+<ul class="simple">
+<li><p>The controlled machine saves the controller’s public key in <code class="docutils literal notranslate"><span class="pre">~/.opendesk/trusted-peers.json</span></code>.</p></li>
+<li><p>The controller saves the controlled machine’s public key and the <code class="docutils literal notranslate"><span class="pre">rendezvous_url</span></code> in its <code class="docutils literal notranslate"><span class="pre">trusted-peers.json</span></code>.</p></li>
+<li><p>Subsequent connections require no pairing codes.</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="connecting-to-the-remote-machine">
+<h2>4. Connecting to the Remote Machine<a class="headerlink" href="#connecting-to-the-remote-machine" title="Link to this heading">#</a></h2>
+<section id="via-cli">
+<h3>Via CLI<a class="headerlink" href="#via-cli" title="Link to this heading">#</a></h3>
+<p>Connect using the stored friendly name:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>connect<span class="w"> </span>cloud-vm
+</pre></div>
+</div>
+<p>Or query online registered devices:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>discover<span class="w"> </span>--rendezvous<span class="w"> </span>ws://rendezvous.example.com:8424
+</pre></div>
+</div>
+<p>Or connect directly by hex public key:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>connect<span class="w"> </span>7a3f89e1b2c4...<span class="w"> </span>--rendezvous<span class="w"> </span>ws://rendezvous.example.com:8424
+</pre></div>
+</div>
+</section>
+<section id="via-python-api">
+<h3>Via Python API<a class="headerlink" href="#via-python-api" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">connect()</span></code> function transparently resolves stored rendezvous URLs:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.computer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span><span class="p">,</span> <span class="n">PointerAction</span><span class="p">,</span> <span class="n">PointerEvent</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.remote.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">connect</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+    <span class="c1"># Resolves 'cloud-vm' from TrustedPeers, negotiates P2P or relay</span>
+    <span class="n">remote</span> <span class="o">=</span> <span class="k">await</span> <span class="n">connect</span><span class="p">(</span><span class="s2">"cloud-vm"</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Screen capture (E2E encrypted)</span>
+        <span class="n">pix</span> <span class="o">=</span> <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Captured screen: </span><span class="si">{</span><span class="n">pix</span><span class="o">.</span><span class="n">width</span><span class="si">}</span><span class="s2">x</span><span class="si">{</span><span class="n">pix</span><span class="o">.</span><span class="n">height</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="c1"># Cursor inspection &amp; mouse move</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">cursor_position</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Cursor currently at: (</span><span class="si">{</span><span class="n">pos</span><span class="o">.</span><span class="n">x</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">pos</span><span class="o">.</span><span class="n">y</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">pointer</span><span class="p">(</span><span class="n">PointerEvent</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">PointerAction</span><span class="o">.</span><span class="n">MOVE</span><span class="p">,</span> <span class="n">point</span><span class="o">=</span><span class="n">Point</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">200</span><span class="p">)))</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
+
+<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
+<section id="via-mcp-for-ai-agents">
+<h3>Via MCP for AI Agents<a class="headerlink" href="#via-mcp-for-ai-agents" title="Link to this heading">#</a></h3>
+<p>Point Claude Code, Cursor, or any MCP client to the remote machine over the Internet:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>mcp<span class="w"> </span>--target<span class="w"> </span>cloud-vm
+</pre></div>
+</div>
+<p>Claude can now inspect, click, type, and automate the remote machine across the Internet without any port forwarding or VPNs.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="security-model">
+<h2>Security Model<a class="headerlink" href="#security-model" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Relay cannot eavesdrop</strong>: Wire frames forwarded through the rendezvous server are ChaCha20-Poly1305 AEAD authenticated ciphertexts keyed by ephemeral session secrets derived from X25519 Diffie-Hellman.</p></li>
+<li><p><strong>Strict Mutual Authentication</strong>: Unknown controllers are rejected before session dispatching occurs.</p></li>
+<li><p><strong>Single Controller Enforcement</strong>: Controlled machines enforce single active controller locks to prevent conflicting inputs.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="running.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Running</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="mcp.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">MCP Integration</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#core-capabilities">Core Capabilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deploying-the-rendezvous-server">1. Deploying the Rendezvous Server</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#controlled-machine-setup">2. Controlled Machine Setup</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-outbound-only">Running Outbound-Only</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#persistent-unattended-service">Persistent Unattended Service</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#one-time-pairing-across-the-internet">3. One-Time Pairing Across the Internet</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-to-the-remote-machine">4. Connecting to the Remote Machine</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-cli">Via CLI</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-python-api">Via Python API</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-mcp-for-ai-agents">Via MCP for AI Agents</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#security-model">Security Model</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Abhigith Neil Abraham, Fariz Rahman, Fadil Rahman
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2026, Vitalops Technologies.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

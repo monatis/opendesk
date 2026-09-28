@@ -1,0 +1,878 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>opendesk &#8212; opendesk</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="_static/documentation_options.js?v=7f7c277e"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'index';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://vitalops.github.io/opendesk/docs/index.html" />
+    <link rel="icon" href="_static/logo.png"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Getting Started" href="getting-started/index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="_static/searchtools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <script src="searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+<aside class="bd-header-announcement" aria-label="Announcement">
+  <div class="bd-header-announcement__content">opendesk — Open Computer Use Agent for any AI framework</div>
+</aside>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="#">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="_static/logo.png" class="logo__image only-light" alt="opendesk - Home"/>
+    <img src="_static/logo.png" class="logo__image only-dark pst-js-only" alt="opendesk - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="getting-started/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/python.html">Python Quickstart</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">MCP</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="mcp/index.html">MCP Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/claude-code.html">Claude Code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/claude-desktop.html">Claude Desktop</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/cursor.html">Cursor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/continue.html">Continue (VS Code)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="integrations/index.html">Integrations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/anthropic.html">Anthropic SDK</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/openai.html">OpenAI Function Calling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/langchain.html">LangChain / LangGraph</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/custom.html">Custom / Generic Integration</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tools</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tools/index.html">Tools Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/ui.html"><code class="docutils literal notranslate"><span class="pre">ui</span></code> — Accessibility-based UI Interaction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/screenshot.html"><code class="docutils literal notranslate"><span class="pre">screenshot</span></code> — Screen Capture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/mouse.html"><code class="docutils literal notranslate"><span class="pre">mouse</span></code> — Mouse Control</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/keyboard.html"><code class="docutils literal notranslate"><span class="pre">keyboard</span></code> — Keyboard Input</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="automation/index.html">Automation — Learn, Replay &amp; Schedule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="automation/claude-code.html">Automation in Claude Code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="automation/python-api.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="automation/scheduler.html">Scheduler</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Architecture</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="architecture/index.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/layers.html">Computer &amp; Tools Layers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/protocol-layer.html">Protocol Layer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/remote-layer.html">Remote &amp; Integrations Layers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/data-flow.html">Data Flow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/custom-tools.html">Adding a Custom Tool</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Protocol</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="protocol/index.html">Protocol Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/transport.html">Transport &amp; Encoding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/encryption.html">Encryption &amp; Identity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/pairing.html">Pairing Handshake</a></li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/auth.html">Auth Handshake</a></li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/frames.html">Frames &amp; Errors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/session.html">Session Lifecycle &amp; Method Namespace</a></li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/discovery.html">Discovery, Admin IPC &amp; Cryptographic Summary</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/setup.html">One-time Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/running.html">Running</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/mcp.html">MCP Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/security.html">Trust &amp; Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/service.html">Service Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/concurrency.html">Concurrency: One Controller at a Time</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/programmatic.html">Programmatic Use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/vitalops/opendesk" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/vitalops/opendesk/issues/new?title=Issue%20on%20page%20%2Findex.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="_sources/index.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>opendesk</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="opendesk">
+<h1>opendesk<a class="headerlink" href="#opendesk" title="Link to this heading">#</a></h1>
+<p><strong>Open Computer Use Agent</strong> — gives any AI agent eyes and hands on your desktop. Works with any MCP client (Claude Code, Cursor, Windsurf, Continue) and any AI framework (Anthropic SDK, OpenAI, LangChain). Runs on macOS, Linux, and Windows.</p>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/index.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/index.html#try-it-immediately-via-claude">Try it immediately via Claude</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/python.html">Python Quickstart</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#install">Install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#try-it-via-claude">Try it via Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#click-a-button-by-name">2. Click a button by name</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#type-text">3. Type text</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#full-agentic-loop">4. Full agentic loop</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#permission-modes">5. Permission modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#restrict-the-sandbox">6. Restrict the sandbox</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#next-steps">Next steps</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">MCP</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="mcp/index.html">MCP Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcp/index.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp/index.html#what-the-llm-sees">What the LLM sees</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp/index.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp/index.html#setup">Setup</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/install.html">Install</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcp/install.html#python">Python</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/claude-code.html">Claude Code</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcp/claude-code.html#python">Python</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/claude-desktop.html">Claude Desktop</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcp/claude-desktop.html#python">Python</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/cursor.html">Cursor</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcp/cursor.html#python">Python</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/continue.html">Continue (VS Code)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcp/continue.html#python">Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp/continue.html#any-other-mcp-client">Any other MCP client</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#running-the-mcp-server-in-python">Running the MCP server in Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#restricting-what-the-agent-can-do">Restricting what the agent can do</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#audit-log">Audit log</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="integrations/index.html">Integrations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/anthropic.html">Anthropic SDK</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="integrations/anthropic.html#agentic-loop-recommended">Agentic loop (recommended)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations/anthropic.html#manual-control">Manual control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations/anthropic.html#tool-definitions-format">Tool definitions format</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/openai.html">OpenAI Function Calling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="integrations/openai.html#agentic-loop">Agentic loop</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations/openai.html#with-groq">With Groq</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations/openai.html#with-ollama">With Ollama</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations/openai.html#manual-control">Manual control</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/langchain.html">LangChain / LangGraph</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="integrations/langchain.html#with-custom-context">With custom context</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/custom.html">Custom / Generic Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="integrations/custom.html#sandbox-configuration">Sandbox configuration</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tools</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tools/index.html">Tools Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/index.html#toolresult">ToolResult</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/ui.html"><code class="docutils literal notranslate"><span class="pre">ui</span></code> — Accessibility-based UI Interaction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/ui.html#actions">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/ui.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/ui.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/ui.html#platform-notes">Platform notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/screenshot.html"><code class="docutils literal notranslate"><span class="pre">screenshot</span></code> — Screen Capture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#output">Output</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/mouse.html"><code class="docutils literal notranslate"><span class="pre">mouse</span></code> — Mouse Control</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/mouse.html#actions">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/mouse.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/mouse.html#sdk-examples">SDK examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/keyboard.html"><code class="docutils literal notranslate"><span class="pre">keyboard</span></code> — Keyboard Input</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#actions">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#sdk-examples">SDK examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/app.html#actions">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/app.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/app.html#sdk-examples">SDK examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/clipboard.html#actions">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/clipboard.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/clipboard.html#sdk-examples">SDK examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/ocr.html#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/ocr.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/ocr.html#sdk-examples">SDK examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/audit.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/audit.html#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/audit.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/audit.html#what-gets-replayed">What gets replayed</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tools/learn.html#actions">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/learn.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/learn.html#sdk-examples">SDK examples</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="automation/index.html">Automation — Learn, Replay &amp; Schedule</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="automation/index.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/index.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/index.html#guides">Guides</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="automation/claude-code.html">Automation in Claude Code</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#record">Record</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#replay">Replay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#schedule">Schedule</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#manage">Manage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="automation/python-api.html">Python API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="automation/python-api.html#learn-replay">Learn &amp; Replay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/python-api.html#schedule">Schedule</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="automation/scheduler.html">Scheduler</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#start-the-background-runner">Start the background runner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#timing-formats">Timing formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#storage">Storage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#platform-support">Platform support</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Architecture</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture/index.html">Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture/index.html#layer-guide">Layer guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/layers.html">Computer &amp; Tools Layers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture/layers.html#layer-1-computer">Layer 1: <code class="docutils literal notranslate"><span class="pre">computer/</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/layers.html#computer-use-three-tier-grounding-architecture">Computer Use: Three-Tier Grounding Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/layers.html#layer-2-tools">Layer 2: <code class="docutils literal notranslate"><span class="pre">tools/</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/protocol-layer.html">Protocol Layer</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture/protocol-layer.html#layer-3-protocol">Layer 3: <code class="docutils literal notranslate"><span class="pre">protocol/</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/remote-layer.html">Remote &amp; Integrations Layers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#layer-4-remote">Layer 4: <code class="docutils literal notranslate"><span class="pre">remote/</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#layer-5-integrations">Layer 5: <code class="docutils literal notranslate"><span class="pre">integrations/</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/data-flow.html">Data Flow</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture/data-flow.html#local-call">Local call</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/data-flow.html#remote-call">Remote call</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/custom-tools.html">Adding a Custom Tool</a></li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Protocol</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="protocol/index.html">Protocol Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/transport.html">Transport &amp; Encoding</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="protocol/transport.html#transport">1. Transport</a></li>
+<li class="toctree-l2"><a class="reference internal" href="protocol/transport.html#encoding">2. Encoding</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/encryption.html">Encryption &amp; Identity</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="protocol/encryption.html#encryption">3. Encryption</a></li>
+<li class="toctree-l2"><a class="reference internal" href="protocol/encryption.html#identity-and-key-material">4. Identity and key material</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/pairing.html">Pairing Handshake</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="protocol/pairing.html#pairing-handshake-first-contact">5. Pairing handshake (first contact)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/auth.html">Auth Handshake</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="protocol/auth.html#auth-handshake-reconnect">6. Auth handshake (reconnect)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/frames.html">Frames &amp; Errors</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="protocol/frames.html#frame-types">7. Frame types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="protocol/frames.html#error-codes">8. Error codes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/session.html">Session Lifecycle &amp; Method Namespace</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="protocol/session.html#session-lifecycle">9. Session lifecycle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="protocol/session.html#method-namespace">10. Method namespace</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="protocol/discovery.html">Discovery, Admin IPC &amp; Cryptographic Summary</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="protocol/discovery.html#mdns-discovery">11. mDNS discovery</a></li>
+<li class="toctree-l2"><a class="reference internal" href="protocol/discovery.html#capability-manifest">12. Capability manifest</a></li>
+<li class="toctree-l2"><a class="reference internal" href="protocol/discovery.html#admin-ipc">13. Admin IPC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="protocol/discovery.html#cryptographic-summary">14. Cryptographic summary</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="remote/index.html">Remote Computer Use — Python / CLI</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/index.html#mental-model">Mental model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/index.html#guides">Guides</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/setup.html">One-time Setup</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/setup.html#on-the-controlled-machine">On the controlled machine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/setup.html#on-the-controller">On the controller</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/running.html">Running</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/running.html#controlled-machine">Controlled machine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/running.html#ask-claude-on-the-controller">Ask Claude (on the controller)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/running.html#controller">Controller</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/internet-transport.html#core-capabilities">Core Capabilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/internet-transport.html#deploying-the-rendezvous-server">1. Deploying the Rendezvous Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/internet-transport.html#controlled-machine-setup">2. Controlled Machine Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/internet-transport.html#one-time-pairing-across-the-internet">3. One-Time Pairing Across the Internet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/internet-transport.html#connecting-to-the-remote-machine">4. Connecting to the Remote Machine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/internet-transport.html#security-model">Security Model</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/mcp.html">MCP Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/mcp.html#ask-claude">Ask Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/mcp.html#default-peer-resolution">Default peer resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/mcp.html#agent-example">Agent example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/mcp.html#why-pairing-isnt-an-mcp-tool">Why pairing isn’t an MCP tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/security.html">Trust &amp; Security</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/security.html#what-the-threat-model-covers">What the threat model covers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/security.html#whats-not-in-v1">What’s not in v1</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/security.html#pairing-code-strength">Pairing-code strength</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/security.html#files-written-to-disk">Files written to disk</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/cli.html">CLI Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/cli.html#controlled-machine">Controlled machine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/cli.html#controller">Controller</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/service.html">Service Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/concurrency.html">Concurrency: One Controller at a Time</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/concurrency.html#disconnect-vs-unpair-the-trust-model">Disconnect vs unpair — the trust model</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/programmatic.html">Programmatic Use</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="remote/programmatic.html#python">Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/programmatic.html#over-the-internet-rendezvous-direct-p2p">Over the Internet (Rendezvous &amp; Direct P2P)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/programmatic.html#running-an-outbound-server-python">Running an Outbound Server (Python)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</div>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="right-next"
+       href="getting-started/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Getting Started</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Abhigith Neil Abraham, Fariz Rahman, Fadil Rahman
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2026, Vitalops Technologies.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>
