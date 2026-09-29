@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "opendesk-use",
+  "version": "1.0.0",
+  "description": "Control the computer UI like a human, using OpenDesk",
+  "author": {
+    "name": "ALTAI",
+    "url": "https://altai.dev"
+  },
+  "homepage": "https://github.com/altaidevorg/isanagent",
+  "license": "MIT",
+  "keywords": [
+    "opendesk",
+    "computer-use",
+    "agent-desktop,
+    "agent-computer",
+    "cowork",
+    "remote-computer"
+  ],
+  "extensions": {
+    "dev.altai.isanagent": {
+      "min_version": "0.14.0",
+      "overlay_file": "PROMPT.md"
+    }
+  }
+}
