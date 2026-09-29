@@ -7,7 +7,7 @@
 :caption: Getting Started
 
 getting-started/index
-getting-started/python
+getting-started/rust
 ```
 
 ```{toctree}
@@ -57,7 +57,6 @@ tools/learn
 
 automation/index
 automation/claude-code
-automation/python-api
 automation/scheduler
 ```
 

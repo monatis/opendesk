@@ -2,27 +2,27 @@
 
 Follow the quickstart to get up and running:
 
-| | Python |
+| | Rust |
 |---|---|
-| Package | `opendesk` (PyPI) |
-| Install | `pip install 'opendesk[core,mcp]'` |
+| Crate | `opendesk-rs` |
+| Install | `cargo install --path opendesk-rs --force` |
 | MCP register | `opendesk install` |
-| Requires | Python 3.10+ |
+| Requires | Rust 1.80+ (2024 edition) |
 
-- [Python quickstart](python.md)
+- [Rust Quickstart](rust.md)
 
 ---
 
-## Try it immediately via Claude
+## Try it immediately via Claude Code or any MCP Client
 
 Once installed and registered, open Claude Code and ask:
 
 > "Take a screenshot and tell me what's on my screen"
 
-> "Open TextEdit and type hello world"
+> "Open Notepad and type hello world"
 
 > "What apps are running?"
 
 > "Click the Save button"
 
-No code needed — Claude calls the tools automatically.
+No code needed — your agent calls the tools automatically.

@@ -64,7 +64,7 @@ nav:
   - Home: index.md
   - Getting Started:
     - getting-started/index.md
-    - Python: getting-started/python.md
+    - Rust: getting-started/rust.md
   - MCP:
     - mcp/index.md
     - Install: mcp/install.md
@@ -94,7 +94,6 @@ nav:
   - Automation:
     - automation/index.md
     - In Claude Code: automation/claude-code.md
-    - Python API: automation/python-api.md
     - Scheduler: automation/scheduler.md
   - Architecture:
     - architecture/index.md
