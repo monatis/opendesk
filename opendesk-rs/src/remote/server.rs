@@ -131,6 +131,30 @@ impl OpendeskServer {
 
         let fp = fingerprint(&self.identity.public_bytes());
 
+        // Advertise via mDNS if enabled
+        let mut _ad: Option<Advertisement> = None;
+        if self.advertise_mdns {
+            let desc = read_description(self.home.as_deref());
+            let machine_name = std::env::var("COMPUTERNAME")
+                .or_else(|_| std::env::var("HOSTNAME"))
+                .unwrap_or_else(|_| "opendesk".to_string());
+            match advertise(
+                &machine_name,
+                self.port,
+                &self.identity.public_bytes(),
+                &desc,
+            ) {
+                Ok(adv) => {
+                    info!(
+                        "mDNS advertisement started for '{}' on port {}",
+                        machine_name, self.port
+                    );
+                    _ad = Some(adv);
+                }
+                Err(e) => warn!("mDNS advertisement failed in pairing mode: {}", e),
+            }
+        }
+
         println!();
         println!("┌──────────────────────────────────────────────┐");
         println!("│  opendesk pairing                            │");

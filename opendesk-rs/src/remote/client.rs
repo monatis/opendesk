@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_tungstenite::connect_async;
 
@@ -504,6 +505,7 @@ pub async fn pair_with(
     let identity = Identity::load_or_create(home)?;
     let trusted = TrustedPeers::new(home);
 
+    let mut resolved_endpoint = ("127.0.0.1".to_string(), 8423u16);
     let (mut transport, _server_pubkey) = if let Some(r_url) = rendezvous_url {
         let target_pk = target_pubkey
             .ok_or_else(|| anyhow!("target_pubkey is required when pairing via rendezvous"))?;
@@ -521,12 +523,37 @@ pub async fn pair_with(
             super::rendezvous::connect_via_rendezvous(r_url, rendezvous_token, &target_arr).await?;
         (tr, target_arr)
     } else {
-        let host = host.ok_or_else(|| anyhow!("host is required for direct pairing"))?;
-        let port = port.unwrap_or(8423);
-        let ws_url = format!("ws://{}:{}", host, port);
+        let host_input = host.ok_or_else(|| anyhow!("host is required for direct pairing"))?;
+        let (raw_host, parsed_port) = if let Some((h, p)) = host_input.split_once(':') {
+            (h, p.parse::<u16>().ok())
+        } else {
+            (host_input, None)
+        };
+        let target_port = parsed_port.or(port).unwrap_or(8423);
+
+        let target_host = if raw_host.parse::<std::net::IpAddr>().is_err() {
+            // If raw_host is not an IP address (e.g. "old-pc"), try resolving via mDNS discovery
+            if let Ok(peers) = super::discovery::discover(Duration::from_secs(2)).await {
+                if let Some(p) = peers
+                    .into_iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(raw_host))
+                {
+                    p.host
+                } else {
+                    raw_host.to_string()
+                }
+            } else {
+                raw_host.to_string()
+            }
+        } else {
+            raw_host.to_string()
+        };
+
+        let ws_url = format!("ws://{}:{}", target_host, target_port);
         let (ws_stream, _) = connect_async(&ws_url)
             .await
             .with_context(|| format!("failed to connect to {}", ws_url))?;
+        resolved_endpoint = (target_host, target_port);
         (WebSocketTransport::new_tls(ws_stream), [0u8; 32])
     };
 
@@ -542,10 +569,8 @@ pub async fn pair_with(
     if let Some(r_url) = rendezvous_url {
         trusted.add(&verified_pubkey, &peer_name, r_url)?;
     } else {
-        let host = host.unwrap_or("127.0.0.1");
-        let port = port.unwrap_or(8423);
         trusted.add(&verified_pubkey, &peer_name, "")?;
-        trusted.cache_endpoint(&verified_pubkey, host, port)?;
+        trusted.cache_endpoint(&verified_pubkey, &resolved_endpoint.0, resolved_endpoint.1)?;
     }
 
     // Exchange Hello
@@ -621,9 +646,34 @@ pub async fn connect(
             8423
         };
         let ws_url = format!("ws://{}:{}", host, port);
-        let (ws_stream, _) = connect_async(&ws_url)
-            .await
-            .with_context(|| format!("failed to connect to {}", ws_url))?;
+        let ws_stream = match connect_async(&ws_url).await {
+            Ok((ws, _)) => ws,
+            Err(initial_err) => {
+                // If last_host failed, attempt LAN discovery by public key or name
+                let discovered =
+                    if let Ok(peers) = super::discovery::discover(Duration::from_secs(2)).await {
+                        peers.into_iter().find(|p| {
+                            p.public_key == peer_pub || p.name.eq_ignore_ascii_case(&target_name)
+                        })
+                    } else {
+                        None
+                    };
+
+                if let Some(disc) = discovered {
+                    let fallback_url = format!("ws://{}:{}", disc.host, disc.port);
+                    let (ws, _) = connect_async(&fallback_url).await.with_context(|| {
+                        format!(
+                            "failed to connect to {} (mDNS fallback for {})",
+                            fallback_url, ws_url
+                        )
+                    })?;
+                    let _ = trusted.cache_endpoint(&peer_pub, &disc.host, disc.port);
+                    ws
+                } else {
+                    return Err(anyhow!("failed to connect to {}: {}", ws_url, initial_err));
+                }
+            }
+        };
         let mut tr = WebSocketTransport::new_tls(ws_stream);
         let session = auth_client(&mut tr, &identity, &peer_pub).await?;
         (tr, session.channel)

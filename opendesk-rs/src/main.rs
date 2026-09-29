@@ -109,7 +109,7 @@ enum Commands {
 
     /// List opendesk peers visible on the LAN or rendezvous
     Discover {
-        #[arg(long, default_value_t = 2.0)]
+        #[arg(long, default_value_t = 3.0)]
         timeout: f64,
         #[arg(long)]
         rendezvous: Option<String>,
