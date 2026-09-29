@@ -2,6 +2,7 @@
 target/
 **/*.rs.bk
 Cargo.lock
+**/.opendesk/
 
 .DS_Store
 **/.DS_Store
