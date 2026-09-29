@@ -23,7 +23,7 @@ pub struct ErrorInfo {
     #[serde(default)]
     pub message: String,
     #[serde(default)]
-    pub details: HashMap<String, serde_json::Value>,
+    pub details: HashMap<String, rmpv::Value>,
 }
 
 impl std::fmt::Display for ErrorInfo {
@@ -66,9 +66,9 @@ pub struct HelloFrame {
     #[serde(default)]
     pub principal: String,
     #[serde(default)]
-    pub auth: HashMap<String, serde_json::Value>,
+    pub auth: HashMap<String, rmpv::Value>,
     #[serde(default)]
-    pub capabilities: HashMap<String, serde_json::Value>,
+    pub capabilities: HashMap<String, rmpv::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<ErrorInfo>,
 }
@@ -82,7 +82,7 @@ pub struct ReqFrame {
     #[serde(default)]
     pub stream: bool,
     #[serde(default)]
-    pub params: HashMap<String, serde_json::Value>,
+    pub params: HashMap<String, rmpv::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -95,7 +95,7 @@ pub struct ResFrame {
     #[serde(default = "default_true")]
     pub end: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub result: Option<serde_json::Value>,
+    pub result: Option<rmpv::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<ErrorInfo>,
 }
@@ -115,11 +115,11 @@ pub struct PushFrame {
     pub v: u32,
     pub topic: String,
     #[serde(default)]
-    pub payload: HashMap<String, serde_json::Value>,
+    pub payload: HashMap<String, rmpv::Value>,
 }
 
 impl PushFrame {
-    pub fn new(topic: &str, payload: HashMap<String, serde_json::Value>) -> Self {
+    pub fn new(topic: &str, payload: HashMap<String, rmpv::Value>) -> Self {
         Self {
             v: PROTOCOL_VERSION,
             topic: topic.to_string(),
@@ -137,7 +137,7 @@ fn default_true() -> bool {
 }
 
 impl HelloFrame {
-    pub fn server(capabilities: HashMap<String, serde_json::Value>) -> Self {
+    pub fn server(capabilities: HashMap<String, rmpv::Value>) -> Self {
         Self {
             v: PROTOCOL_VERSION,
             role: "server".to_string(),
@@ -161,11 +161,7 @@ impl HelloFrame {
 }
 
 impl ReqFrame {
-    pub fn new(
-        id: u64,
-        method: impl Into<String>,
-        params: HashMap<String, serde_json::Value>,
-    ) -> Self {
+    pub fn new(id: u64, method: impl Into<String>, params: HashMap<String, rmpv::Value>) -> Self {
         Self {
             v: PROTOCOL_VERSION,
             id,
@@ -177,7 +173,7 @@ impl ReqFrame {
 }
 
 impl ResFrame {
-    pub fn ok(id: u64, result: serde_json::Value) -> Self {
+    pub fn ok(id: u64, result: rmpv::Value) -> Self {
         Self {
             v: PROTOCOL_VERSION,
             id,
@@ -200,10 +196,23 @@ impl ResFrame {
     }
 }
 
-fn rmpv_to_json(val: rmpv::Value) -> serde_json::Value {
+/// Helper to extract a value by string key from an rmpv::Value::Map.
+pub fn value_get<'a>(val: &'a rmpv::Value, key: &str) -> Option<&'a rmpv::Value> {
+    if let rmpv::Value::Map(entries) = val {
+        for (k, v) in entries {
+            if k.as_str() == Some(key) {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+/// Convert rmpv::Value to serde_json::Value (for audit log recording or MCP outputs).
+pub fn rmpv_to_json(val: &rmpv::Value) -> serde_json::Value {
     match val {
         rmpv::Value::Nil => serde_json::Value::Null,
-        rmpv::Value::Boolean(b) => serde_json::Value::Bool(b),
+        rmpv::Value::Boolean(b) => serde_json::Value::Bool(*b),
         rmpv::Value::Integer(i) => {
             if let Some(v) = i.as_i64() {
                 serde_json::Value::Number(v.into())
@@ -213,10 +222,10 @@ fn rmpv_to_json(val: rmpv::Value) -> serde_json::Value {
                 serde_json::Value::Null
             }
         }
-        rmpv::Value::F32(f) => serde_json::Number::from_f64(f as f64)
+        rmpv::Value::F32(f) => serde_json::Number::from_f64(*f as f64)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
-        rmpv::Value::F64(f) => serde_json::Number::from_f64(f)
+        rmpv::Value::F64(f) => serde_json::Number::from_f64(*f)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         rmpv::Value::String(s) => match s.as_str() {
@@ -224,15 +233,15 @@ fn rmpv_to_json(val: rmpv::Value) -> serde_json::Value {
             None => serde_json::Value::String(data_encoding::BASE64.encode(s.as_bytes())),
         },
         rmpv::Value::Binary(bytes) => {
-            serde_json::Value::String(data_encoding::BASE64.encode(&bytes))
+            serde_json::Value::String(data_encoding::BASE64.encode(bytes))
         }
         rmpv::Value::Array(items) => {
-            serde_json::Value::Array(items.into_iter().map(rmpv_to_json).collect())
+            serde_json::Value::Array(items.iter().map(rmpv_to_json).collect())
         }
         rmpv::Value::Map(entries) => {
             let mut map = serde_json::Map::new();
             for (k, v) in entries {
-                let key_str = match &k {
+                let key_str = match k {
                     rmpv::Value::String(s) => s
                         .as_str()
                         .map(|str_val| str_val.to_string())
@@ -244,7 +253,35 @@ fn rmpv_to_json(val: rmpv::Value) -> serde_json::Value {
             serde_json::Value::Object(map)
         }
         rmpv::Value::Ext(_, bytes) => {
-            serde_json::Value::String(data_encoding::BASE64.encode(&bytes))
+            serde_json::Value::String(data_encoding::BASE64.encode(bytes))
+        }
+    }
+}
+
+/// Convert serde_json::Value to rmpv::Value (e.g. from MCP params or config into MessagePack values).
+pub fn json_to_rmpv(json: &serde_json::Value) -> rmpv::Value {
+    match json {
+        serde_json::Value::Null => rmpv::Value::Nil,
+        serde_json::Value::Bool(b) => rmpv::Value::Boolean(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                rmpv::Value::Integer(i.into())
+            } else if let Some(u) = n.as_u64() {
+                rmpv::Value::Integer(u.into())
+            } else if let Some(f) = n.as_f64() {
+                rmpv::Value::F64(f)
+            } else {
+                rmpv::Value::Nil
+            }
+        }
+        serde_json::Value::String(s) => rmpv::Value::from(s.as_str()),
+        serde_json::Value::Array(arr) => rmpv::Value::Array(arr.iter().map(json_to_rmpv).collect()),
+        serde_json::Value::Object(map) => {
+            let entries = map
+                .iter()
+                .map(|(k, v)| (rmpv::Value::from(k.as_str()), json_to_rmpv(v)))
+                .collect();
+            rmpv::Value::Map(entries)
         }
     }
 }
@@ -254,12 +291,8 @@ impl Frame {
         rmp_serde::to_vec_named(self)
     }
 
-    pub fn from_msgpack(bytes: &[u8]) -> anyhow::Result<Self> {
-        let rmp_val = rmpv::decode::read_value(&mut &bytes[..])
-            .map_err(|e| anyhow::anyhow!("failed to read msgpack value: {}", e))?;
-        let json_val = rmpv_to_json(rmp_val);
-        serde_json::from_value(json_val)
-            .map_err(|e| anyhow::anyhow!("failed to deserialize frame from value: {}", e))
+    pub fn from_msgpack(bytes: &[u8]) -> Result<Self, rmp_serde::decode::Error> {
+        rmp_serde::from_slice(bytes)
     }
 }
 
@@ -311,12 +344,38 @@ mod tests {
             .map(|i| u8::from_str_radix(&hex_str[i..i + 2], 16).unwrap())
             .collect();
 
-        let frame_res = Frame::from_msgpack(&bytes);
-        println!("Result: {:?}", frame_res);
-        assert!(
-            frame_res.is_ok(),
-            "Failed to unpack python res frame with binary: {:?}",
-            frame_res.err()
-        );
+        let frame: Frame = Frame::from_msgpack(&bytes).expect("unpack failed");
+        match frame {
+            Frame::Res(res) => {
+                assert_eq!(res.v, 1);
+                assert_eq!(res.id, 1);
+                let result = res.result.expect("result present");
+                let data = value_get(&result, "data").expect("data present");
+                assert_eq!(data.as_slice(), Some(&[137, 80, 78, 71][..]));
+            }
+            _ => panic!("Expected Res frame"),
+        }
+    }
+
+    #[test]
+    fn test_native_binary_roundtrip() {
+        let binary_payload = vec![0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        let frame = Frame::Res(ResFrame::ok(
+            42,
+            rmpv::Value::Map(vec![
+                (
+                    rmpv::Value::from("data"),
+                    rmpv::Value::Binary(binary_payload.clone()),
+                ),
+                (rmpv::Value::from("format"), rmpv::Value::from("png")),
+            ]),
+        ));
+
+        let bytes = frame.to_msgpack().expect("pack failed");
+        // Verify MessagePack bin marker is in the wire bytes
+        assert!(bytes.windows(2).any(|w| w[0] == 0xc4 && w[1] == 0x08));
+
+        let decoded: Frame = Frame::from_msgpack(&bytes).expect("unpack failed");
+        assert_eq!(frame, decoded);
     }
 }

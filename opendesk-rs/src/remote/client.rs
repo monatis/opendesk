@@ -11,7 +11,7 @@ use tokio_tungstenite::connect_async;
 
 use super::transport::WebSocketTransport;
 use crate::protocol::crypto::EncryptedChannel;
-use crate::protocol::frames::{Frame, HelloFrame, ReqFrame};
+use crate::protocol::frames::{Frame, HelloFrame, ReqFrame, rmpv_to_json, value_get};
 use crate::protocol::handshake::{Transport, auth_client, pair_client};
 use crate::protocol::identity::Identity;
 use crate::protocol::storage::{TrustedPeers, default_peer_name};
@@ -19,7 +19,7 @@ use crate::protocol::storage::{TrustedPeers, default_peer_name};
 pub struct RemoteComputer {
     transport: Arc<Mutex<WebSocketTransport>>,
     channel: Arc<Mutex<EncryptedChannel>>,
-    capabilities: HashMap<String, Value>,
+    capabilities: HashMap<String, rmpv::Value>,
     req_counter: AtomicU64,
 }
 
@@ -27,7 +27,7 @@ impl RemoteComputer {
     pub fn new(
         transport: WebSocketTransport,
         channel: EncryptedChannel,
-        capabilities: HashMap<String, Value>,
+        capabilities: HashMap<String, rmpv::Value>,
     ) -> Self {
         Self {
             transport: Arc::new(Mutex::new(transport)),
@@ -37,18 +37,17 @@ impl RemoteComputer {
         }
     }
 
-    pub fn capabilities(&self) -> &HashMap<String, Value> {
+    pub fn capabilities(&self) -> &HashMap<String, rmpv::Value> {
         &self.capabilities
     }
 
-    pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
+    pub async fn call(
+        &self,
+        method: &str,
+        params: HashMap<String, rmpv::Value>,
+    ) -> Result<rmpv::Value> {
         let id = self.req_counter.fetch_add(1, Ordering::SeqCst);
-        let params_map: HashMap<String, Value> = match params {
-            Value::Object(m) => m.into_iter().collect(),
-            _ => HashMap::new(),
-        };
-
-        let req = Frame::Req(ReqFrame::new(id, method, params_map));
+        let req = Frame::Req(ReqFrame::new(id, method, params));
         let req_bytes = req.to_msgpack()?;
         let ct = {
             let mut chan = self.channel.lock().await;
@@ -77,7 +76,7 @@ impl RemoteComputer {
                 Frame::Res(res) => {
                     if res.id == id {
                         if res.error.is_none() {
-                            return Ok(res.result.unwrap_or(Value::Null));
+                            return Ok(res.result.unwrap_or(rmpv::Value::Nil));
                         } else {
                             let err_msg = res
                                 .error
@@ -98,56 +97,54 @@ impl RemoteComputer {
                     }
                 }
                 Frame::Push(_) | Frame::Hello(_) | Frame::Cancel(_) | Frame::Req(_) => {
-                    // Ignore non-matching frames or push events
                     continue;
                 }
             }
         }
     }
 
-    // Convenience API methods matching LocalComputer
-    pub async fn screenshot(&self, format: &str, target: Option<&str>) -> Result<String> {
-        let params = json!({
-            "format": format,
-            "target": target,
-        });
-        let res = match self.call("computer.screenshot", params.clone()).await {
-            Ok(r) => r,
-            Err(_) => {
-                let capture_params = json!({
-                    "display_id": target,
-                    "downscale": false,
-                });
-                self.call("display.capture", capture_params).await?
+    // Convenience API methods matching Python OpenDesk RemoteComputer
+
+    pub async fn screenshot(&self, _format: &str, target: Option<&str>) -> Result<String> {
+        let bytes = self.screenshot_bytes(target).await?;
+        Ok(data_encoding::BASE64.encode(&bytes))
+    }
+
+    pub async fn screenshot_bytes(&self, target: Option<&str>) -> Result<Vec<u8>> {
+        let mut params = HashMap::new();
+        if let Some(t) = target {
+            params.insert("display_id".to_string(), rmpv::Value::from(t));
+        }
+        let res = self.call("display.capture", params).await?;
+        if let Some(data_val) = value_get(&res, "data") {
+            if let Some(bytes) = data_val.as_slice() {
+                return Ok(bytes.to_vec());
             }
-        };
-        res.get("image_base64")
-            .or_else(|| res.get("data"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| anyhow!("missing image data in response"))
+            if let Some(decoded) = data_val
+                .as_str()
+                .and_then(|s| data_encoding::BASE64.decode(s.as_bytes()).ok())
+            {
+                return Ok(decoded);
+            }
+        }
+        bail!("missing binary image data in display.capture response")
     }
 
     pub async fn mouse_move(&self, x: i32, y: i32) -> Result<()> {
-        match self
-            .call("computer.mouse_move", json!({ "x": x, "y": y }))
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call(
-                    "input.pointer",
-                    json!({
-                        "event": {
-                            "action": "move",
-                            "point": { "x": x, "y": y }
-                        }
-                    }),
-                )
-                .await?;
-                Ok(())
-            }
-        }
+        let evt = vec![
+            (rmpv::Value::from("action"), rmpv::Value::from("move")),
+            (
+                rmpv::Value::from("point"),
+                rmpv::Value::Map(vec![
+                    (rmpv::Value::from("x"), rmpv::Value::from(x)),
+                    (rmpv::Value::from("y"), rmpv::Value::from(y)),
+                ]),
+            ),
+        ];
+        let mut params = HashMap::new();
+        params.insert("event".to_string(), rmpv::Value::Map(evt));
+        self.call("input.pointer", params).await?;
+        Ok(())
     }
 
     pub async fn mouse_click(&self, x: i32, y: i32, button: Option<&str>) -> Result<()> {
@@ -156,66 +153,49 @@ impl RemoteComputer {
             Some("middle") => "middle",
             _ => "left",
         };
-        match self
-            .call(
-                "computer.mouse_click",
-                json!({ "x": x, "y": y, "button": button }),
-            )
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                let _ = self
-                    .call(
-                        "input.pointer",
-                        json!({
-                            "event": {
-                                "action": "move",
-                                "point": { "x": x, "y": y }
-                            }
-                        }),
-                    )
-                    .await;
-                self.call(
-                    "input.pointer",
-                    json!({
-                        "event": {
-                            "action": "down",
-                            "point": { "x": x, "y": y },
-                            "button": btn_str
-                        }
-                    }),
-                )
-                .await?;
-                self.call(
-                    "input.pointer",
-                    json!({
-                        "event": {
-                            "action": "up",
-                            "point": { "x": x, "y": y },
-                            "button": btn_str
-                        }
-                    }),
-                )
-                .await?;
-                Ok(())
-            }
-        }
+
+        // 1. Move to position
+        self.mouse_move(x, y).await?;
+
+        // 2. Down
+        let down_evt = vec![
+            (rmpv::Value::from("action"), rmpv::Value::from("down")),
+            (
+                rmpv::Value::from("point"),
+                rmpv::Value::Map(vec![
+                    (rmpv::Value::from("x"), rmpv::Value::from(x)),
+                    (rmpv::Value::from("y"), rmpv::Value::from(y)),
+                ]),
+            ),
+            (rmpv::Value::from("button"), rmpv::Value::from(btn_str)),
+        ];
+        let mut down_params = HashMap::new();
+        down_params.insert("event".to_string(), rmpv::Value::Map(down_evt));
+        self.call("input.pointer", down_params).await?;
+
+        // 3. Up
+        let up_evt = vec![
+            (rmpv::Value::from("action"), rmpv::Value::from("up")),
+            (
+                rmpv::Value::from("point"),
+                rmpv::Value::Map(vec![
+                    (rmpv::Value::from("x"), rmpv::Value::from(x)),
+                    (rmpv::Value::from("y"), rmpv::Value::from(y)),
+                ]),
+            ),
+            (rmpv::Value::from("button"), rmpv::Value::from(btn_str)),
+        ];
+        let mut up_params = HashMap::new();
+        up_params.insert("event".to_string(), rmpv::Value::Map(up_evt));
+        self.call("input.pointer", up_params).await?;
+        Ok(())
     }
 
     pub async fn mouse_double_click(&self, x: i32, y: i32) -> Result<()> {
-        match self
-            .call("computer.mouse_double_click", json!({ "x": x, "y": y }))
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.mouse_click(x, y, None).await?;
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                self.mouse_click(x, y, None).await?;
-                Ok(())
-            }
-        }
+        self.mouse_click(x, y, None).await?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        self.mouse_click(x, y, None).await?;
+        Ok(())
     }
 
     pub async fn mouse_drag(
@@ -225,245 +205,149 @@ impl RemoteComputer {
         end_x: i32,
         end_y: i32,
     ) -> Result<()> {
-        match self
-            .call(
-                "computer.mouse_drag",
-                json!({
-                    "start_x": start_x,
-                    "start_y": start_y,
-                    "end_x": end_x,
-                    "end_y": end_y,
-                }),
-            )
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                let _ = self
-                    .call(
-                        "input.pointer",
-                        json!({
-                            "event": {
-                                "action": "move",
-                                "point": { "x": start_x, "y": start_y }
-                            }
-                        }),
-                    )
-                    .await;
-                self.call(
-                    "input.pointer",
-                    json!({
-                        "event": {
-                            "action": "down",
-                            "point": { "x": start_x, "y": start_y },
-                            "button": "left"
-                        }
-                    }),
-                )
-                .await?;
-                self.call(
-                    "input.pointer",
-                    json!({
-                        "event": {
-                            "action": "move",
-                            "point": { "x": end_x, "y": end_y }
-                        }
-                    }),
-                )
-                .await?;
-                self.call(
-                    "input.pointer",
-                    json!({
-                        "event": {
-                            "action": "up",
-                            "point": { "x": end_x, "y": end_y },
-                            "button": "left"
-                        }
-                    }),
-                )
-                .await?;
-                Ok(())
-            }
-        }
+        self.mouse_move(start_x, start_y).await?;
+
+        let down_evt = vec![
+            (rmpv::Value::from("action"), rmpv::Value::from("down")),
+            (
+                rmpv::Value::from("point"),
+                rmpv::Value::Map(vec![
+                    (rmpv::Value::from("x"), rmpv::Value::from(start_x)),
+                    (rmpv::Value::from("y"), rmpv::Value::from(start_y)),
+                ]),
+            ),
+            (rmpv::Value::from("button"), rmpv::Value::from("left")),
+        ];
+        let mut down_params = HashMap::new();
+        down_params.insert("event".to_string(), rmpv::Value::Map(down_evt));
+        self.call("input.pointer", down_params).await?;
+
+        self.mouse_move(end_x, end_y).await?;
+
+        let up_evt = vec![
+            (rmpv::Value::from("action"), rmpv::Value::from("up")),
+            (
+                rmpv::Value::from("point"),
+                rmpv::Value::Map(vec![
+                    (rmpv::Value::from("x"), rmpv::Value::from(end_x)),
+                    (rmpv::Value::from("y"), rmpv::Value::from(end_y)),
+                ]),
+            ),
+            (rmpv::Value::from("button"), rmpv::Value::from("left")),
+        ];
+        let mut up_params = HashMap::new();
+        up_params.insert("event".to_string(), rmpv::Value::Map(up_evt));
+        self.call("input.pointer", up_params).await?;
+        Ok(())
     }
 
     pub async fn mouse_scroll(&self, x: i32, y: i32, delta_y: i32) -> Result<()> {
-        match self
-            .call(
-                "computer.mouse_scroll",
-                json!({
-                    "x": x,
-                    "y": y,
-                    "delta_y": delta_y,
-                }),
-            )
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call(
-                    "input.pointer",
-                    json!({
-                        "event": {
-                            "action": "scroll",
-                            "point": { "x": x, "y": y },
-                            "dx": 0.0,
-                            "dy": delta_y as f64
-                        }
-                    }),
-                )
-                .await?;
-                Ok(())
-            }
-        }
+        let evt = vec![
+            (rmpv::Value::from("action"), rmpv::Value::from("scroll")),
+            (
+                rmpv::Value::from("point"),
+                rmpv::Value::Map(vec![
+                    (rmpv::Value::from("x"), rmpv::Value::from(x)),
+                    (rmpv::Value::from("y"), rmpv::Value::from(y)),
+                ]),
+            ),
+            (rmpv::Value::from("dx"), rmpv::Value::from(0.0)),
+            (rmpv::Value::from("dy"), rmpv::Value::from(delta_y as f64)),
+        ];
+        let mut params = HashMap::new();
+        params.insert("event".to_string(), rmpv::Value::Map(evt));
+        self.call("input.pointer", params).await?;
+        Ok(())
     }
 
     pub async fn keyboard_type(&self, text: &str) -> Result<()> {
-        match self
-            .call("computer.keyboard_type", json!({ "text": text }))
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call(
-                    "input.text",
-                    json!({
-                        "text_input": {
-                            "text": text,
-                            "interval_ms": 10
-                        }
-                    }),
-                )
-                .await?;
-                Ok(())
-            }
-        }
+        let ti = vec![
+            (rmpv::Value::from("text"), rmpv::Value::from(text)),
+            (rmpv::Value::from("interval_ms"), rmpv::Value::from(10)),
+        ];
+        let mut params = HashMap::new();
+        params.insert("text_input".to_string(), rmpv::Value::Map(ti));
+        self.call("input.text", params).await?;
+        Ok(())
     }
 
     pub async fn keyboard_press(&self, key: &str) -> Result<()> {
-        match self
-            .call("computer.keyboard_press", json!({ "key": key }))
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call(
-                    "input.key",
-                    json!({
-                        "event": {
-                            "action": "down",
-                            "keysym": key
-                        }
-                    }),
-                )
-                .await?;
-                self.call(
-                    "input.key",
-                    json!({
-                        "event": {
-                            "action": "up",
-                            "keysym": key
-                        }
-                    }),
-                )
-                .await?;
-                Ok(())
-            }
-        }
+        let down_evt = vec![
+            (rmpv::Value::from("action"), rmpv::Value::from("down")),
+            (rmpv::Value::from("keysym"), rmpv::Value::from(key)),
+        ];
+        let mut down_params = HashMap::new();
+        down_params.insert("event".to_string(), rmpv::Value::Map(down_evt));
+        self.call("input.key", down_params).await?;
+
+        let up_evt = vec![
+            (rmpv::Value::from("action"), rmpv::Value::from("up")),
+            (rmpv::Value::from("keysym"), rmpv::Value::from(key)),
+        ];
+        let mut up_params = HashMap::new();
+        up_params.insert("event".to_string(), rmpv::Value::Map(up_evt));
+        self.call("input.key", up_params).await?;
+        Ok(())
     }
 
     pub async fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
-        match self
-            .call("computer.keyboard_hotkey", json!({ "keys": keys }))
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                for key in keys {
-                    let _ = self
-                        .call(
-                            "input.key",
-                            json!({
-                                "event": {
-                                    "action": "down",
-                                    "keysym": key
-                                }
-                            }),
-                        )
-                        .await;
-                }
-                for key in keys.iter().rev() {
-                    let _ = self
-                        .call(
-                            "input.key",
-                            json!({
-                                "event": {
-                                    "action": "up",
-                                    "keysym": key
-                                }
-                            }),
-                        )
-                        .await;
-                }
-                Ok(())
-            }
+        for key in keys {
+            let down_evt = vec![
+                (rmpv::Value::from("action"), rmpv::Value::from("down")),
+                (rmpv::Value::from("keysym"), rmpv::Value::from(*key)),
+            ];
+            let mut params = HashMap::new();
+            params.insert("event".to_string(), rmpv::Value::Map(down_evt));
+            self.call("input.key", params).await?;
         }
+        for key in keys.iter().rev() {
+            let up_evt = vec![
+                (rmpv::Value::from("action"), rmpv::Value::from("up")),
+                (rmpv::Value::from("keysym"), rmpv::Value::from(*key)),
+            ];
+            let mut params = HashMap::new();
+            params.insert("event".to_string(), rmpv::Value::Map(up_evt));
+            self.call("input.key", params).await?;
+        }
+        Ok(())
     }
 
     pub async fn app_open(&self, path: &str) -> Result<()> {
-        let params = json!({ "name": path, "path": path });
-        match self.call("apps.open", params.clone()).await {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call("computer.app_open", params).await?;
-                Ok(())
-            }
-        }
+        let mut params = HashMap::new();
+        params.insert("name".to_string(), rmpv::Value::from(path));
+        self.call("apps.open", params).await?;
+        Ok(())
     }
 
     pub async fn app_focus(&self, name: &str) -> Result<()> {
-        let params = json!({ "name": name });
-        match self.call("apps.focus", params.clone()).await {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call("computer.app_focus", params).await?;
-                Ok(())
-            }
-        }
+        let mut params = HashMap::new();
+        params.insert("name".to_string(), rmpv::Value::from(name));
+        self.call("apps.focus", params).await?;
+        Ok(())
     }
 
     pub async fn app_close(&self, name: &str) -> Result<()> {
-        let params = json!({ "name": name });
-        match self.call("apps.close", params.clone()).await {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call("computer.app_close", params).await?;
-                Ok(())
-            }
-        }
+        let mut params = HashMap::new();
+        params.insert("name".to_string(), rmpv::Value::from(name));
+        self.call("apps.close", params).await?;
+        Ok(())
     }
 
     pub async fn app_list(&self) -> Result<Vec<Value>> {
-        let res = match self.call("apps.list", json!({})).await {
-            Ok(r) => r,
-            Err(_) => self.call("computer.app_list", json!({})).await?,
-        };
-        if let Some(items) = res.get("items").and_then(|v| v.as_array()) {
+        let res = self.call("apps.list", HashMap::new()).await?;
+        if let Some(items) = value_get(&res, "items").and_then(|v| v.as_array()) {
             return Ok(items
                 .iter()
                 .map(|item| {
                     if let Some(s) = item.as_str() {
                         json!({ "name": s, "pid": Value::Null })
                     } else {
-                        item.clone()
+                        rmpv_to_json(item)
                     }
                 })
                 .collect());
         }
-        res.get("apps")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .ok_or_else(|| anyhow!("missing 'apps' in response"))
+        bail!("missing 'items' in apps.list response")
     }
 
     pub async fn ui_tree(
@@ -471,120 +355,95 @@ impl RemoteComputer {
         app_name: Option<&str>,
         max_depth: Option<usize>,
     ) -> Result<String> {
-        let params = json!({
-            "app": app_name,
-            "app_name": app_name,
-            "max_depth": max_depth,
-        });
-        let res = match self.call("computer.ui_tree", params.clone()).await {
-            Ok(r) => r,
-            Err(_) => self.call("ui.tree", params).await?,
-        };
-        if let Some(tree) = res.get("tree").and_then(|v| v.as_str()) {
-            return Ok(tree.to_string());
+        let mut params = HashMap::new();
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
         }
-        if res.get("role").is_some() {
+        if let Some(d) = max_depth {
+            params.insert("max_depth".to_string(), rmpv::Value::from(d as u64));
+        }
+        let res = self.call("ui.tree", params).await?;
+        if value_get(&res, "role").is_some() {
             let mut out = String::new();
-            format_py_ui_element(&res, 0, &mut out);
+            format_rmpv_ui_element(&res, 0, &mut out);
             return Ok(out);
         }
-        Ok(serde_json::to_string_pretty(&res).unwrap_or_default())
+        if let Some(tree) = value_get(&res, "tree").and_then(|v| v.as_str()) {
+            return Ok(tree.to_string());
+        }
+        Ok(rmpv_to_json(&res).to_string())
     }
 
     pub async fn ui_click(&self, app_name: Option<&str>, selector: &str) -> Result<()> {
-        let params = json!({
-            "app_name": app_name,
-            "selector": selector,
-        });
-        match self.call("computer.ui_click", params).await {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call(
-                    "ui.action",
-                    json!({
-                        "element": {
-                            "role": "",
-                            "name": selector
-                        },
-                        "action": "click",
-                        "app": app_name
-                    }),
-                )
-                .await?;
-                Ok(())
-            }
+        let elem = vec![
+            (rmpv::Value::from("role"), rmpv::Value::from("")),
+            (rmpv::Value::from("name"), rmpv::Value::from(selector)),
+        ];
+        let mut params = HashMap::new();
+        params.insert("element".to_string(), rmpv::Value::Map(elem));
+        params.insert("action".to_string(), rmpv::Value::from("click"));
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
         }
+        self.call("ui.action", params).await?;
+        Ok(())
     }
 
     pub async fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {
-        let params = json!({
-            "app_name": app_name,
-            "selector": selector,
-            "text": text,
-        });
-        match self.call("computer.ui_type", params).await {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.ui_click(app_name, selector).await?;
-                self.keyboard_type(text).await?;
-                Ok(())
-            }
-        }
+        self.ui_click(app_name, selector).await?;
+        self.keyboard_type(text).await?;
+        Ok(())
     }
 
     pub async fn clipboard_read(&self) -> Result<String> {
-        let res = match self.call("computer.clipboard_read", json!({})).await {
-            Ok(r) => r,
-            Err(_) => self.call("clipboard.read", json!({})).await?,
-        };
-        if let Some(text) = res.get("text").and_then(|v| v.as_str()) {
-            return Ok(text.to_string());
-        }
-        if let Some(entries) = res.get("entries").and_then(|v| v.as_array()) {
+        let res = self.call("clipboard.read", HashMap::new()).await?;
+        if let Some(entries) = value_get(&res, "entries").and_then(|v| v.as_array()) {
             for entry in entries {
-                if let Some(data) = entry.get("data").and_then(|v| v.as_str()) {
-                    if let Ok(bytes) = data_encoding::BASE64.decode(data.as_bytes())
-                        && let Ok(text) = String::from_utf8(bytes)
-                    {
-                        return Ok(text);
+                if let Some(data) = value_get(entry, "data") {
+                    if let Some(text) = data.as_slice().and_then(|b| std::str::from_utf8(b).ok()) {
+                        return Ok(text.to_string());
                     }
-                    return Ok(data.to_string());
+                    if let Some(s) = data.as_str() {
+                        return Ok(s.to_string());
+                    }
                 }
             }
+        }
+        if let Some(text) = value_get(&res, "text").and_then(|v| v.as_str()) {
+            return Ok(text.to_string());
         }
         bail!("no text found in clipboard response")
     }
 
     pub async fn clipboard_write(&self, text: &str) -> Result<()> {
-        match self
-            .call("computer.clipboard_write", json!({ "text": text }))
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                self.call(
-                    "clipboard.write",
-                    json!({
-                        "contents": {
-                            "entries": [{
-                                "mime_type": "text/plain;charset=utf-8",
-                                "data": text
-                            }]
-                        }
-                    }),
-                )
-                .await?;
-                Ok(())
-            }
-        }
+        let entry = vec![
+            (
+                rmpv::Value::from("mime_type"),
+                rmpv::Value::from("text/plain;charset=utf-8"),
+            ),
+            (
+                rmpv::Value::from("data"),
+                rmpv::Value::Binary(text.as_bytes().to_vec()),
+            ),
+        ];
+        let contents = rmpv::Value::Map(vec![(
+            rmpv::Value::from("entries"),
+            rmpv::Value::Array(vec![rmpv::Value::Map(entry)]),
+        )]);
+        let mut params = HashMap::new();
+        params.insert("contents".to_string(), contents);
+        self.call("clipboard.write", params).await?;
+        Ok(())
     }
 }
 
-fn format_py_ui_element(el: &Value, depth: usize, out: &mut String) {
+fn format_rmpv_ui_element(el: &rmpv::Value, depth: usize, out: &mut String) {
     let indent = "  ".repeat(depth);
-    let role = el.get("role").and_then(|v| v.as_str()).unwrap_or("element");
-    let name = el.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let value = el.get("value").and_then(|v| v.as_str());
+    let role = value_get(el, "role")
+        .and_then(|v| v.as_str())
+        .unwrap_or("element");
+    let name = value_get(el, "name").and_then(|v| v.as_str()).unwrap_or("");
+    let value = value_get(el, "value").and_then(|v| v.as_str());
 
     out.push_str(&indent);
     out.push_str(role);
@@ -603,9 +462,9 @@ fn format_py_ui_element(el: &Value, depth: usize, out: &mut String) {
     }
     out.push('\n');
 
-    if let Some(children) = el.get("children").and_then(|v| v.as_array()) {
+    if let Some(children) = value_get(el, "children").and_then(|v| v.as_array()) {
         for child in children {
-            format_py_ui_element(child, depth + 1, out);
+            format_rmpv_ui_element(child, depth + 1, out);
         }
     }
 }

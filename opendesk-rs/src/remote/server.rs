@@ -1,7 +1,6 @@
 //! opendesk server implementation: pairing listener and long-lived daemon.
 
 use anyhow::{Context, Result, anyhow};
-use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -17,7 +16,7 @@ use super::discovery::{Advertisement, advertise};
 use super::transport::WebSocketTransport;
 use crate::computer::local::LocalComputer;
 use crate::protocol::crypto::EncryptedChannel;
-use crate::protocol::frames::{Frame, HelloFrame, PushFrame, ResFrame};
+use crate::protocol::frames::{Frame, HelloFrame, PushFrame, ResFrame, rmpv_to_json, value_get};
 use crate::protocol::handshake::{Transport, auth_server, pair_server};
 use crate::protocol::identity::Identity;
 use crate::protocol::storage::{TrustedPeers, default_peer_name, fingerprint, read_description};
@@ -460,16 +459,22 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
 ) -> Result<()> {
     // 1. Send HelloFrame with capabilities and description
     let mut caps = HashMap::new();
-    caps.insert("mouse".to_string(), json!(true));
-    caps.insert("keyboard".to_string(), json!(true));
-    caps.insert("app".to_string(), json!(true));
-    caps.insert("ui".to_string(), json!(true));
-    caps.insert("clipboard".to_string(), json!(true));
-    caps.insert("screenshot".to_string(), json!(true));
+    caps.insert("display.capture".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("input.pointer".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("input.key".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("input.text".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("apps.open".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("apps.close".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("apps.focus".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("apps.list".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("ui.tree".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("ui.action".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("clipboard.read".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("clipboard.write".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
     if !desc.is_empty() {
-        caps.insert("description".to_string(), json!(desc));
+        caps.insert("description".to_string(), rmpv::Value::from(desc));
     }
 
     let hello = Frame::Hello(HelloFrame::server(caps));
@@ -484,7 +489,7 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
                 let reason = eviction_reason.unwrap_or_else(|| "admin_disconnect".to_string());
                 info!("Session {} evicted: {}", session_id, reason);
                 let mut payload = HashMap::new();
-                payload.insert("reason".to_string(), json!(reason));
+                payload.insert("reason".to_string(), rmpv::Value::from(reason));
                 let push = Frame::Push(PushFrame::new("session.evicted", payload));
                 if let Ok(bytes) = push.to_msgpack()
                     && let Ok(ct) = channel.encrypt(&bytes) {
@@ -513,7 +518,9 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
                         };
 
                         if !no_audit {
-                            let params_val = serde_json::to_value(&req.params).unwrap_or(Value::Null);
+                            let params_val = rmpv_to_json(&rmpv::Value::Map(
+                                req.params.iter().map(|(k, v)| (rmpv::Value::from(k.as_str()), v.clone())).collect()
+                            ));
                             audit.record_call(
                                 peer_public,
                                 peer_name,
@@ -549,281 +556,265 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
 pub(crate) async fn dispatch_call(
     computer: &LocalComputer,
     method: &str,
-    params: &HashMap<String, Value>,
-) -> Result<Value, String> {
+    params: &HashMap<String, rmpv::Value>,
+) -> Result<rmpv::Value, String> {
     match method {
-        "computer.screenshot" | "display.capture" => {
+        "display.capture" => {
             let bytes = computer.screenshot(None).map_err(|e| e.to_string())?;
-            let b64 = data_encoding::BASE64.encode(&bytes);
-            Ok(json!({ "image_base64": b64, "format": "png", "data": b64 }))
-        }
-        "computer.mouse_move" => {
-            let x = params
-                .get("x")
-                .and_then(|v| v.as_i64())
-                .ok_or("missing 'x'")? as i32;
-            let y = params
-                .get("y")
-                .and_then(|v| v.as_i64())
-                .ok_or("missing 'y'")? as i32;
-            computer
-                .mouse_move(x, y)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
-        }
-        "computer.mouse_click" => {
-            let x = params.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let y = params.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let button = params.get("button").and_then(|v| v.as_str());
-            computer
-                .mouse_click(x, y, button)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
-        }
-        "computer.mouse_double_click" => {
-            let x = params.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let y = params.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            computer
-                .mouse_double_click(x, y)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
-        }
-        "computer.mouse_right_click" => {
-            let x = params.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let y = params.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            computer
-                .mouse_click(x, y, Some("right"))
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
-        }
-        "computer.mouse_drag" => {
-            let sx = params.get("start_x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let sy = params.get("start_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let ex = params.get("end_x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let ey = params.get("end_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            computer
-                .mouse_drag(sx, sy, ex, ey)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
-        }
-        "computer.mouse_scroll" => {
-            let x = params.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let y = params.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let dy = params.get("delta_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            computer
-                .mouse_scroll(x, y, dy)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
+            // Transmit pure native MessagePack binary bytes (bin) - matching Python Pixmap
+            Ok(rmpv::Value::Map(vec![
+                (rmpv::Value::from("data"), rmpv::Value::Binary(bytes)),
+                (rmpv::Value::from("format"), rmpv::Value::from("png")),
+            ]))
         }
         "input.pointer" => {
-            let evt = params.get("event").unwrap_or(&Value::Null);
-            let pt = evt.get("point").unwrap_or(&Value::Null);
-            let action = evt.get("action").and_then(|v| v.as_str()).unwrap_or("move");
-            let x = pt.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
-            let y = pt.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as i32;
+            let evt = params.get("event");
+            let action = evt
+                .and_then(|e| value_get(e, "action"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("move");
+            let pt = evt.and_then(|e| value_get(e, "point"));
+            let x = pt
+                .and_then(|p| value_get(p, "x"))
+                .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+                .unwrap_or(0.0) as i32;
+            let y = pt
+                .and_then(|p| value_get(p, "y"))
+                .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+                .unwrap_or(0.0) as i32;
             match action {
                 "click" => {
-                    let btn = evt.get("button").and_then(|v| v.as_str());
+                    let btn = evt
+                        .and_then(|e| value_get(e, "button"))
+                        .and_then(|v| v.as_str());
                     computer
                         .mouse_click(x, y, btn)
-                        .map(|_| json!({ "status": "ok" }))
+                        .map(|_| rmpv::Value::Nil)
                         .map_err(|e| e.to_string())
                 }
                 "move" => computer
                     .mouse_move(x, y)
-                    .map(|_| json!({ "status": "ok" }))
+                    .map(|_| rmpv::Value::Nil)
                     .map_err(|e| e.to_string()),
+                "scroll" => {
+                    let dy = evt
+                        .and_then(|e| value_get(e, "dy"))
+                        .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+                        .unwrap_or(0.0) as i32;
+                    computer
+                        .mouse_scroll(x, y, dy)
+                        .map(|_| rmpv::Value::Nil)
+                        .map_err(|e| e.to_string())
+                }
+                "down" => {
+                    let btn = evt
+                        .and_then(|e| value_get(e, "button"))
+                        .and_then(|v| v.as_str());
+                    computer
+                        .mouse_click(x, y, btn)
+                        .map(|_| rmpv::Value::Nil)
+                        .map_err(|e| e.to_string())
+                }
+                "up" => Ok(rmpv::Value::Nil),
                 _ => computer
                     .mouse_click(x, y, None)
-                    .map(|_| json!({ "status": "ok" }))
+                    .map(|_| rmpv::Value::Nil)
                     .map_err(|e| e.to_string()),
             }
         }
-        "computer.keyboard_type" | "input.text" => {
+        "input.text" => {
             let text = params
                 .get("text")
                 .and_then(|v| v.as_str())
                 .or_else(|| {
                     params
                         .get("text_input")
-                        .and_then(|v| v.get("text"))
+                        .and_then(|ti| value_get(ti, "text"))
                         .and_then(|v| v.as_str())
                 })
                 .ok_or("missing 'text'")?;
             computer
                 .keyboard_type(text)
-                .map(|_| json!({ "status": "ok" }))
+                .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
         }
-        "computer.keyboard_press" | "input.key" => {
+        "input.key" => {
             let key = params
                 .get("key")
                 .and_then(|v| v.as_str())
                 .or_else(|| {
                     params
                         .get("event")
-                        .and_then(|v| v.get("keysym"))
+                        .and_then(|e| value_get(e, "keysym"))
                         .and_then(|v| v.as_str())
                 })
                 .ok_or("missing 'key'")?;
-            computer
-                .keyboard_press(key)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
-        }
-        "computer.keyboard_hotkey" => {
-            let keys_arr = params
-                .get("keys")
-                .and_then(|v| v.as_array())
-                .ok_or("missing 'keys'")?;
-            let keys: Vec<&str> = keys_arr.iter().filter_map(|v| v.as_str()).collect();
-            computer
-                .keyboard_hotkey(&keys)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
-        }
-        "computer.app_open" | "apps.open" => {
-            let path = params
-                .get("path")
+            let action = params
+                .get("event")
+                .and_then(|e| value_get(e, "action"))
                 .and_then(|v| v.as_str())
-                .or_else(|| params.get("name").and_then(|v| v.as_str()))
-                .ok_or("missing 'path'")?;
-            computer
-                .app_open(path)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
+                .unwrap_or("press");
+            if action == "down" || action == "press" {
+                computer
+                    .keyboard_press(key)
+                    .map(|_| rmpv::Value::Nil)
+                    .map_err(|e| e.to_string())
+            } else {
+                Ok(rmpv::Value::Nil)
+            }
         }
-        "computer.app_focus" | "apps.focus" => {
-            let name = params
+        "apps.open" => {
+            let path = params
                 .get("name")
                 .and_then(|v| v.as_str())
+                .or_else(|| params.get("path").and_then(|v| v.as_str()))
                 .ok_or("missing 'name'")?;
             computer
-                .app_focus(name)
-                .map(|_| json!({ "status": "ok" }))
+                .app_open(path)
+                .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
         }
-        "computer.app_close" | "apps.close" => {
+        "apps.close" => {
             let name = params
                 .get("name")
                 .and_then(|v| v.as_str())
                 .ok_or("missing 'name'")?;
             computer
                 .app_close(name)
-                .map(|_| json!({ "status": "ok" }))
+                .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
         }
-        "computer.app_list" | "apps.list" | "windows.list" => computer
-            .app_list()
-            .map(|apps| json!({ "apps": apps, "windows": apps }))
-            .map_err(|e| e.to_string()),
-        "computer.ui_tree" | "ui.tree" => {
-            let app_name = params.get("app_name").and_then(|v| v.as_str());
+        "apps.focus" => {
+            let name = params
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'name'")?;
+            computer
+                .app_focus(name)
+                .map(|_| rmpv::Value::Nil)
+                .map_err(|e| e.to_string())
+        }
+        "apps.list" | "windows.list" => {
+            let apps = computer.app_list().map_err(|e| e.to_string())?;
+            let items: Vec<rmpv::Value> = apps
+                .iter()
+                .map(|s| rmpv::Value::from(s.name.as_str()))
+                .collect();
+            Ok(rmpv::Value::Map(vec![(
+                rmpv::Value::from("items"),
+                rmpv::Value::Array(items),
+            )]))
+        }
+        "ui.tree" => {
+            let app_name = params
+                .get("app")
+                .or_else(|| params.get("app_name"))
+                .and_then(|v| v.as_str());
             let max_depth = params
                 .get("max_depth")
                 .and_then(|v| v.as_u64())
                 .map(|d| d as usize);
-            computer
+            let tree = computer
                 .ui_tree(app_name, max_depth)
-                .map(|tree| json!({ "tree": tree }))
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_string())?;
+            Ok(rmpv::Value::Map(vec![(
+                rmpv::Value::from("tree"),
+                rmpv::Value::from(tree),
+            )]))
         }
-        "system.capabilities" => Ok(json!({
-            "capabilities": [
-                "display.capture", "input.pointer", "input.key", "input.text",
-                "apps.open", "apps.close", "apps.focus", "apps.list",
-                "ui.tree", "ui.action", "clipboard.read", "clipboard.write"
-            ],
-            "limits": {},
-            "protocol_version": "0.1",
-            "backend": "xa11y",
-            "description": ""
-        })),
-        "system.environment" => Ok(json!({
-            "os": std::env::consts::OS,
-            "os_version": "",
-            "hostname": "",
-            "locale": "",
-            "timezone": "",
-            "displays": []
-        })),
-        "computer.ui_click" | "ui.action" => {
+        "ui.action" => {
             let app_name = params
-                .get("app_name")
-                .or_else(|| params.get("app"))
+                .get("app")
+                .or_else(|| params.get("app_name"))
                 .and_then(|v| v.as_str());
             let selector = params
-                .get("selector")
+                .get("element")
+                .and_then(|e| value_get(e, "name"))
                 .and_then(|v| v.as_str())
+                .or_else(|| params.get("selector").and_then(|v| v.as_str()))
                 .or_else(|| params.get("name").and_then(|v| v.as_str()))
-                .or_else(|| {
-                    params
-                        .get("element")
-                        .and_then(|v| v.get("name"))
-                        .and_then(|v| v.as_str())
-                })
-                .ok_or("missing 'selector' or 'element.name'")?;
+                .ok_or("missing 'element.name' or 'selector'")?;
             computer
                 .ui_click(app_name, selector)
-                .map(|_| json!({ "status": "ok" }))
+                .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
         }
-        "computer.ui_type" => {
-            let app_name = params
-                .get("app_name")
-                .or_else(|| params.get("app"))
-                .and_then(|v| v.as_str());
-            let selector = params
-                .get("selector")
-                .and_then(|v| v.as_str())
-                .or_else(|| params.get("name").and_then(|v| v.as_str()))
-                .or_else(|| {
-                    params
-                        .get("element")
-                        .and_then(|v| v.get("name"))
-                        .and_then(|v| v.as_str())
-                })
-                .ok_or("missing 'selector'")?;
-            let text = params
-                .get("text")
-                .and_then(|v| v.as_str())
-                .ok_or("missing 'text'")?;
-            computer
-                .ui_type(app_name, selector, text)
-                .map(|_| json!({ "status": "ok" }))
-                .map_err(|e| e.to_string())
+        "clipboard.read" => {
+            let text = computer.clipboard_read().map_err(|e| e.to_string())?;
+            let entry = rmpv::Value::Map(vec![
+                (
+                    rmpv::Value::from("mime_type"),
+                    rmpv::Value::from("text/plain;charset=utf-8"),
+                ),
+                (
+                    rmpv::Value::from("data"),
+                    rmpv::Value::Binary(text.as_bytes().to_vec()),
+                ),
+            ]);
+            Ok(rmpv::Value::Map(vec![
+                (
+                    rmpv::Value::from("entries"),
+                    rmpv::Value::Array(vec![entry]),
+                ),
+                (rmpv::Value::from("text"), rmpv::Value::from(text)),
+            ]))
         }
-        "computer.clipboard_read" | "clipboard.read" => computer
-            .clipboard_read()
-            .map(|text| {
-                json!({
-                    "text": text,
-                    "entries": [{
-                        "mime_type": "text/plain;charset=utf-8",
-                        "data": text
-                    }]
-                })
-            })
-            .map_err(|e| e.to_string()),
-        "computer.clipboard_write" | "clipboard.write" => {
+        "clipboard.write" => {
             let text = params
-                .get("text")
-                .and_then(|v| v.as_str())
-                .or_else(|| {
-                    params
-                        .get("contents")
-                        .and_then(|v| v.get("entries"))
-                        .and_then(|v| v.as_array())
-                        .and_then(|arr| arr.first())
-                        .and_then(|e| e.get("data"))
-                        .and_then(|v| v.as_str())
+                .get("contents")
+                .and_then(|c| value_get(c, "entries"))
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|e| value_get(e, "data"))
+                .and_then(|d| {
+                    d.as_slice()
+                        .and_then(|b| std::str::from_utf8(b).ok())
+                        .or_else(|| d.as_str())
                 })
-                .ok_or("missing 'text'")?;
+                .or_else(|| params.get("text").and_then(|v| v.as_str()))
+                .ok_or("missing 'contents'")?;
             computer
                 .clipboard_write(text)
-                .map(|_| json!({ "status": "ok" }))
+                .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
         }
+        "system.capabilities" => {
+            let caps = vec![
+                rmpv::Value::from("display.capture"),
+                rmpv::Value::from("input.pointer"),
+                rmpv::Value::from("input.key"),
+                rmpv::Value::from("input.text"),
+                rmpv::Value::from("apps.open"),
+                rmpv::Value::from("apps.close"),
+                rmpv::Value::from("apps.focus"),
+                rmpv::Value::from("apps.list"),
+                rmpv::Value::from("ui.tree"),
+                rmpv::Value::from("ui.action"),
+                rmpv::Value::from("clipboard.read"),
+                rmpv::Value::from("clipboard.write"),
+            ];
+            Ok(rmpv::Value::Map(vec![
+                (rmpv::Value::from("capabilities"), rmpv::Value::Array(caps)),
+                (rmpv::Value::from("limits"), rmpv::Value::Map(vec![])),
+                (
+                    rmpv::Value::from("protocol_version"),
+                    rmpv::Value::from("0.1"),
+                ),
+                (rmpv::Value::from("backend"), rmpv::Value::from("xa11y")),
+                (rmpv::Value::from("description"), rmpv::Value::from("")),
+            ]))
+        }
+        "system.environment" => Ok(rmpv::Value::Map(vec![
+            (
+                rmpv::Value::from("os"),
+                rmpv::Value::from(std::env::consts::OS),
+            ),
+            (rmpv::Value::from("os_version"), rmpv::Value::from("")),
+            (rmpv::Value::from("hostname"), rmpv::Value::from("")),
+            (rmpv::Value::from("locale"), rmpv::Value::from("")),
+            (rmpv::Value::from("timezone"), rmpv::Value::from("")),
+            (rmpv::Value::from("displays"), rmpv::Value::Array(vec![])),
+        ])),
         other => Err(format!("unknown method: {}", other)),
     }
 }
