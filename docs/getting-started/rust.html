@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Encryption &amp; Identity &#8212; opendesk</title>
+    <title>Rust Quickstart &#8212; opendesk</title>
   
   
   
@@ -45,14 +45,14 @@
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'protocol/encryption';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'getting-started/rust';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://vitalops.github.io/opendesk/docs/protocol/encryption.html" />
+    <link rel="canonical" href="https://vitalops.github.io/opendesk/docs/getting-started/rust.html" />
     <link rel="icon" href="../_static/logo.png"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Pairing Handshake" href="pairing.html" />
-    <link rel="prev" title="Transport &amp; Encoding" href="transport.html" />
+    <link rel="next" title="MCP Integration" href="../mcp/index.html" />
+    <link rel="prev" title="Getting Started" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -202,9 +202,9 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
-<ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../getting-started/index.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../getting-started/rust.html">Rust Quickstart</a></li>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="index.html">Getting Started</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Rust Quickstart</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">MCP</span></p>
 <ul class="nav bd-sidenav">
@@ -254,15 +254,15 @@
 <li class="toctree-l1"><a class="reference internal" href="../architecture/custom-tools.html">Adding a Custom Tool</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Protocol</span></p>
-<ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="index.html">Protocol Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="transport.html">Transport &amp; Encoding</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Encryption &amp; Identity</a></li>
-<li class="toctree-l1"><a class="reference internal" href="pairing.html">Pairing Handshake</a></li>
-<li class="toctree-l1"><a class="reference internal" href="auth.html">Auth Handshake</a></li>
-<li class="toctree-l1"><a class="reference internal" href="frames.html">Frames &amp; Errors</a></li>
-<li class="toctree-l1"><a class="reference internal" href="session.html">Session Lifecycle &amp; Method Namespace</a></li>
-<li class="toctree-l1"><a class="reference internal" href="discovery.html">Discovery, Admin IPC &amp; Cryptographic Summary</a></li>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../protocol/index.html">Protocol Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/transport.html">Transport &amp; Encoding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/encryption.html">Encryption &amp; Identity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/pairing.html">Pairing Handshake</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/auth.html">Auth Handshake</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/frames.html">Frames &amp; Errors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/session.html">Session Lifecycle &amp; Method Namespace</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../protocol/discovery.html">Discovery, Admin IPC &amp; Cryptographic Summary</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
@@ -353,7 +353,7 @@
       
       
       
-      <li><a href="https://github.com/vitalops/opendesk/issues/new?title=Issue%20on%20page%20%2Fprotocol/encryption.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/vitalops/opendesk/issues/new?title=Issue%20on%20page%20%2Fgetting-started/rust.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -383,7 +383,7 @@
       
       
       
-      <li><a href="../_sources/protocol/encryption.md" target="_blank"
+      <li><a href="../_sources/getting-started/rust.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -466,7 +466,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Encryption & Identity</h1>
+    <h1>Rust Quickstart</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -476,8 +476,14 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#encryption">3. Encryption</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#identity-and-key-material">4. Identity and key material</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#register-with-claude-code">Register with Claude Code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#try-it-via-claude-code-or-any-mcp-client">Try it via Claude Code or any MCP Client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-computer-use-lan-internet">Remote Computer Use (LAN &amp; Internet)</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#controlled-machine">1. Controlled Machine</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#controller-machine">2. Controller Machine</a></li>
+</ul>
+</li>
 </ul>
             </nav>
         </div>
@@ -489,65 +495,75 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="encryption-identity">
-<h1>Encryption &amp; Identity<a class="headerlink" href="#encryption-identity" title="Link to this heading">#</a></h1>
-<section id="encryption">
-<h2>3. Encryption<a class="headerlink" href="#encryption" title="Link to this heading">#</a></h2>
-<p>After a successful handshake (§5 or §6) the two peers share two 32-byte
-session keys — one per direction — and all subsequent frames pass through
-<code class="docutils literal notranslate"><span class="pre">EncryptedConnection</span></code> (<code class="docutils literal notranslate"><span class="pre">protocol/auth/encrypted.py</span></code>).</p>
-<p><strong>Algorithm:</strong> ChaCha20-Poly1305 AEAD (RFC 8439).</p>
-<p><strong>Nonce:</strong> A per-direction monotonic counter encoded as a 96-bit big-endian
-integer. The counter starts at 0, increments by 1 per frame, and is <strong>not
-transmitted</strong> — both ends maintain their own copy. Because the transport is
-reliable and ordered, both counters stay in sync.</p>
-<p><strong>Effect of tampering or desync:</strong> AEAD verification fails → <code class="docutils literal notranslate"><span class="pre">ConnectionClosed</span></code>
-is raised immediately on the receiving side. There is no retry; the TCP
-connection must be re-established and a new handshake run.</p>
-<p><strong>Key lifetime:</strong> Session keys are ephemeral — they exist for one TCP
-connection. Long-lived static keys never appear in frame payloads.</p>
-</section>
-<hr class="docutils" />
-<section id="identity-and-key-material">
-<h2>4. Identity and key material<a class="headerlink" href="#identity-and-key-material" title="Link to this heading">#</a></h2>
-<p>Each machine holds a long-lived X25519 static keypair in its <strong>identity</strong>
-(<code class="docutils literal notranslate"><span class="pre">protocol/auth/identity.py</span></code>):</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>File</p></th>
-<th class="head"><p>Mode</p></th>
-<th class="head"><p>Contents</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">~/.opendesk/identity.key</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">0600</span></code></p></td>
-<td><p>32 raw bytes — the X25519 <strong>private</strong> key. Never leaves disk.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>The <strong>fingerprint</strong> is derived from the public key by hex-encoding it and
-grouping into four colon-separated 4-character chunks:
-<code class="docutils literal notranslate"><span class="pre">abcd:ef01:2345:6789</span></code> (16 hex chars = first 8 bytes of the 32-byte key).</p>
-<p>Trusted peers are stored in <code class="docutils literal notranslate"><span class="pre">~/.opendesk/trusted-peers.json</span></code> (mode <code class="docutils literal notranslate"><span class="pre">0600</span></code>,
-directory mode <code class="docutils literal notranslate"><span class="pre">0700</span></code>). Each entry:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"public_key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;64-char hex&gt;"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"mini"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"paired_at"</span><span class="p">:</span><span class="w"> </span><span class="mf">1710000000.0</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;cached from peer's mDNS/HELLO&gt;"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"description_override"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;user-set local label&gt;"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"last_host"</span><span class="p">:</span><span class="w"> </span><span class="s2">"192.168.1.42"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"last_port"</span><span class="p">:</span><span class="w"> </span><span class="mi">8423</span>
-<span class="p">}</span>
+  <section id="rust-quickstart">
+<h1>Rust Quickstart<a class="headerlink" href="#rust-quickstart" title="Link to this heading">#</a></h1>
+<p>OpenDesk is built entirely in Rust (<code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code>), delivering single-binary deployments, sub-millisecond execution times, and deep platform accessibility integration.</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
+<p>Install directly from source via <code class="docutils literal notranslate"><span class="pre">cargo</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cargo<span class="w"> </span>install<span class="w"> </span>--path<span class="w"> </span>opendesk-rs<span class="w"> </span>--force
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">description_override</span></code> wins over <code class="docutils literal notranslate"><span class="pre">description</span></code> when non-empty (exposed as
-<code class="docutils literal notranslate"><span class="pre">effective_description</span></code>). <code class="docutils literal notranslate"><span class="pre">last_host</span></code>/<code class="docutils literal notranslate"><span class="pre">last_port</span></code> allow reconnecting without
-an mDNS round-trip — essential in WSL2 or AP-isolation environments.</p>
+<p>This installs:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">opendesk</span></code>: The core desktop automation CLI, background server, and pairing manager.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code>: The stdio Model Context Protocol (MCP) server for AI agent harnesses.</p></li>
+</ul>
+</section>
+<section id="register-with-claude-code">
+<h2>Register with Claude Code<a class="headerlink" href="#register-with-claude-code" title="Link to this heading">#</a></h2>
+<p>Register OpenDesk globally as an MCP server for Claude Code with one command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>install
+</pre></div>
+</div>
+<p>To remove the registration:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>uninstall
+</pre></div>
+</div>
+</section>
+<section id="try-it-via-claude-code-or-any-mcp-client">
+<h2>Try it via Claude Code or any MCP Client<a class="headerlink" href="#try-it-via-claude-code-or-any-mcp-client" title="Link to this heading">#</a></h2>
+<p>Once registered, open Claude Code (or Cursor / Claude Desktop) and ask:</p>
+<blockquote>
+<div><p>“Take a screenshot and describe what’s on my screen”</p>
+</div></blockquote>
+<blockquote>
+<div><p>“Open Notepad and type hello world”</p>
+</div></blockquote>
+<blockquote>
+<div><p>“Inspect the active window’s accessibility tree”</p>
+</div></blockquote>
+<blockquote>
+<div><p>“Click the Save button”</p>
+</div></blockquote>
+<blockquote>
+<div><p>“Show me the audit log”</p>
+</div></blockquote>
+<p>Your AI model interacts with OpenDesk via native MCP tool calls automatically.</p>
+</section>
 <hr class="docutils" />
-<p>Next: <a class="reference internal" href="pairing.html"><span class="std std-doc">Pairing Handshake →</span></a> — how two machines establish trust for the first time.</p>
+<section id="remote-computer-use-lan-internet">
+<h2>Remote Computer Use (LAN &amp; Internet)<a class="headerlink" href="#remote-computer-use-lan-internet" title="Link to this heading">#</a></h2>
+<p>OpenDesk makes it effortless to control another machine remotely:</p>
+<section id="controlled-machine">
+<h3>1. Controlled Machine<a class="headerlink" href="#controlled-machine" title="Link to this heading">#</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>pair
+</pre></div>
+</div>
+<p>Displays a one-time, PBKDF2-stretched 6-digit code.</p>
+</section>
+<section id="controller-machine">
+<h3>2. Controller Machine<a class="headerlink" href="#controller-machine" title="Link to this heading">#</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>discover
+opendesk<span class="w"> </span>pair-with<span class="w"> </span>&lt;host&gt;<span class="w"> </span>&lt;code&gt;<span class="w"> </span>--name<span class="w"> </span>work-pc
+</pre></div>
+</div>
+<p>Now, any MCP tool or prompt can target <code class="docutils literal notranslate"><span class="pre">work-pc</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># In Claude Code:</span>
+<span class="s2">"On work-pc, open Terminal and check disk space"</span>
+</pre></div>
+</div>
+</section>
 </section>
 </section>
 
@@ -563,20 +579,20 @@ an mDNS round-trip — essential in WSL2 or AP-isolation environments.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="transport.html"
+       href="index.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Transport &amp; Encoding</p>
+        <p class="prev-next-title">Getting Started</p>
       </div>
     </a>
     <a class="right-next"
-       href="pairing.html"
+       href="../mcp/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Pairing Handshake</p>
+        <p class="prev-next-title">MCP Integration</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -598,8 +614,14 @@ an mDNS round-trip — essential in WSL2 or AP-isolation environments.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#encryption">3. Encryption</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#identity-and-key-material">4. Identity and key material</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#register-with-claude-code">Register with Claude Code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#try-it-via-claude-code-or-any-mcp-client">Try it via Claude Code or any MCP Client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-computer-use-lan-internet">Remote Computer Use (LAN &amp; Internet)</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#controlled-machine">1. Controlled Machine</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#controller-machine">2. Controller Machine</a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 

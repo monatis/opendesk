@@ -201,7 +201,7 @@
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="getting-started/index.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="getting-started/python.html">Python Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/rust.html">Rust Quickstart</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">MCP</span></p>
 <ul class="nav bd-sidenav">
@@ -239,7 +239,6 @@
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="automation/index.html">Automation — Learn, Replay &amp; Schedule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="automation/claude-code.html">Automation in Claude Code</a></li>
-<li class="toctree-l1"><a class="reference internal" href="automation/python-api.html">Python API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="automation/scheduler.html">Scheduler</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Architecture</span></p>
@@ -483,19 +482,14 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="getting-started/index.html">Getting Started</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/index.html#try-it-immediately-via-claude">Try it immediately via Claude</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/index.html#try-it-immediately-via-claude-code-or-any-mcp-client">Try it immediately via Claude Code or any MCP Client</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="getting-started/python.html">Python Quickstart</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#install">Install</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#try-it-via-claude">Try it via Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#sdk-examples">SDK examples</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#click-a-button-by-name">2. Click a button by name</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#type-text">3. Type text</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#full-agentic-loop">4. Full agentic loop</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#permission-modes">5. Permission modes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#restrict-the-sandbox">6. Restrict the sandbox</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting-started/python.html#next-steps">Next steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/rust.html">Rust Quickstart</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/rust.html#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/rust.html#register-with-claude-code">Register with Claude Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/rust.html#try-it-via-claude-code-or-any-mcp-client">Try it via Claude Code or any MCP Client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started/rust.html#remote-computer-use-lan-internet">Remote Computer Use (LAN &amp; Internet)</a></li>
 </ul>
 </li>
 </ul>
@@ -649,11 +643,6 @@
 <li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#manage">Manage</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="automation/python-api.html">Python API</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="automation/python-api.html#learn-replay">Learn &amp; Replay</a></li>
-<li class="toctree-l2"><a class="reference internal" href="automation/python-api.html#schedule">Schedule</a></li>
-</ul>
-</li>
 <li class="toctree-l1"><a class="reference internal" href="automation/scheduler.html">Scheduler</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#ask-claude">Ask Claude</a></li>
 <li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#start-the-background-runner">Start the background runner</a></li>
@@ -789,9 +778,8 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="remote/programmatic.html">Programmatic Use</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="remote/programmatic.html#python">Python</a></li>
-<li class="toctree-l2"><a class="reference internal" href="remote/programmatic.html#over-the-internet-rendezvous-direct-p2p">Over the Internet (Rendezvous &amp; Direct P2P)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="remote/programmatic.html#running-an-outbound-server-python">Running an Outbound Server (Python)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/programmatic.html#rust-library-opendesk-rs">Rust Library (<code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/programmatic.html#language-agnostic-use-via-mcp">Language-Agnostic Use via MCP</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="remote/troubleshooting.html">Troubleshooting</a></li>

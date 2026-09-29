@@ -204,7 +204,7 @@
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../getting-started/index.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../getting-started/python.html">Python Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/rust.html">Rust Quickstart</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">MCP</span></p>
 <ul class="nav bd-sidenav">
@@ -242,7 +242,6 @@
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../automation/index.html">Automation — Learn, Replay &amp; Schedule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../automation/claude-code.html">Automation in Claude Code</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../automation/python-api.html">Python API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../automation/scheduler.html">Scheduler</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Architecture</span></p>
@@ -477,9 +476,12 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python">Python</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#over-the-internet-rendezvous-direct-p2p">Over the Internet (Rendezvous &amp; Direct P2P)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-an-outbound-server-python">Running an Outbound Server (Python)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rust-library-opendesk-rs">Rust Library (<code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code>)</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#driving-a-paired-remote-peer">Driving a Paired Remote Peer</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#driving-the-local-desktop">Driving the Local Desktop</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-agnostic-use-via-mcp">Language-Agnostic Use via MCP</a></li>
 </ul>
             </nav>
         </div>
@@ -493,79 +495,71 @@
                   
   <section id="programmatic-use">
 <h1>Programmatic Use<a class="headerlink" href="#programmatic-use" title="Link to this heading">#</a></h1>
-<section id="python">
-<h2>Python<a class="headerlink" href="#python" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.remote</span><span class="w"> </span><span class="kn">import</span> <span class="n">connect</span>
-
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-    <span class="n">remote</span> <span class="o">=</span> <span class="k">await</span> <span class="n">connect</span><span class="p">(</span><span class="s2">"mini"</span><span class="p">)</span>        <span class="c1"># peer name from `opendesk peers list`</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">pixmap</span> <span class="o">=</span> <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
-        <span class="nb">print</span><span class="p">(</span><span class="n">pixmap</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="n">pixmap</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">pixmap</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
-
-<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+<p>OpenDesk can be embedded directly into Rust applications via the <code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code> crate, or consumed over standard Model Context Protocol (MCP) JSON-RPC from any programming language.</p>
+<section id="rust-library-opendesk-rs">
+<h2>Rust Library (<code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code>)<a class="headerlink" href="#rust-library-opendesk-rs" title="Link to this heading">#</a></h2>
+<p>Add <code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code> to your <code class="docutils literal notranslate"><span class="pre">Cargo.toml</span></code>:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[dependencies]</span>
+<span class="n">opendesk-rs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"../opendesk-rs"</span><span class="w"> </span><span class="p">}</span>
+<span class="n">tokio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"1"</span><span class="p">,</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"full"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="n">anyhow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"1.0"</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">remote</span></code> is a full <code class="docutils literal notranslate"><span class="pre">Computer</span></code> — drop it into any existing opendesk
-<code class="docutils literal notranslate"><span class="pre">ToolContext</span></code> and every tool transparently targets the remote machine.</p>
-</section>
-<section id="over-the-internet-rendezvous-direct-p2p">
-<h2>Over the Internet (Rendezvous &amp; Direct P2P)<a class="headerlink" href="#over-the-internet-rendezvous-direct-p2p" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.remote</span><span class="w"> </span><span class="kn">import</span> <span class="n">connect</span>
+<section id="driving-a-paired-remote-peer">
+<h3>Driving a Paired Remote Peer<a class="headerlink" href="#driving-a-paired-remote-peer" title="Link to this heading">#</a></h3>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="n">opendesk_rs</span><span class="p">::</span><span class="n">protocol</span><span class="p">::</span><span class="n">identity</span><span class="p">::</span><span class="n">Identity</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="n">opendesk_rs</span><span class="p">::</span><span class="n">protocol</span><span class="p">::</span><span class="n">storage</span><span class="p">::</span><span class="n">TrustedPeers</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="n">opendesk_rs</span><span class="p">::</span><span class="n">remote</span><span class="p">::</span><span class="n">client</span><span class="p">::</span><span class="n">connect</span><span class="p">;</span>
 
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-    <span class="c1"># Connects over the Internet using stored rendezvous URL or explicit URL</span>
-    <span class="n">remote</span> <span class="o">=</span> <span class="k">await</span> <span class="n">connect</span><span class="p">(</span>
-        <span class="s2">"cloud-vm"</span><span class="p">,</span>
-        <span class="n">rendezvous</span><span class="o">=</span><span class="s2">"ws://rendezvous.example.com:8424"</span><span class="p">,</span>
-        <span class="n">rendezvous_token</span><span class="o">=</span><span class="s2">"secret"</span><span class="p">,</span>
-        <span class="n">enable_p2p</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># tries direct P2P first, falls back to relay</span>
-    <span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">pix</span> <span class="o">=</span> <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Captured screen: </span><span class="si">{</span><span class="n">pix</span><span class="o">.</span><span class="n">width</span><span class="si">}</span><span class="s2">x</span><span class="si">{</span><span class="n">pix</span><span class="o">.</span><span class="n">height</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">home</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dirs</span><span class="p">::</span><span class="n">home_dir</span><span class="p">().</span><span class="n">expect</span><span class="p">(</span><span class="s">"home dir"</span><span class="p">).</span><span class="n">join</span><span class="p">(</span><span class="s">".opendesk"</span><span class="p">);</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">identity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Identity</span><span class="p">::</span><span class="n">load_or_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">home</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">trusted</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TrustedPeers</span><span class="p">::</span><span class="n">load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">home</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
 
-<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+<span class="w">    </span><span class="c1">// Connect to a paired peer (e.g., 'work-pc')</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">remote</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">connect</span><span class="p">(</span><span class="s">"work-pc"</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">home</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">identity</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">trusted</span><span class="p">,</span><span class="w"> </span><span class="nb">None</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+
+<span class="w">    </span><span class="c1">// Capture screenshot as native binary PNG bytes</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">png_bytes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">remote</span><span class="p">.</span><span class="n">screenshot_bytes</span><span class="p">().</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">"Captured screenshot: {} bytes"</span><span class="p">,</span><span class="w"> </span><span class="n">png_bytes</span><span class="p">.</span><span class="n">len</span><span class="p">());</span>
+
+<span class="w">    </span><span class="c1">// Type text and trigger hotkeys</span>
+<span class="w">    </span><span class="n">remote</span><span class="p">.</span><span class="n">keyboard_type</span><span class="p">(</span><span class="s">"Hello from Rust!"</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="n">remote</span><span class="p">.</span><span class="n">keyboard_hotkey</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[</span><span class="s">"ctrl"</span><span class="p">,</span><span class="w"> </span><span class="s">"s"</span><span class="p">]).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
 </pre></div>
 </div>
 </section>
-<section id="running-an-outbound-server-python">
-<h2>Running an Outbound Server (Python)<a class="headerlink" href="#running-an-outbound-server-python" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.computer.local</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalComputer</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.protocol.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">Identity</span><span class="p">,</span> <span class="n">TrustedPeers</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.remote.server</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpendeskServer</span>
+<section id="driving-the-local-desktop">
+<h3>Driving the Local Desktop<a class="headerlink" href="#driving-the-local-desktop" title="Link to this heading">#</a></h3>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="n">opendesk_rs</span><span class="p">::</span><span class="n">computer</span><span class="p">::</span><span class="n">local</span><span class="p">::</span><span class="n">LocalComputer</span><span class="p">;</span>
 
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run_server</span><span class="p">():</span>
-    <span class="n">computer</span> <span class="o">=</span> <span class="n">LocalComputer</span><span class="p">()</span>
-    <span class="n">home</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">".opendesk"</span>
-    <span class="n">identity</span> <span class="o">=</span> <span class="n">Identity</span><span class="o">.</span><span class="n">load_or_create</span><span class="p">(</span><span class="n">home</span><span class="p">)</span>
-    <span class="n">trusted</span> <span class="o">=</span> <span class="n">TrustedPeers</span><span class="p">(</span><span class="n">home</span><span class="p">)</span>
+<span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">computer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">LocalComputer</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
 
-    <span class="n">server</span> <span class="o">=</span> <span class="n">OpendeskServer</span><span class="p">(</span>
-        <span class="n">computer</span><span class="p">,</span>
-        <span class="n">identity</span><span class="p">,</span>
-        <span class="n">trusted</span><span class="p">,</span>
-        <span class="n">home</span><span class="o">=</span><span class="n">home</span><span class="p">,</span>
-        <span class="n">listen</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Zero inbound open ports</span>
-        <span class="n">rendezvous</span><span class="o">=</span><span class="s2">"ws://rendezvous.example.com:8424"</span><span class="p">,</span>
-        <span class="n">rendezvous_token</span><span class="o">=</span><span class="s2">"secret"</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-    <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">serve_forever</span><span class="p">()</span>
+<span class="w">    </span><span class="c1">// Inspect semantic accessibility tree</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">tree</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">computer</span><span class="p">.</span><span class="n">ui_tree</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="s">"Notepad"</span><span class="p">),</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">"Accessibility tree:</span><span class="se">\n</span><span class="s">{tree}"</span><span class="p">);</span>
 
-<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">run_server</span><span class="p">())</span>
+<span class="w">    </span><span class="c1">// Type and click</span>
+<span class="w">    </span><span class="n">computer</span><span class="p">.</span><span class="n">keyboard_type</span><span class="p">(</span><span class="s">"Autonomous testing"</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="n">computer</span><span class="p">.</span><span class="n">ui_click</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="s">"Notepad"</span><span class="p">),</span><span class="w"> </span><span class="s">"Save"</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
 </pre></div>
 </div>
+</section>
+</section>
 <hr class="docutils" />
-<p>Running into issues? See <a class="reference internal" href="troubleshooting.html"><span class="std std-doc">Troubleshooting →</span></a></p>
+<section id="language-agnostic-use-via-mcp">
+<h2>Language-Agnostic Use via MCP<a class="headerlink" href="#language-agnostic-use-via-mcp" title="Link to this heading">#</a></h2>
+<p>For Python, Node.js, Go, or any other language, connect to the standalone <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> binary via standard stdio JSON-RPC.</p>
 </section>
 </section>
 
@@ -616,9 +610,12 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python">Python</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#over-the-internet-rendezvous-direct-p2p">Over the Internet (Rendezvous &amp; Direct P2P)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-an-outbound-server-python">Running an Outbound Server (Python)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rust-library-opendesk-rs">Rust Library (<code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code>)</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#driving-a-paired-remote-peer">Driving a Paired Remote Peer</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#driving-the-local-desktop">Driving the Local Desktop</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-agnostic-use-via-mcp">Language-Agnostic Use via MCP</a></li>
 </ul>
   </nav></div>
 

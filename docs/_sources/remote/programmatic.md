@@ -1,78 +1,70 @@
 # Programmatic Use
 
-## Python
+OpenDesk can be embedded directly into Rust applications via the `opendesk-rs` crate, or consumed over standard Model Context Protocol (MCP) JSON-RPC from any programming language.
 
-```python
-import asyncio
-from opendesk.remote import connect
+## Rust Library (`opendesk-rs`)
 
-async def main():
-    remote = await connect("mini")        # peer name from `opendesk peers list`
-    try:
-        pixmap = await remote.capture()
-        print(pixmap.width, pixmap.height, len(pixmap.data))
-    finally:
-        await remote.aclose()
+Add `opendesk-rs` to your `Cargo.toml`:
 
-asyncio.run(main())
+```toml
+[dependencies]
+opendesk-rs = { path = "../opendesk-rs" }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
 ```
 
-`remote` is a full `Computer` — drop it into any existing opendesk
-`ToolContext` and every tool transparently targets the remote machine.
+### Driving a Paired Remote Peer
 
-## Over the Internet (Rendezvous & Direct P2P)
+```rust
+use anyhow::Result;
+use opendesk_rs::protocol::identity::Identity;
+use opendesk_rs::protocol::storage::TrustedPeers;
+use opendesk_rs::remote::client::connect;
 
-```python
-import asyncio
-from opendesk.remote import connect
+#[tokio::main]
+async fn main() -> Result<()> {
+    let home = dirs::home_dir().expect("home dir").join(".opendesk");
+    let identity = Identity::load_or_create(&home)?;
+    let trusted = TrustedPeers::load(&home)?;
 
-async def main():
-    # Connects over the Internet using stored rendezvous URL or explicit URL
-    remote = await connect(
-        "cloud-vm",
-        rendezvous="ws://rendezvous.example.com:8424",
-        rendezvous_token="secret",
-        enable_p2p=True,  # tries direct P2P first, falls back to relay
-    )
-    try:
-        pix = await remote.capture()
-        print(f"Captured screen: {pix.width}x{pix.height}")
-    finally:
-        await remote.aclose()
+    // Connect to a paired peer (e.g., 'work-pc')
+    let remote = connect("work-pc", &home, &identity, &trusted, None).await?;
 
-asyncio.run(main())
+    // Capture screenshot as native binary PNG bytes
+    let png_bytes = remote.screenshot_bytes().await?;
+    println!("Captured screenshot: {} bytes", png_bytes.len());
+
+    // Type text and trigger hotkeys
+    remote.keyboard_type("Hello from Rust!").await?;
+    remote.keyboard_hotkey(&["ctrl", "s"]).await?;
+
+    Ok(())
+}
 ```
 
-## Running an Outbound Server (Python)
+### Driving the Local Desktop
 
-```python
-import asyncio
-from pathlib import Path
-from opendesk.computer.local import LocalComputer
-from opendesk.protocol.auth import Identity, TrustedPeers
-from opendesk.remote.server import OpendeskServer
+```rust
+use anyhow::Result;
+use opendesk_rs::computer::local::LocalComputer;
 
-async def run_server():
-    computer = LocalComputer()
-    home = Path.home() / ".opendesk"
-    identity = Identity.load_or_create(home)
-    trusted = TrustedPeers(home)
+fn main() -> Result<()> {
+    let computer = LocalComputer::new();
 
-    server = OpendeskServer(
-        computer,
-        identity,
-        trusted,
-        home=home,
-        listen=False,  # Zero inbound open ports
-        rendezvous="ws://rendezvous.example.com:8424",
-        rendezvous_token="secret",
-    )
-    await server.start()
-    await server.serve_forever()
+    // Inspect semantic accessibility tree
+    let tree = computer.ui_tree(Some("Notepad"), Some(5))?;
+    println!("Accessibility tree:\n{tree}");
 
-asyncio.run(run_server())
+    // Type and click
+    computer.keyboard_type("Autonomous testing")?;
+    computer.ui_click(Some("Notepad"), "Save")?;
+
+    Ok(())
+}
 ```
 
 ---
 
-Running into issues? See [Troubleshooting →](troubleshooting.md)
+## Language-Agnostic Use via MCP
+
+For Python, Node.js, Go, or any other language, connect to the standalone `opendesk-mcp` binary via standard stdio JSON-RPC.
