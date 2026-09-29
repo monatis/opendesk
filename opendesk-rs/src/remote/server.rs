@@ -728,24 +728,61 @@ pub(crate) async fn dispatch_call(
                 .map(|tree| json!({ "tree": tree }))
                 .map_err(|e| e.to_string())
         }
-        "computer.ui_click" => {
-            let app_name = params.get("app_name").and_then(|v| v.as_str());
+        "system.capabilities" => Ok(json!({
+            "capabilities": [
+                "display.capture", "input.pointer", "input.key", "input.text",
+                "apps.open", "apps.close", "apps.focus", "apps.list",
+                "ui.tree", "ui.action", "clipboard.read", "clipboard.write"
+            ],
+            "limits": {},
+            "protocol_version": "0.1",
+            "backend": "xa11y",
+            "description": ""
+        })),
+        "system.environment" => Ok(json!({
+            "os": std::env::consts::OS,
+            "os_version": "",
+            "hostname": "",
+            "locale": "",
+            "timezone": "",
+            "displays": []
+        })),
+        "computer.ui_click" | "ui.action" => {
+            let app_name = params
+                .get("app_name")
+                .or_else(|| params.get("app"))
+                .and_then(|v| v.as_str());
             let selector = params
                 .get("selector")
                 .and_then(|v| v.as_str())
                 .or_else(|| params.get("name").and_then(|v| v.as_str()))
-                .ok_or("missing 'selector'")?;
+                .or_else(|| {
+                    params
+                        .get("element")
+                        .and_then(|v| v.get("name"))
+                        .and_then(|v| v.as_str())
+                })
+                .ok_or("missing 'selector' or 'element.name'")?;
             computer
                 .ui_click(app_name, selector)
                 .map(|_| json!({ "status": "ok" }))
                 .map_err(|e| e.to_string())
         }
         "computer.ui_type" => {
-            let app_name = params.get("app_name").and_then(|v| v.as_str());
+            let app_name = params
+                .get("app_name")
+                .or_else(|| params.get("app"))
+                .and_then(|v| v.as_str());
             let selector = params
                 .get("selector")
                 .and_then(|v| v.as_str())
                 .or_else(|| params.get("name").and_then(|v| v.as_str()))
+                .or_else(|| {
+                    params
+                        .get("element")
+                        .and_then(|v| v.get("name"))
+                        .and_then(|v| v.as_str())
+                })
                 .ok_or("missing 'selector'")?;
             let text = params
                 .get("text")
@@ -758,12 +795,29 @@ pub(crate) async fn dispatch_call(
         }
         "computer.clipboard_read" | "clipboard.read" => computer
             .clipboard_read()
-            .map(|text| json!({ "text": text }))
+            .map(|text| {
+                json!({
+                    "text": text,
+                    "entries": [{
+                        "mime_type": "text/plain;charset=utf-8",
+                        "data": text
+                    }]
+                })
+            })
             .map_err(|e| e.to_string()),
         "computer.clipboard_write" | "clipboard.write" => {
             let text = params
                 .get("text")
                 .and_then(|v| v.as_str())
+                .or_else(|| {
+                    params
+                        .get("contents")
+                        .and_then(|v| v.get("entries"))
+                        .and_then(|v| v.as_array())
+                        .and_then(|arr| arr.first())
+                        .and_then(|e| e.get("data"))
+                        .and_then(|v| v.as_str())
+                })
                 .ok_or("missing 'text'")?;
             computer
                 .clipboard_write(text)

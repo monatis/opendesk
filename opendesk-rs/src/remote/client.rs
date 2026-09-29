@@ -1,6 +1,6 @@
 //! RemoteComputer and client connection helpers: pair_with and connect.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;
@@ -81,7 +81,17 @@ impl RemoteComputer {
                         } else {
                             let err_msg = res
                                 .error
-                                .map(|e| e.to_string())
+                                .map(|e| {
+                                    let s = e.to_string();
+                                    let trimmed = s.trim();
+                                    if let Some(unquoted) =
+                                        trimmed.strip_prefix('"').and_then(|t| t.strip_suffix('"'))
+                                    {
+                                        unquoted.to_string()
+                                    } else {
+                                        s
+                                    }
+                                })
                                 .unwrap_or_else(|| "unknown remote error".to_string());
                             return Err(anyhow!(err_msg));
                         }
@@ -101,32 +111,111 @@ impl RemoteComputer {
             "format": format,
             "target": target,
         });
-        let res = self.call("computer.screenshot", params).await?;
+        let res = match self.call("computer.screenshot", params.clone()).await {
+            Ok(r) => r,
+            Err(_) => {
+                let capture_params = json!({
+                    "display_id": target,
+                    "downscale": false,
+                });
+                self.call("display.capture", capture_params).await?
+            }
+        };
         res.get("image_base64")
+            .or_else(|| res.get("data"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
-            .ok_or_else(|| anyhow!("missing 'image_base64' in response"))
+            .ok_or_else(|| anyhow!("missing image data in response"))
     }
 
     pub async fn mouse_move(&self, x: i32, y: i32) -> Result<()> {
-        self.call("computer.mouse_move", json!({ "x": x, "y": y }))
-            .await?;
-        Ok(())
+        match self
+            .call("computer.mouse_move", json!({ "x": x, "y": y }))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call(
+                    "input.pointer",
+                    json!({
+                        "event": {
+                            "action": "move",
+                            "point": { "x": x, "y": y }
+                        }
+                    }),
+                )
+                .await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn mouse_click(&self, x: i32, y: i32, button: Option<&str>) -> Result<()> {
-        self.call(
-            "computer.mouse_click",
-            json!({ "x": x, "y": y, "button": button }),
-        )
-        .await?;
-        Ok(())
+        let btn_str = match button {
+            Some("right") => "right",
+            Some("middle") => "middle",
+            _ => "left",
+        };
+        match self
+            .call(
+                "computer.mouse_click",
+                json!({ "x": x, "y": y, "button": button }),
+            )
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                let _ = self
+                    .call(
+                        "input.pointer",
+                        json!({
+                            "event": {
+                                "action": "move",
+                                "point": { "x": x, "y": y }
+                            }
+                        }),
+                    )
+                    .await;
+                self.call(
+                    "input.pointer",
+                    json!({
+                        "event": {
+                            "action": "down",
+                            "point": { "x": x, "y": y },
+                            "button": btn_str
+                        }
+                    }),
+                )
+                .await?;
+                self.call(
+                    "input.pointer",
+                    json!({
+                        "event": {
+                            "action": "up",
+                            "point": { "x": x, "y": y },
+                            "button": btn_str
+                        }
+                    }),
+                )
+                .await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn mouse_double_click(&self, x: i32, y: i32) -> Result<()> {
-        self.call("computer.mouse_double_click", json!({ "x": x, "y": y }))
-            .await?;
-        Ok(())
+        match self
+            .call("computer.mouse_double_click", json!({ "x": x, "y": y }))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.mouse_click(x, y, None).await?;
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                self.mouse_click(x, y, None).await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn mouse_drag(
@@ -136,70 +225,241 @@ impl RemoteComputer {
         end_x: i32,
         end_y: i32,
     ) -> Result<()> {
-        self.call(
-            "computer.mouse_drag",
-            json!({
-                "start_x": start_x,
-                "start_y": start_y,
-                "end_x": end_x,
-                "end_y": end_y,
-            }),
-        )
-        .await?;
-        Ok(())
+        match self
+            .call(
+                "computer.mouse_drag",
+                json!({
+                    "start_x": start_x,
+                    "start_y": start_y,
+                    "end_x": end_x,
+                    "end_y": end_y,
+                }),
+            )
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                let _ = self
+                    .call(
+                        "input.pointer",
+                        json!({
+                            "event": {
+                                "action": "move",
+                                "point": { "x": start_x, "y": start_y }
+                            }
+                        }),
+                    )
+                    .await;
+                self.call(
+                    "input.pointer",
+                    json!({
+                        "event": {
+                            "action": "down",
+                            "point": { "x": start_x, "y": start_y },
+                            "button": "left"
+                        }
+                    }),
+                )
+                .await?;
+                self.call(
+                    "input.pointer",
+                    json!({
+                        "event": {
+                            "action": "move",
+                            "point": { "x": end_x, "y": end_y }
+                        }
+                    }),
+                )
+                .await?;
+                self.call(
+                    "input.pointer",
+                    json!({
+                        "event": {
+                            "action": "up",
+                            "point": { "x": end_x, "y": end_y },
+                            "button": "left"
+                        }
+                    }),
+                )
+                .await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn mouse_scroll(&self, x: i32, y: i32, delta_y: i32) -> Result<()> {
-        self.call(
-            "computer.mouse_scroll",
-            json!({
-                "x": x,
-                "y": y,
-                "delta_y": delta_y,
-            }),
-        )
-        .await?;
-        Ok(())
+        match self
+            .call(
+                "computer.mouse_scroll",
+                json!({
+                    "x": x,
+                    "y": y,
+                    "delta_y": delta_y,
+                }),
+            )
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call(
+                    "input.pointer",
+                    json!({
+                        "event": {
+                            "action": "scroll",
+                            "point": { "x": x, "y": y },
+                            "dx": 0.0,
+                            "dy": delta_y as f64
+                        }
+                    }),
+                )
+                .await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn keyboard_type(&self, text: &str) -> Result<()> {
-        self.call("computer.keyboard_type", json!({ "text": text }))
-            .await?;
-        Ok(())
+        match self
+            .call("computer.keyboard_type", json!({ "text": text }))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call(
+                    "input.text",
+                    json!({
+                        "text_input": {
+                            "text": text,
+                            "interval_ms": 10
+                        }
+                    }),
+                )
+                .await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn keyboard_press(&self, key: &str) -> Result<()> {
-        self.call("computer.keyboard_press", json!({ "key": key }))
-            .await?;
-        Ok(())
+        match self
+            .call("computer.keyboard_press", json!({ "key": key }))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call(
+                    "input.key",
+                    json!({
+                        "event": {
+                            "action": "down",
+                            "keysym": key
+                        }
+                    }),
+                )
+                .await?;
+                self.call(
+                    "input.key",
+                    json!({
+                        "event": {
+                            "action": "up",
+                            "keysym": key
+                        }
+                    }),
+                )
+                .await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
-        self.call("computer.keyboard_hotkey", json!({ "keys": keys }))
-            .await?;
-        Ok(())
+        match self
+            .call("computer.keyboard_hotkey", json!({ "keys": keys }))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                for key in keys {
+                    let _ = self
+                        .call(
+                            "input.key",
+                            json!({
+                                "event": {
+                                    "action": "down",
+                                    "keysym": key
+                                }
+                            }),
+                        )
+                        .await;
+                }
+                for key in keys.iter().rev() {
+                    let _ = self
+                        .call(
+                            "input.key",
+                            json!({
+                                "event": {
+                                    "action": "up",
+                                    "keysym": key
+                                }
+                            }),
+                        )
+                        .await;
+                }
+                Ok(())
+            }
+        }
     }
 
     pub async fn app_open(&self, path: &str) -> Result<()> {
-        self.call("computer.app_open", json!({ "path": path }))
-            .await?;
-        Ok(())
+        let params = json!({ "name": path, "path": path });
+        match self.call("apps.open", params.clone()).await {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call("computer.app_open", params).await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn app_focus(&self, name: &str) -> Result<()> {
-        self.call("computer.app_focus", json!({ "name": name }))
-            .await?;
-        Ok(())
+        let params = json!({ "name": name });
+        match self.call("apps.focus", params.clone()).await {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call("computer.app_focus", params).await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn app_close(&self, name: &str) -> Result<()> {
-        self.call("computer.app_close", json!({ "name": name }))
-            .await?;
-        Ok(())
+        let params = json!({ "name": name });
+        match self.call("apps.close", params.clone()).await {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call("computer.app_close", params).await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn app_list(&self) -> Result<Vec<Value>> {
-        let res = self.call("computer.app_list", json!({})).await?;
+        let res = match self.call("apps.list", json!({})).await {
+            Ok(r) => r,
+            Err(_) => self.call("computer.app_list", json!({})).await?,
+        };
+        if let Some(items) = res.get("items").and_then(|v| v.as_array()) {
+            return Ok(items
+                .iter()
+                .map(|item| {
+                    if let Some(s) = item.as_str() {
+                        json!({ "name": s, "pid": Value::Null })
+                    } else {
+                        item.clone()
+                    }
+                })
+                .collect());
+        }
         res.get("apps")
             .and_then(|v| v.as_array())
             .cloned()
@@ -211,58 +471,142 @@ impl RemoteComputer {
         app_name: Option<&str>,
         max_depth: Option<usize>,
     ) -> Result<String> {
-        let res = self
-            .call(
-                "computer.ui_tree",
-                json!({
-                    "app_name": app_name,
-                    "max_depth": max_depth,
-                }),
-            )
-            .await?;
-        res.get("tree")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| anyhow!("missing 'tree' in response"))
+        let params = json!({
+            "app": app_name,
+            "app_name": app_name,
+            "max_depth": max_depth,
+        });
+        let res = match self.call("computer.ui_tree", params.clone()).await {
+            Ok(r) => r,
+            Err(_) => self.call("ui.tree", params).await?,
+        };
+        if let Some(tree) = res.get("tree").and_then(|v| v.as_str()) {
+            return Ok(tree.to_string());
+        }
+        if res.get("role").is_some() {
+            let mut out = String::new();
+            format_py_ui_element(&res, 0, &mut out);
+            return Ok(out);
+        }
+        Ok(serde_json::to_string_pretty(&res).unwrap_or_default())
     }
 
     pub async fn ui_click(&self, app_name: Option<&str>, selector: &str) -> Result<()> {
-        self.call(
-            "computer.ui_click",
-            json!({
-                "app_name": app_name,
-                "selector": selector,
-            }),
-        )
-        .await?;
-        Ok(())
+        let params = json!({
+            "app_name": app_name,
+            "selector": selector,
+        });
+        match self.call("computer.ui_click", params).await {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call(
+                    "ui.action",
+                    json!({
+                        "element": {
+                            "role": "",
+                            "name": selector
+                        },
+                        "action": "click",
+                        "app": app_name
+                    }),
+                )
+                .await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {
-        self.call(
-            "computer.ui_type",
-            json!({
-                "app_name": app_name,
-                "selector": selector,
-                "text": text,
-            }),
-        )
-        .await?;
-        Ok(())
+        let params = json!({
+            "app_name": app_name,
+            "selector": selector,
+            "text": text,
+        });
+        match self.call("computer.ui_type", params).await {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.ui_click(app_name, selector).await?;
+                self.keyboard_type(text).await?;
+                Ok(())
+            }
+        }
     }
 
     pub async fn clipboard_read(&self) -> Result<String> {
-        let res = self.call("computer.clipboard_read", json!({})).await?;
-        res.get("text")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| anyhow!("missing 'text' in response"))
+        let res = match self.call("computer.clipboard_read", json!({})).await {
+            Ok(r) => r,
+            Err(_) => self.call("clipboard.read", json!({})).await?,
+        };
+        if let Some(text) = res.get("text").and_then(|v| v.as_str()) {
+            return Ok(text.to_string());
+        }
+        if let Some(entries) = res.get("entries").and_then(|v| v.as_array()) {
+            for entry in entries {
+                if let Some(data) = entry.get("data").and_then(|v| v.as_str()) {
+                    if let Ok(bytes) = data_encoding::BASE64.decode(data.as_bytes())
+                        && let Ok(text) = String::from_utf8(bytes)
+                    {
+                        return Ok(text);
+                    }
+                    return Ok(data.to_string());
+                }
+            }
+        }
+        bail!("no text found in clipboard response")
     }
 
     pub async fn clipboard_write(&self, text: &str) -> Result<()> {
-        self.call("computer.clipboard_write", json!({ "text": text }))
-            .await?;
-        Ok(())
+        match self
+            .call("computer.clipboard_write", json!({ "text": text }))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                self.call(
+                    "clipboard.write",
+                    json!({
+                        "contents": {
+                            "entries": [{
+                                "mime_type": "text/plain;charset=utf-8",
+                                "data": text
+                            }]
+                        }
+                    }),
+                )
+                .await?;
+                Ok(())
+            }
+        }
+    }
+}
+
+fn format_py_ui_element(el: &Value, depth: usize, out: &mut String) {
+    let indent = "  ".repeat(depth);
+    let role = el.get("role").and_then(|v| v.as_str()).unwrap_or("element");
+    let name = el.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let value = el.get("value").and_then(|v| v.as_str());
+
+    out.push_str(&indent);
+    out.push_str(role);
+    if !name.is_empty() {
+        out.push_str(&format!(" name=\"{}\"", name));
+    }
+    if let Some(v) = value
+        && !v.is_empty()
+    {
+        let escaped = v
+            .replace('\\', "\\\\")
+            .replace('\"', "\\\"")
+            .replace("\r\n", "\\n")
+            .replace(['\r', '\n'], "\\n");
+        out.push_str(&format!(" value=\"{}\"", escaped));
+    }
+    out.push('\n');
+
+    if let Some(children) = el.get("children").and_then(|v| v.as_array()) {
+        for child in children {
+            format_py_ui_element(child, depth + 1, out);
+        }
     }
 }
 

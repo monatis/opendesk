@@ -200,13 +200,66 @@ impl ResFrame {
     }
 }
 
+fn rmpv_to_json(val: rmpv::Value) -> serde_json::Value {
+    match val {
+        rmpv::Value::Nil => serde_json::Value::Null,
+        rmpv::Value::Boolean(b) => serde_json::Value::Bool(b),
+        rmpv::Value::Integer(i) => {
+            if let Some(v) = i.as_i64() {
+                serde_json::Value::Number(v.into())
+            } else if let Some(v) = i.as_u64() {
+                serde_json::Value::Number(v.into())
+            } else {
+                serde_json::Value::Null
+            }
+        }
+        rmpv::Value::F32(f) => serde_json::Number::from_f64(f as f64)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        rmpv::Value::F64(f) => serde_json::Number::from_f64(f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        rmpv::Value::String(s) => match s.as_str() {
+            Some(st) => serde_json::Value::String(st.to_string()),
+            None => serde_json::Value::String(data_encoding::BASE64.encode(s.as_bytes())),
+        },
+        rmpv::Value::Binary(bytes) => {
+            serde_json::Value::String(data_encoding::BASE64.encode(&bytes))
+        }
+        rmpv::Value::Array(items) => {
+            serde_json::Value::Array(items.into_iter().map(rmpv_to_json).collect())
+        }
+        rmpv::Value::Map(entries) => {
+            let mut map = serde_json::Map::new();
+            for (k, v) in entries {
+                let key_str = match &k {
+                    rmpv::Value::String(s) => s
+                        .as_str()
+                        .map(|str_val| str_val.to_string())
+                        .unwrap_or_else(|| k.to_string()),
+                    _ => k.to_string(),
+                };
+                map.insert(key_str, rmpv_to_json(v));
+            }
+            serde_json::Value::Object(map)
+        }
+        rmpv::Value::Ext(_, bytes) => {
+            serde_json::Value::String(data_encoding::BASE64.encode(&bytes))
+        }
+    }
+}
+
 impl Frame {
     pub fn to_msgpack(&self) -> Result<Vec<u8>, rmp_serde::encode::Error> {
         rmp_serde::to_vec_named(self)
     }
 
-    pub fn from_msgpack(bytes: &[u8]) -> Result<Self, rmp_serde::decode::Error> {
-        rmp_serde::from_slice(bytes)
+    pub fn from_msgpack(bytes: &[u8]) -> anyhow::Result<Self> {
+        let rmp_val = rmpv::decode::read_value(&mut &bytes[..])
+            .map_err(|e| anyhow::anyhow!("failed to read msgpack value: {}", e))?;
+        let json_val = rmpv_to_json(rmp_val);
+        serde_json::from_value(json_val)
+            .map_err(|e| anyhow::anyhow!("failed to deserialize frame from value: {}", e))
     }
 }
 
@@ -248,5 +301,22 @@ mod tests {
             }
             _ => panic!("Expected Hello frame"),
         }
+    }
+
+    #[test]
+    fn test_python_res_with_binary() {
+        let hex_str = "86a474797065a3726573a17601a2696401a373657100a3656e64c3a6726573756c7482a464617461c40489504e47a6666f726d6174a3706e67";
+        let bytes: Vec<u8> = (0..hex_str.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex_str[i..i + 2], 16).unwrap())
+            .collect();
+
+        let frame_res = Frame::from_msgpack(&bytes);
+        println!("Result: {:?}", frame_res);
+        assert!(
+            frame_res.is_ok(),
+            "Failed to unpack python res frame with binary: {:?}",
+            frame_res.err()
+        );
     }
 }

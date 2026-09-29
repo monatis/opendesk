@@ -66,12 +66,7 @@ impl McpSession {
         if let Some(def) = self.trusted.get_default() {
             return (Some(def), "persistent");
         }
-        let peers = self.trusted.list();
-        match peers.len() {
-            0 => (None, "local"),
-            1 => (Some(peers[0].name.clone()), "implicit"),
-            _ => (None, "ambiguous"),
-        }
+        (None, "local")
     }
 
     pub fn use_peer(&mut self, name: Option<&str>) -> Result<()> {
@@ -143,14 +138,7 @@ impl McpSession {
         } else if let Some(ref cur) = self.current_peer {
             cur.clone()
         } else {
-            let (eff, source) = self.effective_peer();
-            if source == "ambiguous" {
-                let names: Vec<String> = self.trusted.list().into_iter().map(|p| p.name).collect();
-                bail!(
-                    "Multiple peers paired ({}) and no default set. Run `opendesk_use <name>` to choose one, or pass `peer:` on this call (use 'local' to target this machine).",
-                    names.join(", ")
-                );
-            }
+            let (eff, _source) = self.effective_peer();
             eff.unwrap_or_else(|| "local".to_string())
         };
 
@@ -270,13 +258,22 @@ impl McpServer {
                         });
                         (c, has_err)
                     }
-                    Err(e) => (
-                        vec![json!({
-                            "type": "text",
-                            "text": format!("Error: {e}")
-                        })],
-                        true,
-                    ),
+                    Err(e) => {
+                        let mut msg = e.to_string();
+                        while let Some(stripped) = msg
+                            .strip_prefix("Error: ")
+                            .or_else(|| msg.strip_prefix("ERROR: "))
+                        {
+                            msg = stripped.trim().to_string();
+                        }
+                        (
+                            vec![json!({
+                                "type": "text",
+                                "text": format!("Error: {msg}")
+                            })],
+                            true,
+                        )
+                    }
                 };
 
                 Ok(json!({
@@ -323,7 +320,7 @@ impl McpServer {
                         },
                         "peer": {
                             "type": "string",
-                            "description": "Optional. Name of the peer to run this action on. Use 'local' for the local machine, or any name from `opendesk_peers`. When omitted, falls back to the session's default peer (see `opendesk_status` / `opendesk_use`)."
+                            "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
                         }
                     }
                 }
@@ -357,7 +354,7 @@ impl McpServer {
                         "settle_ms": { "type": "integer", "default": 500, "description": "Milliseconds to wait after the action for the UI to settle." },
                         "peer": {
                             "type": "string",
-                            "description": "Optional. Name of the peer to run this action on. Use 'local' for the local machine, or any name from `opendesk_peers`. When omitted, falls back to the session's default peer (see `opendesk_status` / `opendesk_use`)."
+                            "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
                         }
                     },
                     "required": ["action"]
@@ -378,7 +375,7 @@ impl McpServer {
                         "hold_duration": { "type": "number", "default": 1.0, "description": "Seconds to hold key for action='hold'." },
                         "peer": {
                             "type": "string",
-                            "description": "Optional. Name of the peer to run this action on. Use 'local' for the local machine, or any name from `opendesk_peers`. When omitted, falls back to the session's default peer (see `opendesk_status` / `opendesk_use`)."
+                            "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
                         }
                     },
                     "required": ["action"]
@@ -394,7 +391,7 @@ impl McpServer {
                         "name": { "type": "string", "description": "Application name (e.g. 'Terminal', 'Google Chrome', 'VS Code') or full executable path. Required for open/close/focus." },
                         "peer": {
                             "type": "string",
-                            "description": "Optional. Name of the peer to run this action on. Use 'local' for the local machine, or any name from `opendesk_peers`. When omitted, falls back to the session's default peer (see `opendesk_status` / `opendesk_use`)."
+                            "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
                         }
                     },
                     "required": ["action"]
@@ -420,7 +417,7 @@ impl McpServer {
                         "max_depth": { "type": "integer", "description": "Depth limit for tree inspection (default: 8)." },
                         "peer": {
                             "type": "string",
-                            "description": "Optional. Name of the peer to run this action on. Use 'local' for the local machine, or any name from `opendesk_peers`. When omitted, falls back to the session's default peer (see `opendesk_status` / `opendesk_use`)."
+                            "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
                         }
                     },
                     "required": ["action"]
@@ -436,7 +433,7 @@ impl McpServer {
                         "text": { "type": "string", "description": "Text to place on the clipboard. Required for action='write'." },
                         "peer": {
                             "type": "string",
-                            "description": "Optional. Name of the peer to run this action on. Use 'local' for the local machine, or any name from `opendesk_peers`. When omitted, falls back to the session's default peer (see `opendesk_status` / `opendesk_use`)."
+                            "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
                         }
                     },
                     "required": ["action"]
@@ -1426,19 +1423,16 @@ impl McpServer {
         let (effective_name, source) = session.effective_peer();
         let mut parts = Vec::new();
 
-        if source == "ambiguous" {
-            parts.push("Default peer: (none — multiple peers paired)".to_string());
-            parts.push(
-                "  Pick one with `opendesk_use <name>` or pass `peer:` on each call.".to_string(),
-            );
-        } else {
-            let target = effective_name.as_deref().unwrap_or("local");
-            parts.push(format!("Default peer: {target} ({source})"));
-            if source == "implicit" {
-                parts.push(
-                    "  (single paired peer — pairing another will require an explicit default)"
-                        .to_string(),
-                );
+        let target = effective_name.as_deref().unwrap_or("local");
+        parts.push(format!("Default peer: {target} ({source})"));
+        if source == "local" {
+            let peers = session.trusted.list();
+            if !peers.is_empty() {
+                let names: Vec<String> = peers.into_iter().map(|p| p.name).collect();
+                parts.push(format!(
+                    "  (paired peer(s) available: {}. Use `opendesk_use <name>` to target one)",
+                    names.join(", ")
+                ));
             }
         }
 
@@ -1977,10 +1971,21 @@ mod tests {
         let mut session = McpSession::new();
         session.trusted = trusted;
 
-        // Initially with 1 peer and no explicit selection, implicit default is old-pc
+        // Initially with 1 peer and no explicit selection, default is always local
+        let (eff, source) = session.effective_peer();
+        assert_eq!(eff.as_deref(), None);
+        assert_eq!(source, "local");
+
+        // Resolving None without peer param must resolve to local
+        let (remote, name) = session.resolve(None).await.unwrap();
+        assert!(remote.is_none());
+        assert_eq!(name, "local");
+
+        // When use_peer(Some("old-pc")) is explicitly called:
+        session.use_peer(Some("old-pc")).unwrap();
         let (eff, source) = session.effective_peer();
         assert_eq!(eff.as_deref(), Some("old-pc"));
-        assert_eq!(source, "implicit");
+        assert_eq!(source, "explicit");
 
         // When use_peer(Some("local")) is called:
         session.use_peer(Some("local")).unwrap();
@@ -1988,15 +1993,14 @@ mod tests {
         assert_eq!(eff.as_deref(), Some("local"));
         assert_eq!(source, "explicit");
 
-        // Resolving None without peer param must resolve to local!
         let (remote, name) = session.resolve(None).await.unwrap();
         assert!(remote.is_none());
         assert_eq!(name, "local");
 
-        // Calling use_peer(Some("auto")) reverts to implicit
+        // Calling use_peer(Some("auto")) reverts to default local
         session.use_peer(Some("auto")).unwrap();
         let (eff, source) = session.effective_peer();
-        assert_eq!(eff.as_deref(), Some("old-pc"));
-        assert_eq!(source, "implicit");
+        assert_eq!(eff.as_deref(), None);
+        assert_eq!(source, "local");
     }
 }

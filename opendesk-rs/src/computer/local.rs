@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use xa11y::{App, AppExt, Key, Point, Rect, ScrollDelta, input_sim};
+use xa11y::{App, AppExt, Key, Point, Rect, ScrollDelta, TreeNode, input_sim};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppInfo {
@@ -410,19 +410,22 @@ impl LocalComputer {
 
     pub fn ui_tree(&self, app_name: Option<&str>, max_depth: Option<usize>) -> Result<String> {
         let app = match app_name {
-            Some(name) => App::by_name(name, Duration::from_secs(3))
-                .map_err(|e| anyhow!("app {name} not found: {e}"))?,
+            Some(name) => Self::find_app(name)?,
             None => App::foreground(Duration::from_secs(2))
                 .map_err(|e| anyhow!("no foreground app: {e}"))?,
         };
-        app.dump(max_depth)
-            .map_err(|e| anyhow!("dump tree failed: {e}"))
+        let tree_node = app
+            .as_element()
+            .tree(max_depth)
+            .map_err(|e| anyhow!("dump tree failed: {e}"))?;
+        let mut out = String::new();
+        format_tree_node(&tree_node, 0, &mut out);
+        Ok(out)
     }
 
     pub fn ui_click(&self, app_name: Option<&str>, selector: &str) -> Result<()> {
         let app = match app_name {
-            Some(name) => App::by_name(name, Duration::from_secs(3))
-                .map_err(|e| anyhow!("app {name} not found: {e}"))?,
+            Some(name) => Self::find_app(name)?,
             None => App::foreground(Duration::from_secs(2))
                 .map_err(|e| anyhow!("no foreground app: {e}"))?,
         };
@@ -434,8 +437,7 @@ impl LocalComputer {
 
     pub fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {
         let app = match app_name {
-            Some(name) => App::by_name(name, Duration::from_secs(3))
-                .map_err(|e| anyhow!("app {name} not found: {e}"))?,
+            Some(name) => Self::find_app(name)?,
             None => App::foreground(Duration::from_secs(2))
                 .map_err(|e| anyhow!("no foreground app: {e}"))?,
         };
@@ -457,6 +459,36 @@ impl LocalComputer {
     pub fn clipboard_write(&self, text: &str) -> Result<()> {
         let mut cb = arboard::Clipboard::new().context("failed to access clipboard")?;
         cb.set_text(text).context("failed to write clipboard text")
+    }
+}
+
+fn format_tree_node(node: &TreeNode, depth: usize, out: &mut String) {
+    let indent = "  ".repeat(depth);
+    out.push_str(&indent);
+    out.push_str(&node.role);
+    if let Some(ref n) = node.name {
+        let escaped = n
+            .replace('\\', "\\\\")
+            .replace('\r', "")
+            .replace('\n', "\\n")
+            .replace('"', "\\\"");
+        out.push_str(" \"");
+        out.push_str(&escaped);
+        out.push('"');
+    }
+    if let Some(ref v) = node.value {
+        let escaped = v
+            .replace('\\', "\\\\")
+            .replace('\r', "")
+            .replace('\n', "\\n")
+            .replace('"', "\\\"");
+        out.push_str(" value=\"");
+        out.push_str(&escaped);
+        out.push('"');
+    }
+    out.push('\n');
+    for child in &node.children {
+        format_tree_node(child, depth + 1, out);
     }
 }
 
