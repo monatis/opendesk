@@ -787,11 +787,18 @@ impl McpServer {
                         ])
                     }
                     "hotkey" => {
-                        let keys = args
-                            .get("keys")
-                            .and_then(|v| v.as_array())
-                            .ok_or_else(|| anyhow!("missing keys array"))?;
-                        let key_strs: Vec<&str> = keys.iter().filter_map(|v| v.as_str()).collect();
+                        let key_strs: Vec<&str> = if let Some(keys) =
+                            args.get("keys").and_then(|v| v.as_array())
+                        {
+                            keys.iter().filter_map(|v| v.as_str()).collect()
+                        } else if let Some(key) = args.get("key").and_then(|v| v.as_str()) {
+                            key.split(['+', '-'])
+                                .map(|s| s.trim())
+                                .filter(|s| !s.is_empty())
+                                .collect()
+                        } else {
+                            return Err(anyhow!("missing keys array or key parameter for hotkey"));
+                        };
                         self.computer.keyboard_hotkey(&key_strs)?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Pressed hotkey: {}", key_strs.join("+")) }),
@@ -1175,11 +1182,18 @@ impl McpServer {
                         ])
                     }
                     "hotkey" => {
-                        let keys = args
-                            .get("keys")
-                            .and_then(|v| v.as_array())
-                            .ok_or_else(|| anyhow!("missing keys array"))?;
-                        let key_strs: Vec<&str> = keys.iter().filter_map(|v| v.as_str()).collect();
+                        let key_strs: Vec<&str> = if let Some(keys) =
+                            args.get("keys").and_then(|v| v.as_array())
+                        {
+                            keys.iter().filter_map(|v| v.as_str()).collect()
+                        } else if let Some(key) = args.get("key").and_then(|v| v.as_str()) {
+                            key.split(['+', '-'])
+                                .map(|s| s.trim())
+                                .filter(|s| !s.is_empty())
+                                .collect()
+                        } else {
+                            return Err(anyhow!("missing keys array or key parameter for hotkey"));
+                        };
                         remote.keyboard_hotkey(&key_strs).await?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Pressed hotkey: {}", key_strs.join("+")) }),

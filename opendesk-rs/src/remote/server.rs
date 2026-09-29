@@ -611,11 +611,19 @@ pub(crate) async fn dispatch_call(
                         .and_then(|e| value_get(e, "button"))
                         .and_then(|v| v.as_str());
                     computer
-                        .mouse_click(x, y, btn)
+                        .mouse_down(btn)
                         .map(|_| rmpv::Value::Nil)
                         .map_err(|e| e.to_string())
                 }
-                "up" => Ok(rmpv::Value::Nil),
+                "up" => {
+                    let btn = evt
+                        .and_then(|e| value_get(e, "button"))
+                        .and_then(|v| v.as_str());
+                    computer
+                        .mouse_up(btn)
+                        .map(|_| rmpv::Value::Nil)
+                        .map_err(|e| e.to_string())
+                }
                 _ => computer
                     .mouse_click(x, y, None)
                     .map(|_| rmpv::Value::Nil)
@@ -653,14 +661,35 @@ pub(crate) async fn dispatch_call(
                 .get("event")
                 .and_then(|e| value_get(e, "action"))
                 .and_then(|v| v.as_str())
+                .or_else(|| params.get("action").and_then(|v| v.as_str()))
                 .unwrap_or("press");
-            if action == "down" || action == "press" {
-                computer
-                    .keyboard_press(key)
+            match action {
+                "down" => computer
+                    .keyboard_down(key)
                     .map(|_| rmpv::Value::Nil)
-                    .map_err(|e| e.to_string())
-            } else {
-                Ok(rmpv::Value::Nil)
+                    .map_err(|e| e.to_string()),
+                "up" => computer
+                    .keyboard_up(key)
+                    .map(|_| rmpv::Value::Nil)
+                    .map_err(|e| e.to_string()),
+                _ => {
+                    if key.contains('+') || key.contains('-') {
+                        let parts: Vec<&str> = key
+                            .split(['+', '-'])
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                            .collect();
+                        computer
+                            .keyboard_hotkey(&parts)
+                            .map(|_| rmpv::Value::Nil)
+                            .map_err(|e| e.to_string())
+                    } else {
+                        computer
+                            .keyboard_press(key)
+                            .map(|_| rmpv::Value::Nil)
+                            .map_err(|e| e.to_string())
+                    }
+                }
             }
         }
         "apps.open" => {

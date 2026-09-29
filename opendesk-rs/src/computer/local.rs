@@ -162,39 +162,28 @@ impl LocalComputer {
             return Ok(());
         }
 
-        // For multiline text, strings with newlines, or longer text blocks (> 10 chars),
-        // use clipboard paste for maximum reliability and Unicode/formatting fidelity.
-        // This avoids key drops and buffer queue overflows in WinUI 3/XAML, web browsers,
-        // and modern desktop GUI frameworks (matching Python OpenDesk reference behavior).
-        if text.contains('\n') || text.contains('\r') || text.chars().count() > 10 {
-            self.clipboard_write(text)?;
-            std::thread::sleep(Duration::from_millis(50));
-            #[cfg(target_os = "macos")]
-            self.keyboard_hotkey(&["command", "v"])?;
-            #[cfg(not(target_os = "macos"))]
-            self.keyboard_hotkey(&["ctrl", "v"])?;
-            std::thread::sleep(Duration::from_millis(50));
-            return Ok(());
-        }
-
-        // For short single-line strings, type character-by-character with a small
-        // debounce/inter-key delay so input queues don't drop events.
-        let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
-        for ch in text.chars() {
-            if ch == '\n' || ch == '\r' {
-                self.keyboard_press("enter")?;
-            } else {
-                let s = ch.to_string();
-                sim.keyboard()
-                    .type_text(&s)
-                    .map_err(|e| anyhow!("type_text failed: {e}"))?;
-            }
-            std::thread::sleep(Duration::from_millis(15));
-        }
+        // Like Python OpenDesk reference implementation (_text_sync): insert text via
+        // clipboard-paste for full Unicode support and to prevent WinUI 3 / XAML,
+        // Chromium web forms, and desktop GUI key-drops.
+        self.clipboard_write(text)?;
+        std::thread::sleep(Duration::from_millis(50));
+        #[cfg(target_os = "macos")]
+        self.keyboard_hotkey(&["command", "v"])?;
+        #[cfg(not(target_os = "macos"))]
+        self.keyboard_hotkey(&["ctrl", "v"])?;
+        std::thread::sleep(Duration::from_millis(50));
         Ok(())
     }
 
     pub fn keyboard_press(&self, key_str: &str) -> Result<()> {
+        if key_str.contains('+') || key_str.contains('-') {
+            let parts: Vec<&str> = key_str
+                .split(['+', '-'])
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect();
+            return self.keyboard_hotkey(&parts);
+        }
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
         let key = parse_key(key_str).ok_or_else(|| anyhow!("unknown key: {key_str}"))?;
         sim.keyboard()
@@ -202,12 +191,42 @@ impl LocalComputer {
             .map_err(|e| anyhow!("press failed: {e}"))
     }
 
+    pub fn keyboard_down(&self, key_str: &str) -> Result<()> {
+        let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
+        let key = parse_key(key_str).ok_or_else(|| anyhow!("unknown key: {key_str}"))?;
+        sim.keyboard()
+            .down(key)
+            .map_err(|e| anyhow!("down failed: {e}"))
+    }
+
+    pub fn keyboard_up(&self, key_str: &str) -> Result<()> {
+        let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
+        let key = parse_key(key_str).ok_or_else(|| anyhow!("unknown key: {key_str}"))?;
+        sim.keyboard()
+            .up(key)
+            .map_err(|e| anyhow!("up failed: {e}"))
+    }
+
     pub fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
         if keys.is_empty() {
             return Ok(());
         }
+        // Flatten any composite tokens like ["ctrl+s"] or ["ctrl", "shift+s"]
+        let mut flat_keys = Vec::new();
+        for k in keys {
+            for part in k.split(['+', '-']) {
+                let trimmed = part.trim();
+                if !trimmed.is_empty() {
+                    flat_keys.push(trimmed);
+                }
+            }
+        }
+        if flat_keys.is_empty() {
+            return Ok(());
+        }
+
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
-        let parsed_keys: Vec<Key> = keys
+        let parsed_keys: Vec<Key> = flat_keys
             .iter()
             .map(|k| parse_key(k).ok_or_else(|| anyhow!("unknown key: {k}")))
             .collect::<Result<_, _>>()?;
@@ -498,9 +517,9 @@ pub fn parse_key(s: &str) -> Option<Key> {
         "esc" | "escape" => Some(Key::Escape),
         "backspace" => Some(Key::Backspace),
         "tab" => Some(Key::Tab),
-        "space" => Some(Key::Space),
+        "space" | "spacebar" => Some(Key::Space),
         "delete" | "del" => Some(Key::Delete),
-        "insert" => Some(Key::Insert),
+        "insert" | "ins" => Some(Key::Insert),
         "up" | "arrowup" => Some(Key::ArrowUp),
         "down" | "arrowdown" => Some(Key::ArrowDown),
         "left" | "arrowleft" => Some(Key::ArrowLeft),
@@ -511,8 +530,10 @@ pub fn parse_key(s: &str) -> Option<Key> {
         "pagedown" | "pgdn" => Some(Key::PageDown),
         "shift" => Some(Key::Shift),
         "ctrl" | "control" => Some(Key::Ctrl),
-        "alt" => Some(Key::Alt),
-        "meta" | "cmd" | "win" | "super" => Some(Key::Meta),
+        "alt" | "option" => Some(Key::Alt),
+        "meta" | "cmd" | "command" | "win" | "windows" | "winleft" | "winright" | "super" => {
+            Some(Key::Meta)
+        }
         "f1" => Some(Key::F(1)),
         "f2" => Some(Key::F(2)),
         "f3" => Some(Key::F(3)),
@@ -541,6 +562,10 @@ mod tests {
     fn test_parse_key() {
         assert_eq!(parse_key("enter"), Some(Key::Enter));
         assert_eq!(parse_key("Ctrl"), Some(Key::Ctrl));
+        assert_eq!(parse_key("command"), Some(Key::Meta));
+        assert_eq!(parse_key("option"), Some(Key::Alt));
+        assert_eq!(parse_key("windows"), Some(Key::Meta));
+        assert_eq!(parse_key("spacebar"), Some(Key::Space));
         assert_eq!(parse_key("f5"), Some(Key::F(5)));
         assert_eq!(parse_key("a"), Some(Key::Char('a')));
         assert_eq!(parse_key("unknown_key_xyz"), None);
