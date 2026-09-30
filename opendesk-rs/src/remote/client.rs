@@ -106,26 +106,54 @@ impl RemoteComputer {
 
     // Convenience API methods matching Python OpenDesk RemoteComputer
 
-    pub async fn screenshot(&self, _format: &str, target: Option<&str>) -> Result<String> {
-        let bytes = self.screenshot_bytes(target).await?;
+    pub async fn screenshot(&self, format: &str, target: Option<&str>) -> Result<String> {
+        let (bytes, _mime) = self.screenshot_format(target, Some(format), None).await?;
         Ok(data_encoding::BASE64.encode(&bytes))
     }
 
     pub async fn screenshot_bytes(&self, target: Option<&str>) -> Result<Vec<u8>> {
+        self.screenshot_format(target, None, None).await.map(|(b, _)| b)
+    }
+
+    pub async fn screenshot_format(
+        &self,
+        target: Option<&str>,
+        format: Option<&str>,
+        quality: Option<u8>,
+    ) -> Result<(Vec<u8>, String)> {
         let mut params = HashMap::new();
         if let Some(t) = target {
             params.insert("display_id".to_string(), rmpv::Value::from(t));
         }
+        if let Some(f) = format {
+            params.insert("format".to_string(), rmpv::Value::from(f));
+        }
+        if let Some(q) = quality {
+            params.insert("quality".to_string(), rmpv::Value::from(q as i64));
+        }
         let res = self.call("display.capture", params).await?;
+        let mime = value_get(&res, "format")
+            .and_then(|v| v.as_str())
+            .map(|f| {
+                if f.contains('/') {
+                    f.to_string()
+                } else if f == "jpeg" || f == "jpg" {
+                    "image/jpeg".to_string()
+                } else {
+                    "image/png".to_string()
+                }
+            })
+            .unwrap_or_else(|| "image/png".to_string());
+
         if let Some(data_val) = value_get(&res, "data") {
             if let Some(bytes) = data_val.as_slice() {
-                return Ok(bytes.to_vec());
+                return Ok((bytes.to_vec(), mime));
             }
             if let Some(decoded) = data_val
                 .as_str()
                 .and_then(|s| data_encoding::BASE64.decode(s.as_bytes()).ok())
             {
-                return Ok(decoded);
+                return Ok((decoded, mime));
             }
         }
         bail!("missing binary image data in display.capture response")

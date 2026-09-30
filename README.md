@@ -86,7 +86,8 @@ When connected via MCP, the agent receives a rich, deterministic set of desktop 
 
 | Tool | Capabilities |
 | :--- | :--- |
-| **`screenshot`** | Captures display as optimized PNG. Supports multi-monitor selection and region crops. |
+| **`screenshot`** | Captures display as PNG or lightweight JPEG with configurable quality (`format="jpeg"`, `quality=75`). Supports multi-monitor selection, Set-of-Marks overlay, and region crops. |
+| **`opendesk_view`** | Opens the interactive OpenDesk MCP App remote desktop viewport inline in supported hosts (**Goose**, **Claude Desktop**, custom web harnesses) for live observation, peer switching, and human-in-the-loop control. |
 | **`ui`** | Inspects hierarchical accessibility trees (`action="get_tree"`), clicks elements by semantic role/title (`action="click"`), and types into active controls (`action="type"`). |
 | **`keyboard`** | Types text via atomic Unicode paste (`action="type"`), presses single keys (`action="press"`), executes modifier chords (`action="hotkey"`, e.g. `ctrl+s`), or holds keys (`action="hold"`). |
 | **`mouse`** | Pixel-accurate pointer movements (`action="move"`), clicks (`action="click"`), drags (`action="drag"`), and vertical/horizontal scrolling (`action="scroll"`). |
@@ -153,17 +154,21 @@ opendesk connect work-pc --rendezvous ws://relay.example.com:8765 --rendezvous-t
 
 ---
 
-## 🖥️ Built-in Web UI
+## 🖥️ Built-in Web UI & MCP Apps
 
+### Standalone Web Dashboard
 Launch OpenDesk's built-in web management dashboard:
 ```bash
 opendesk app
 ```
 Navigates to `http://127.0.0.1:8424`, providing:
-- Connected session inspection and live kick/evict capabilities.
-- Paired peer registry management.
-- Real-time audit log streaming.
-- Background task scheduler management.
+- **Interactive Remote Desktop**: Live viewport with low-bandwidth, sub-second JPEG streaming (~850ms over relays, ~90–260 KB/frame vs 1.26 MB PNG) and instant 80ms interaction burst refresh.
+- **Session Management**: Connected session inspection, peer switching, and live kick/evict capabilities.
+- **Peer Registry**: Discovery, pairing, and trust store management.
+- **Audit & Scheduler**: Real-time audit log streaming and background task scheduler management.
+
+### MCP Apps (Inline Interactive Viewport in Goose, Claude Desktop)
+OpenDesk supports the **MCP Apps (MCP UI) extension specification** (SEP-1865: `io.modelcontextprotocol/ui`). When using agent harnesses like **Goose**, **Claude Desktop**, or custom web frontends, the `opendesk_view` tool renders the complete interactive remote desktop viewport directly inside your chat conversation. The user can watch actions live without filling the LLM context window with images, or take over keyboard and mouse directly for human-in-the-loop tasks.
 
 ---
 

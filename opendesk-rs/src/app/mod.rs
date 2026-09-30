@@ -638,16 +638,16 @@ async fn peer_screenshot(
             .ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
     };
 
-    let b64 = remote
-        .screenshot("png", None)
+    let (bytes, mime) = remote
+        .screenshot_format(None, Some("jpeg"), Some(75))
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
-    let bytes = data_encoding::BASE64
-        .decode(b64.as_bytes())
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
+    headers.insert(
+        header::CONTENT_TYPE,
+        mime.parse().unwrap_or_else(|_| "image/jpeg".parse().unwrap()),
+    );
     headers.insert("X-Logical-Width", "1920".parse().unwrap());
     headers.insert("X-Logical-Height", "1080".parse().unwrap());
     headers.insert("X-Pixel-Width", "1920".parse().unwrap());

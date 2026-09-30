@@ -55,16 +55,103 @@ function applyModeClass() {
 }
 
 // ---------------------------------------------------------------------------
-// HTTP helpers
+// MCP Apps (SEP-1865) PostMessage Bridge & Dual-Mode Transport
+// ---------------------------------------------------------------------------
+
+const isMcpApp = (window.parent !== window);
+let nextMcpRpcId = 1;
+const pendingMcpRequests = new Map();
+
+function sendMcpRpc(method, params = {}) {
+    const id = nextMcpRpcId++;
+    const payload = { jsonrpc: '2.0', id, method, params };
+    window.parent.postMessage(payload, '*');
+    return new Promise((resolve, reject) => {
+        pendingMcpRequests.set(id, { resolve, reject });
+        setTimeout(() => {
+            if (pendingMcpRequests.has(id)) {
+                pendingMcpRequests.delete(id);
+                reject(new Error(`MCP RPC timeout for ${method}`));
+            }
+        }, 45000);
+    });
+}
+
+function sendMcpNotification(method, params = {}) {
+    const payload = { jsonrpc: '2.0', method, params };
+    window.parent.postMessage(payload, '*');
+}
+
+if (isMcpApp) {
+    window.addEventListener('message', (ev) => {
+        const data = ev.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.id && pendingMcpRequests.has(data.id)) {
+            const { resolve, reject } = pendingMcpRequests.get(data.id);
+            pendingMcpRequests.delete(data.id);
+            if (data.error) reject(new Error(data.error.message || 'MCP error'));
+            else resolve(data.result);
+        } else if (data.method === 'ui/notifications/host-context-changed') {
+            if (data.params?.theme) {
+                document.body.classList.toggle('light', data.params.theme === 'light');
+            }
+            if (data.params?.styles?.variables) {
+                for (const [k, v] of Object.entries(data.params.styles.variables)) {
+                    if (v) document.documentElement.style.setProperty(k, v);
+                }
+            }
+        }
+    });
+
+    sendMcpRpc('ui/initialize', {
+        protocolVersion: '2026-01-26',
+        appCapabilities: { availableDisplayModes: ['inline', 'fullscreen'] },
+        clientInfo: { name: 'opendesk-web', version: '0.3.0' }
+    }).then(res => {
+        if (res?.hostContext?.theme) {
+            document.body.classList.toggle('light', res.hostContext.theme === 'light');
+        }
+        sendMcpNotification('ui/notifications/initialized', {});
+    }).catch(e => console.warn('MCP App init fallback:', e));
+
+    window.addEventListener('resize', reportMcpSize);
+}
+
+function reportMcpSize() {
+    if (!isMcpApp) return;
+    const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 520);
+    sendMcpNotification('ui/notifications/size-changed', { height: h });
+}
+
+async function callMcpTool(name, args = {}) {
+    const res = await sendMcpRpc('tools/call', { name, arguments: args });
+    if (res && res.content && res.content[0] && res.content[0].text) {
+        try {
+            return JSON.parse(res.content[0].text);
+        } catch {
+            return res.content[0].text;
+        }
+    }
+    return res;
+}
+
+// ---------------------------------------------------------------------------
+// HTTP helpers (dual-mode: REST when standalone, MCP JSON-RPC when inlined)
 // ---------------------------------------------------------------------------
 
 async function apiGet(path) {
+    if (isMcpApp) {
+        return await callMcpTool('opendesk_app_api', { path, method: 'GET' });
+    }
     const r = await fetch(path);
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
     return await r.json();
 }
 
 async function apiPost(path, body) {
+    if (isMcpApp) {
+        return await callMcpTool('opendesk_app_api', { path, method: 'POST', body });
+    }
     const r = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,6 +166,9 @@ async function apiPost(path, body) {
 }
 
 async function apiDelete(path) {
+    if (isMcpApp) {
+        return await callMcpTool('opendesk_app_api', { path, method: 'DELETE' });
+    }
     const r = await fetch(path, { method: 'DELETE' });
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
     return await r.json();
@@ -156,7 +246,16 @@ function render(state) {
     // clicking the logo lands you, regardless of whether peers are paired.
     const idle = !state.active_session && !controllingPeer;
     if (viewMode === null && idle) {
+        if (isMcpApp && (state.trusted_peers?.length > 0 || state.default_peer)) {
+            viewMode = 'controlling';
+            applyModeClass();
+            ensureView('main');
+            updateMain(state);
+            reportMcpSize();
+            return;
+        }
         ensureView('welcome');
+        reportMcpSize();
         return;
     }
 
@@ -169,6 +268,7 @@ function render(state) {
 
     ensureView('main');
     updateMain(state);
+    reportMcpSize();
 }
 
 function startDiscoveryLoop() {
@@ -873,25 +973,57 @@ async function stopControlling() {
     await poll();
 }
 
+let screenshotTimeoutId = null;
+let screenshotLoopActive = false;
+let screenshotInFlight = false;
+
 function startScreenshotLoop() {
-    if (screenshotTimer) return;
-    pullScreenshot();
-    screenshotTimer = setInterval(pullScreenshot, 1000);
+    if (screenshotLoopActive) return;
+    screenshotLoopActive = true;
+    scheduleNextScreenshot(0);
 }
 
 function stopScreenshotLoop() {
-    if (screenshotTimer) {
-        clearInterval(screenshotTimer);
-        screenshotTimer = null;
+    screenshotLoopActive = false;
+    if (screenshotTimeoutId) {
+        clearTimeout(screenshotTimeoutId);
+        screenshotTimeoutId = null;
     }
 }
 
+function scheduleNextScreenshot(delay = 1000) {
+    if (!screenshotLoopActive) return;
+    if (screenshotTimeoutId) clearTimeout(screenshotTimeoutId);
+    screenshotTimeoutId = setTimeout(async () => {
+        if (!screenshotLoopActive || !controllingPeer) return;
+        await pullScreenshot();
+        if (screenshotLoopActive && controllingPeer) {
+            scheduleNextScreenshot(1000);
+        }
+    }, delay);
+}
+
 async function pullScreenshot() {
-    if (!controllingPeer) return;
+    if (!controllingPeer || screenshotInFlight) return;
     const img = document.getElementById('screen');
     const status = document.getElementById('screen-status');
     if (!img) return;
+    screenshotInFlight = true;
     try {
+        if (isMcpApp) {
+            const r = await callMcpTool('opendesk_app_api', {
+                path: `/api/peer/${encodeURIComponent(controllingPeer)}/screenshot`,
+                method: 'GET'
+            });
+            if (r?.image_b64) {
+                img.src = `data:${r.mime_type || 'image/png'};base64,${r.image_b64}`;
+                img.dataset.logicalWidth = r.logical_width || 1920;
+                img.dataset.logicalHeight = r.logical_height || 1080;
+                if (status) setText(status, `${img.dataset.logicalWidth}×${img.dataset.logicalHeight}`);
+                reportMcpSize();
+            }
+            return;
+        }
         const r = await fetch(`/api/peer/${encodeURIComponent(controllingPeer)}/screenshot`);
         if (!r.ok) {
             if (r.status === 410) {
@@ -910,6 +1042,8 @@ async function pullScreenshot() {
         if (status) setText(status, `${img.dataset.logicalWidth}×${img.dataset.logicalHeight}`);
     } catch (e) {
         if (status) setText(status, `error: ${e.message}`);
+    } finally {
+        screenshotInFlight = false;
     }
 }
 
@@ -920,13 +1054,14 @@ function attachScreenInputs() {
     img.addEventListener('click', async (ev) => {
         if (!controllingPeer) return;
         const rect = img.getBoundingClientRect();
-        const lw = parseFloat(img.dataset.logicalWidth) || rect.width;
-        const lh = parseFloat(img.dataset.logicalHeight) || rect.height;
-        const x = ((ev.clientX - rect.left) / rect.width) * lw;
-        const y = ((ev.clientY - rect.top) / rect.height) * lh;
+        const lw = parseFloat(img.dataset.logicalWidth) || img.naturalWidth || rect.width;
+        const lh = parseFloat(img.dataset.logicalHeight) || img.naturalHeight || rect.height;
+        const x = Math.round(((ev.clientX - rect.left) / rect.width) * lw);
+        const y = Math.round(((ev.clientY - rect.top) / rect.height) * lh);
         try {
             await apiPost(`/api/peer/${encodeURIComponent(controllingPeer)}/action`,
-                          { kind: 'click', x, y });
+                          { kind: 'click', x, y, image_width: lw, image_height: lh });
+            scheduleNextScreenshot(80);
         } catch (e) { toast(e.message, 'error'); }
     });
 
@@ -941,6 +1076,7 @@ function attachScreenInputs() {
                 await apiPost(`/api/peer/${encodeURIComponent(controllingPeer)}/action`,
                               { kind: 'type', text });
                 typeInput.value = '';
+                scheduleNextScreenshot(80);
             } catch (e) { toast(e.message, 'error'); }
         });
     }
@@ -950,6 +1086,7 @@ async function sendKey(keysym) {
     if (!controllingPeer) return;
     await apiPost(`/api/peer/${encodeURIComponent(controllingPeer)}/action`,
                   { kind: 'key', keysym });
+    scheduleNextScreenshot(80);
 }
 
 // Helper used by the data-key buttons in the control panel.
@@ -963,13 +1100,22 @@ document.body.addEventListener('click', (ev) => {
 // Polling
 // ---------------------------------------------------------------------------
 
+let pollInFlight = false;
 async function poll() {
+    if (pollInFlight) return;
+    pollInFlight = true;
     try {
         const s = await apiGet('/api/state');
         lastState = s;
         render(s);
     } catch (e) {
-        setHtml(root, `<p class="muted">backend unreachable: ${escapeHtml(e.message)}</p>`);
+        if (!lastState) {
+            setHtml(root, `<p class="muted">backend unreachable: ${escapeHtml(e.message)}</p>`);
+        } else {
+            console.warn('Poll error:', e.message);
+        }
+    } finally {
+        pollInFlight = false;
     }
 }
 

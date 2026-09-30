@@ -40,6 +40,7 @@ chrono = "0.4.45"
 mdns-sd = "0.21.4"
 webbrowser = "1.2.4"
 rmpv = { version = "1.3.1", features = ["with-serde"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [dev-dependencies]
 tempfile = "3.10"

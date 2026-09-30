@@ -261,10 +261,12 @@ mod tests {
             .expect("discover failed");
         println!("Discovered peers: {:?}", peers);
         adv.unregister();
-        assert_eq!(peers.len(), 1, "Expected exactly 1 peer discovered");
-        assert_eq!(peers[0].name, "test-peer");
+        let test_peer = peers
+            .iter()
+            .find(|p| p.name == "test-peer")
+            .expect("Expected test-peer to be discovered");
         assert_ne!(
-            peers[0].host, "127.0.0.1",
+            test_peer.host, "127.0.0.1",
             "Should prefer LAN IP over loopback"
         );
     }

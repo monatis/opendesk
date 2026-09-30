@@ -22,7 +22,18 @@ impl LocalComputer {
     // -----------------------------------------------------------------------
 
     pub fn screenshot(&self, region: Option<Rect>) -> Result<Vec<u8>> {
-        let shot = match region {
+        self.screenshot_format(region, "png", 0, None)
+            .map(|(bytes, _, _, _)| bytes)
+    }
+
+    pub fn screenshot_format(
+        &self,
+        region: Option<Rect>,
+        format: &str,
+        quality: u8,
+        max_dim: Option<u32>,
+    ) -> Result<(Vec<u8>, String, u32, u32)> {
+        let mut shot = match region {
             Some(r) => {
                 xa11y::screenshot_region(r).map_err(|e| anyhow!("region screenshot failed: {e}"))?
             }
@@ -30,7 +41,40 @@ impl LocalComputer {
                 xa11y::screenshot().map_err(|e| anyhow!("fullscreen screenshot failed: {e}"))?
             }
         };
-        shot.to_png().context("PNG encoding failed")
+
+        if let Some(max_d) = max_dim {
+            if shot.width > max_d || shot.height > max_d {
+                let scale = (max_d as f64) / (shot.width.max(shot.height) as f64);
+                let new_w = (shot.width as f64 * scale).round().max(1.0) as u32;
+                let new_h = (shot.height as f64 * scale).round().max(1.0) as u32;
+                if let Ok(resized) = shot.resize(new_w, new_h) {
+                    shot = resized;
+                }
+            }
+        }
+
+        let width = shot.width;
+        let height = shot.height;
+
+        match format.to_lowercase().as_str() {
+            "jpeg" | "jpg" => {
+                let q = if quality == 0 { 75 } else { quality.min(100) };
+                let mut rgb = Vec::with_capacity((shot.width * shot.height * 3) as usize);
+                for chunk in shot.pixels.chunks_exact(4) {
+                    rgb.extend_from_slice(&chunk[0..3]);
+                }
+                let mut out = Vec::new();
+                let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, q);
+                encoder
+                    .encode(&rgb, shot.width, shot.height, image::ExtendedColorType::Rgb8)
+                    .context("JPEG encoding failed")?;
+                Ok((out, "image/jpeg".to_string(), width, height))
+            }
+            _ => {
+                let png_bytes = shot.to_png().context("PNG encoding failed")?;
+                Ok((png_bytes, "image/png".to_string(), width, height))
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
