@@ -696,11 +696,27 @@ pub(crate) async fn dispatch_call(
 ) -> Result<rmpv::Value, String> {
     match method {
         "display.capture" => {
-            let bytes = computer.screenshot(None).map_err(|e| e.to_string())?;
+            let fmt = params
+                .get("format")
+                .and_then(|v| v.as_str())
+                .unwrap_or("jpeg");
+            let quality = params
+                .get("quality")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(75) as u8;
+            let max_dim = params
+                .get("max_dim")
+                .and_then(|v| v.as_i64())
+                .map(|d| d as u32);
+            let (bytes, mime, width, height) = computer
+                .screenshot_format(None, fmt, quality, max_dim)
+                .map_err(|e| e.to_string())?;
             // Transmit pure native MessagePack binary bytes (bin) - matching Python Pixmap
             Ok(rmpv::Value::Map(vec![
                 (rmpv::Value::from("data"), rmpv::Value::Binary(bytes)),
-                (rmpv::Value::from("format"), rmpv::Value::from("png")),
+                (rmpv::Value::from("format"), rmpv::Value::from(mime)),
+                (rmpv::Value::from("width"), rmpv::Value::from(width as i64)),
+                (rmpv::Value::from("height"), rmpv::Value::from(height as i64)),
             ]))
         }
         "input.pointer" => {

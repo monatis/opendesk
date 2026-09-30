@@ -403,11 +403,12 @@ impl McpServer {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| anyhow!("missing uri"))?;
 
-                if uri == "ui://opendesk/viewport" {
+                let clean_uri = uri.split('?').next().unwrap_or(uri).trim_end_matches('/');
+                if clean_uri == "ui://opendesk/viewport" {
                     Ok(json!({
                         "contents": [
                             {
-                                "uri": "ui://opendesk/viewport",
+                                "uri": uri,
                                 "mimeType": "text/html;profile=mcp-app",
                                 "text": build_mcp_app_html(),
                                 "_meta": {
@@ -472,7 +473,7 @@ impl McpServer {
                 resp_map.insert("content".to_string(), json!(content));
                 resp_map.insert("isError".to_string(), json!(is_error));
 
-                if !is_error && matches!(tool_name, "screenshot" | "opendesk_view" | "opendesk_peers") {
+                if !is_error && tool_name == "opendesk_view" {
                     resp_map.insert(
                         "_meta".to_string(),
                         json!({
@@ -525,12 +526,16 @@ impl McpServer {
                         "peer": {
                             "type": "string",
                             "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
+                        },
+                        "format": {
+                            "type": "string",
+                            "enum": ["jpeg", "png"],
+                            "description": "Image compression format. 'jpeg' is fast and lightweight (recommended for remote/relays); 'png' is lossless."
+                        },
+                        "quality": {
+                            "type": "integer",
+                            "description": "JPEG compression quality (1-100). Defaults to 75."
                         }
-                    }
-                },
-                "_meta": {
-                    "ui": {
-                        "resourceUri": "ui://opendesk/viewport"
                     }
                 }
             }),
@@ -710,12 +715,7 @@ impl McpServer {
             json!({
                 "name": "opendesk_peers",
                 "description": "List the peers available to this MCP session. Returns the local machine and every paired remote peer. The current default is marked with [current]; open connections are marked [active].",
-                "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
-                "_meta": {
-                    "ui": {
-                        "resourceUri": "ui://opendesk/viewport"
-                    }
-                }
+                "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
             }),
             json!({
                 "name": "opendesk_discover",
@@ -832,23 +832,17 @@ impl McpServer {
         match name {
             "screenshot" => {
                 let rect = parse_region(args);
-                let png_bytes = self.computer.screenshot(rect)?;
-                let b64 = BASE64.encode(&png_bytes);
-
-                let (width, height) = if png_bytes.len() >= 24 && &png_bytes[12..16] == b"IHDR" {
-                    let w = u32::from_be_bytes(png_bytes[16..20].try_into().unwrap());
-                    let h = u32::from_be_bytes(png_bytes[20..24].try_into().unwrap());
-                    (w, h)
-                } else {
-                    (1920, 1080)
-                };
+                let fmt = args.get("format").and_then(|v| v.as_str()).unwrap_or("png");
+                let quality = args.get("quality").and_then(|v| v.as_u64()).unwrap_or(75) as u8;
+                let (bytes, mime, width, height) = self.computer.screenshot_format(rect, fmt, quality, None)?;
+                let b64 = BASE64.encode(&bytes);
 
                 let mut saved_desc = String::new();
                 if let Some(save_path) = args.get("save_path").and_then(|v| v.as_str()) {
                     if let Some(parent) = std::path::Path::new(save_path).parent() {
                         let _ = std::fs::create_dir_all(parent);
                     }
-                    std::fs::write(save_path, &png_bytes)?;
+                    std::fs::write(save_path, &bytes)?;
                     saved_desc = format!(" -> saved to {save_path}");
                 }
 
@@ -885,7 +879,7 @@ impl McpServer {
                     json!({
                         "type": "image",
                         "data": b64,
-                        "mimeType": "image/png"
+                        "mimeType": mime
                     }),
                 ])
             }
@@ -1286,15 +1280,16 @@ impl McpServer {
     ) -> Result<Vec<Value>> {
         match name {
             "screenshot" => {
-                let b64 = remote.screenshot("png", None).await?;
+                let fmt = args.get("format").and_then(|v| v.as_str()).unwrap_or("jpeg");
+                let quality = args.get("quality").and_then(|v| v.as_u64()).map(|q| q as u8);
+                let (bytes, mime) = remote.screenshot_format(None, Some(fmt), quality).await?;
+                let b64 = BASE64.encode(&bytes);
                 let mut saved_desc = String::new();
-                if let Some(save_path) = args.get("save_path").and_then(|v| v.as_str())
-                    && let Ok(png_bytes) = BASE64.decode(b64.as_bytes())
-                {
+                if let Some(save_path) = args.get("save_path").and_then(|v| v.as_str()) {
                     if let Some(parent) = std::path::Path::new(save_path).parent() {
                         let _ = std::fs::create_dir_all(parent);
                     }
-                    let _ = std::fs::write(save_path, png_bytes);
+                    let _ = std::fs::write(save_path, &bytes);
                     saved_desc = format!(" -> saved to {save_path}");
                 }
                 Ok(vec![
@@ -1305,7 +1300,7 @@ impl McpServer {
                     json!({
                         "type": "image",
                         "data": b64,
-                        "mimeType": "image/png"
+                        "mimeType": mime
                     }),
                 ])
             }
@@ -1810,12 +1805,16 @@ impl McpServer {
             let parts: Vec<&str> = path.split('/').collect();
             let peer_raw = parts.get(3).copied().unwrap_or("local");
             let peer_name = url_decode_simple(peer_raw);
-            let tool_args = json!({ "peer": peer_name });
+            let tool_args = json!({ "peer": peer_name, "format": "jpeg", "quality": 75 });
             let res = self.call_tool("screenshot", &tool_args).await?;
+            let mut mime_type = "image/jpeg".to_string();
             let b64 = res
                 .iter()
                 .find_map(|item| {
                     if item.get("type").and_then(|v| v.as_str()) == Some("image") {
+                        if let Some(m) = item.get("mimeType").and_then(|v| v.as_str()) {
+                            mime_type = m.to_string();
+                        }
                         item.get("data")
                             .and_then(|v| v.as_str())
                             .map(ToString::to_string)
@@ -1827,7 +1826,7 @@ impl McpServer {
 
             return Ok(json!({
                 "image_b64": b64,
-                "mime_type": "image/png",
+                "mime_type": mime_type,
                 "logical_width": 1920,
                 "logical_height": 1080
             }));
@@ -2675,10 +2674,7 @@ mod tests {
             .iter()
             .find(|t| t["name"] == "screenshot")
             .expect("screenshot tool not found");
-        assert_eq!(
-            screenshot_tool["_meta"]["ui"]["resourceUri"],
-            "ui://opendesk/viewport"
-        );
+        assert!(screenshot_tool.get("_meta").is_none());
 
         // 5. Call opendesk_view returns _meta.ui
         let call_res = server
@@ -2697,7 +2693,7 @@ mod tests {
             "ui://opendesk/viewport"
         );
 
-        // 6. Call opendesk_peers returns _meta.ui
+        // 6. Call opendesk_peers does not return _meta.ui
         let peers_res = server
             .handle_method(
                 "tools/call",
@@ -2709,10 +2705,7 @@ mod tests {
             .await
             .unwrap();
         assert!(!peers_res["isError"].as_bool().unwrap());
-        assert_eq!(
-            peers_res["_meta"]["ui"]["resourceUri"],
-            "ui://opendesk/viewport"
-        );
+        assert!(peers_res.get("_meta").is_none());
 
         // 7. Call opendesk_app_api handles GET /api/state
         let api_res = server

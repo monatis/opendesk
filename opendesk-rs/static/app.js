@@ -1061,6 +1061,7 @@ function attachScreenInputs() {
         try {
             await apiPost(`/api/peer/${encodeURIComponent(controllingPeer)}/action`,
                           { kind: 'click', x, y, image_width: lw, image_height: lh });
+            scheduleNextScreenshot(80);
         } catch (e) { toast(e.message, 'error'); }
     });
 
@@ -1075,6 +1076,7 @@ function attachScreenInputs() {
                 await apiPost(`/api/peer/${encodeURIComponent(controllingPeer)}/action`,
                               { kind: 'type', text });
                 typeInput.value = '';
+                scheduleNextScreenshot(80);
             } catch (e) { toast(e.message, 'error'); }
         });
     }
@@ -1084,6 +1086,7 @@ async function sendKey(keysym) {
     if (!controllingPeer) return;
     await apiPost(`/api/peer/${encodeURIComponent(controllingPeer)}/action`,
                   { kind: 'key', keysym });
+    scheduleNextScreenshot(80);
 }
 
 // Helper used by the data-key buttons in the control panel.
