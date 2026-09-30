@@ -473,6 +473,36 @@ body.mode-controlling .grid { grid-template-columns: 1fr; }
     font-size: 16px;
     font-weight: 600;
 }
+.privacy-badge {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    letter-spacing: 0.02em;
+}
+.privacy-badge.blackout-badge {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    border-color: rgba(139, 92, 246, 0.4);
+}
+button.privacy-active {
+    background: rgba(245, 158, 11, 0.22) !important;
+    color: #f59e0b !important;
+    border: 1px solid #f59e0b !important;
+    font-weight: 600;
+}
+button.blackout-active {
+    background: rgba(139, 92, 246, 0.22) !important;
+    color: #a78bfa !important;
+    border: 1px solid #a78bfa !important;
+    font-weight: 600;
+}
 
 /* Screen / control panel */
 .screen-wrapper {

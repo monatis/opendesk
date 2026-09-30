@@ -93,6 +93,15 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
     let read_back = remote.clipboard_read().await?;
     assert_eq!(read_back, "OPENDESK_RUST_REMOTE_SUCCESS");
 
+    // Test privacy RPC capabilities and set/get
+    assert!(remote.capabilities().contains_key("system.privacy"));
+    let st = remote.set_privacy(true, false).await?;
+    assert!(st.lock_input);
+    let st_status = remote.get_privacy().await?;
+    assert!(st_status.lock_input);
+    let st_reset = remote.set_privacy(false, false).await?;
+    assert!(!st_reset.lock_input);
+
     // Abort server background loop
     server_task.abort();
     Ok(())

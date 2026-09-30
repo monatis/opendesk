@@ -1,3 +1,4 @@
+use anyhow::bail;
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -274,6 +275,27 @@ enum Commands {
         #[command(subcommand)]
         subcmd: Option<ConfigCommands>,
     },
+
+    /// Configure physical input lock and screen blackout curtain on a REMOTE peer
+    Privacy {
+        /// Name of the remote peer to configure (cannot be 'local')
+        peer: String,
+        /// Lock physical keyboard and mouse inputs on remote machine
+        #[arg(long)]
+        lock_input: bool,
+        /// Unlock physical inputs and remove screen blackout
+        #[arg(long)]
+        unlock: bool,
+        /// Turn on blackout curtain on the remote machine's physical monitor
+        #[arg(long)]
+        blackout: bool,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -537,6 +559,87 @@ async fn main() -> anyhow::Result<()> {
                 let png_bytes = data_encoding::BASE64.decode(b64.as_bytes())?;
                 std::fs::write(&shot_path, png_bytes)?;
                 println!("✓ Screenshot saved to: {}", shot_path.display());
+            }
+        }
+
+        Commands::Privacy {
+            peer,
+            lock_input,
+            unlock,
+            blackout,
+            rendezvous,
+            rendezvous_token,
+            home,
+        } => {
+            if peer.trim() == "local" {
+                bail!("Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout.");
+            }
+            let r_cfg = resolve_rendezvous_config(
+                home.as_deref(),
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            );
+            let r_url = if !r_cfg.url.is_empty() {
+                Some(r_cfg.url.as_str())
+            } else {
+                None
+            };
+            println!("Connecting to peer '{}'...", peer);
+            let remote = remote_connect(
+                Some(&peer),
+                r_url,
+                r_cfg.token.as_deref(),
+                home.as_deref(),
+            )
+            .await?;
+
+            if unlock {
+                let _st = remote.set_privacy(false, false).await?;
+                println!("✓ Peer '{}' unlocked successfully.", peer);
+                println!("  Physical Input Lock: Disabled");
+                println!("  Privacy Screen:     Disabled");
+            } else if !lock_input && !blackout {
+                let st = remote.get_privacy().await?;
+                println!("Privacy status for peer '{}':", peer);
+                println!(
+                    "  Physical Input Lock: {}",
+                    if st.lock_input {
+                        "Enabled (Physical inputs blocked)"
+                    } else {
+                        "Disabled"
+                    }
+                );
+                println!(
+                    "  Privacy Screen:     {}",
+                    if st.blackout {
+                        "Enabled (Blackout active)"
+                    } else {
+                        "Disabled"
+                    }
+                );
+                println!(
+                    "  Supported:          {}",
+                    if st.supported { "Yes" } else { "No" }
+                );
+            } else {
+                let st = remote.set_privacy(lock_input, blackout).await?;
+                println!("✓ Privacy updated for peer '{}':", peer);
+                println!(
+                    "  Physical Input Lock: {}",
+                    if st.lock_input {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    }
+                );
+                println!(
+                    "  Privacy Screen:     {}",
+                    if st.blackout {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    }
+                );
             }
         }
 

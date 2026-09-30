@@ -269,5 +269,28 @@ async fn test_app_web_endpoints() -> Result<()> {
     assert!(val.get("identity").is_some());
     assert!(val.get("trusted_peers").is_some());
 
+    // 4. Test that /api/peer/local/privacy is rejected with 400 Bad Request (safety restriction)
+    let res = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/peer/local/privacy")
+                .body(axum::body::Body::empty())?,
+        )
+        .await?;
+    assert_eq!(res.status(), 400);
+
+    let res = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/peer/local/privacy")
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(r#"{"lock_input":true}"#))?,
+        )
+        .await?;
+    assert_eq!(res.status(), 400);
+
     Ok(())
 }

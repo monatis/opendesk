@@ -484,6 +484,49 @@ impl RemoteComputer {
         self.call("clipboard.write", params).await?;
         Ok(())
     }
+
+    pub async fn set_privacy(
+        &self,
+        lock_input: bool,
+        blackout: bool,
+    ) -> Result<crate::computer::privacy::PrivacyState> {
+        let mut params = HashMap::new();
+        params.insert("lock_input".to_string(), rmpv::Value::Boolean(lock_input));
+        params.insert("blackout".to_string(), rmpv::Value::Boolean(blackout));
+        let res = self.call("system.privacy", params).await?;
+        let lock_input = value_get(&res, "lock_input")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let blackout = value_get(&res, "blackout")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let supported = value_get(&res, "supported")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        Ok(crate::computer::privacy::PrivacyState {
+            lock_input,
+            blackout,
+            supported,
+        })
+    }
+
+    pub async fn get_privacy(&self) -> Result<crate::computer::privacy::PrivacyState> {
+        let res = self.call("system.privacy_status", HashMap::new()).await?;
+        let lock_input = value_get(&res, "lock_input")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let blackout = value_get(&res, "blackout")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let supported = value_get(&res, "supported")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        Ok(crate::computer::privacy::PrivacyState {
+            lock_input,
+            blackout,
+            supported,
+        })
+    }
 }
 
 fn format_rmpv_ui_element(el: &rmpv::Value, depth: usize, out: &mut String) {

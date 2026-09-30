@@ -9,12 +9,34 @@ pub struct AppInfo {
     pub pid: Option<u32>,
 }
 
-#[derive(Default)]
-pub struct LocalComputer;
+#[derive(Clone)]
+pub struct LocalComputer {
+    pub privacy: std::sync::Arc<crate::computer::privacy::PrivacyController>,
+}
+
+impl Default for LocalComputer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl LocalComputer {
     pub fn new() -> Self {
-        Self
+        Self {
+            privacy: std::sync::Arc::new(crate::computer::privacy::PrivacyController::new()),
+        }
+    }
+
+    pub fn set_privacy(&self, lock_input: bool, blackout: bool) -> Result<crate::computer::privacy::PrivacyState> {
+        self.privacy.set_privacy(lock_input, blackout)
+    }
+
+    pub fn get_privacy(&self) -> crate::computer::privacy::PrivacyState {
+        self.privacy.get_privacy()
+    }
+
+    pub fn reset_privacy(&self) {
+        self.privacy.reset();
     }
 
     // -----------------------------------------------------------------------

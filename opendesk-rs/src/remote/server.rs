@@ -593,6 +593,16 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     audit: &AuditLog,
     no_audit: bool,
 ) -> Result<()> {
+    // Automatic privacy cleanup guard: ensure physical input lock and blackout are reset when session ends
+    struct PrivacyGuard(Arc<LocalComputer>);
+    impl Drop for PrivacyGuard {
+        fn drop(&mut self) {
+            tracing::info!("Remote session terminated; resetting privacy screen and unlocking physical inputs");
+            self.0.reset_privacy();
+        }
+    }
+    let _privacy_guard = PrivacyGuard(Arc::clone(&computer));
+
     // 1. Send HelloFrame with capabilities and description
     let mut caps = HashMap::new();
     caps.insert("display.capture".to_string(), rmpv::Value::Boolean(true));
@@ -607,6 +617,7 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     caps.insert("ui.action".to_string(), rmpv::Value::Boolean(true));
     caps.insert("clipboard.read".to_string(), rmpv::Value::Boolean(true));
     caps.insert("clipboard.write".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("system.privacy".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
     if !desc.is_empty() {
@@ -973,6 +984,7 @@ pub(crate) async fn dispatch_call(
                 rmpv::Value::from("ui.action"),
                 rmpv::Value::from("clipboard.read"),
                 rmpv::Value::from("clipboard.write"),
+                rmpv::Value::from("system.privacy"),
             ];
             Ok(rmpv::Value::Map(vec![
                 (rmpv::Value::from("capabilities"), rmpv::Value::Array(caps)),
@@ -996,6 +1008,32 @@ pub(crate) async fn dispatch_call(
             (rmpv::Value::from("timezone"), rmpv::Value::from("")),
             (rmpv::Value::from("displays"), rmpv::Value::Array(vec![])),
         ])),
+        "system.privacy" => {
+            let lock_input = params
+                .get("lock_input")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let blackout = params
+                .get("blackout")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let st = computer
+                .set_privacy(lock_input, blackout)
+                .map_err(|e| e.to_string())?;
+            Ok(rmpv::Value::Map(vec![
+                (rmpv::Value::from("lock_input"), rmpv::Value::Boolean(st.lock_input)),
+                (rmpv::Value::from("blackout"), rmpv::Value::Boolean(st.blackout)),
+                (rmpv::Value::from("supported"), rmpv::Value::Boolean(st.supported)),
+            ]))
+        }
+        "system.privacy_status" => {
+            let st = computer.get_privacy();
+            Ok(rmpv::Value::Map(vec![
+                (rmpv::Value::from("lock_input"), rmpv::Value::Boolean(st.lock_input)),
+                (rmpv::Value::from("blackout"), rmpv::Value::Boolean(st.blackout)),
+                (rmpv::Value::from("supported"), rmpv::Value::Boolean(st.supported)),
+            ]))
+        }
         other => Err(format!("unknown method: {}", other)),
     }
 }

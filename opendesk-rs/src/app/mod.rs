@@ -63,6 +63,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/peer/{name}", delete(close_outbound))
         .route("/api/peer/{name}/screenshot", get(peer_screenshot))
         .route("/api/peer/{name}/action", post(peer_action))
+        .route("/api/peer/{name}/privacy", get(get_peer_privacy).post(set_peer_privacy))
         .route("/api/audit", get(get_audit))
         .route("/api/wsl/setup", post(wsl_setup))
         .route("/api/wsl/enable-mirrored", post(wsl_enable_mirrored))
@@ -720,6 +721,70 @@ async fn peer_action(
     }
 
     Ok(Json(json!({ "ok": true })))
+}
+
+async fn get_peer_privacy(
+    State(state): State<AppState>,
+    AxumPath(name): AxumPath<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if name == "local" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout.".to_string(),
+        ));
+    }
+    let remote = {
+        let outbound = state.outbound.lock().await;
+        outbound
+            .get(&name)
+            .cloned()
+            .ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
+    };
+
+    let st = remote
+        .get_privacy()
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    Ok(Json(json!({
+        "ok": true,
+        "lock_input": st.lock_input,
+        "blackout": st.blackout,
+        "supported": st.supported,
+    })))
+}
+
+async fn set_peer_privacy(
+    State(state): State<AppState>,
+    AxumPath(name): AxumPath<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if name == "local" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout.".to_string(),
+        ));
+    }
+    let remote = {
+        let outbound = state.outbound.lock().await;
+        outbound
+            .get(&name)
+            .cloned()
+            .ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
+    };
+
+    let lock_input = body.get("lock_input").and_then(|v| v.as_bool()).unwrap_or(false);
+    let blackout = body.get("blackout").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    let st = remote
+        .set_privacy(lock_input, blackout)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    Ok(Json(json!({
+        "ok": true,
+        "lock_input": st.lock_input,
+        "blackout": st.blackout,
+        "supported": st.supported,
+    })))
 }
 
 #[derive(Deserialize)]

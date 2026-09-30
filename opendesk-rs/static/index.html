@@ -240,8 +240,18 @@
 <div id="control-modal" class="control-modal" hidden>
     <div class="control-modal-inner">
         <header class="control-modal-header">
-            <h2>Controlling <span id="control-peer" class="peer-name"></span></h2>
-            <button class="ghost" data-action="stop-controlling">Disconnect</button>
+            <div class="row gap align-center">
+                <h2>Controlling <span id="control-peer" class="peer-name"></span></h2>
+                <span id="privacy-lock-badge" class="privacy-badge" hidden title="Physical inputs are locked on the remote host">🔒 Inputs Locked</span>
+                <span id="privacy-blackout-badge" class="privacy-badge blackout-badge" hidden title="Privacy blackout screen active on remote host">⬛ Privacy Screen Active</span>
+            </div>
+            <div class="row gap align-center">
+                <div id="control-privacy-actions" class="row gap" hidden>
+                    <button id="btn-toggle-input-lock" class="ghost" data-action="toggle-input-lock" title="Lock physical keyboard & mouse on remote computer">🔒 Lock Input</button>
+                    <button id="btn-toggle-blackout" class="ghost" data-action="toggle-blackout" title="Show a blackout screen on the remote physical monitor">⬛ Privacy Screen</button>
+                </div>
+                <button class="ghost" data-action="stop-controlling">Disconnect</button>
+            </div>
         </header>
         <div class="screen-wrapper">
             <img id="screen" alt="remote screen" />
