@@ -227,6 +227,7 @@ impl McpSession {
     }
 }
 
+#[derive(Clone)]
 pub struct McpServer {
     computer: Arc<LocalComputer>,
     session: Arc<Mutex<McpSession>>,
@@ -256,6 +257,56 @@ impl McpServer {
                 rendezvous_token,
             ))),
         }
+    }
+
+    pub async fn resolve_remote(
+        &self,
+        requested: Option<&str>,
+    ) -> Result<(Option<Arc<RemoteComputer>>, String)> {
+        let (chosen, existing_conn, r_url, r_token, home) = {
+            let session = self.session.lock().await;
+            let chosen = if let Some(req) = requested.filter(|s| !s.trim().is_empty()) {
+                req.to_string()
+            } else if let Some(ref cur) = session.current_peer {
+                cur.clone()
+            } else {
+                let (eff, _source) = session.effective_peer();
+                eff.unwrap_or_else(|| "local".to_string())
+            };
+            if chosen == "local" {
+                return Ok((None, "local".to_string()));
+            }
+            let conn = session.connections.get(&chosen).cloned();
+            (
+                chosen,
+                conn,
+                session.rendezvous_url.clone(),
+                session.rendezvous_token.clone(),
+                session.home.clone(),
+            )
+        };
+
+        if let Some(r) = existing_conn {
+            return Ok((Some(r), chosen));
+        }
+
+        // Establish remote connection without holding the session lock
+        let client = remote_connect(
+            Some(&chosen),
+            r_url.as_deref(),
+            r_token.as_deref(),
+            Some(&home),
+        )
+        .await?;
+
+        let client_arc = Arc::new(client);
+        {
+            let mut session = self.session.lock().await;
+            session
+                .connections
+                .insert(chosen.clone(), client_arc.clone());
+        }
+        Ok((Some(client_arc), chosen))
     }
 
     pub async fn run_stdio(self) -> Result<()> {
@@ -763,10 +814,7 @@ impl McpServer {
         }
 
         let peer_arg = args.get("peer").and_then(|v| v.as_str());
-        let (remote_opt, target_name) = {
-            let mut session = self.session.lock().await;
-            session.resolve(peer_arg).await?
-        };
+        let (remote_opt, target_name) = self.resolve_remote(peer_arg).await?;
 
         let prefix = if target_name == "local" {
             String::new()
@@ -1687,8 +1735,17 @@ impl McpServer {
 
         if path == "/api/connect" {
             let peer = body.get("peer").and_then(|v| v.as_str()).unwrap_or("local");
-            let mut session = self.session.lock().await;
-            session.use_peer(Some(peer))?;
+            {
+                let mut session = self.session.lock().await;
+                session.use_peer(Some(peer))?;
+            }
+            if peer != "local" {
+                let this = self.clone();
+                let peer_name = peer.to_string();
+                tokio::spawn(async move {
+                    let _ = this.resolve_remote(Some(&peer_name)).await;
+                });
+            }
             return Ok(json!({ "ok": true, "peer": peer }));
         }
 

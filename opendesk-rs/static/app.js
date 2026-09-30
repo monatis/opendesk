@@ -73,7 +73,7 @@ function sendMcpRpc(method, params = {}) {
                 pendingMcpRequests.delete(id);
                 reject(new Error(`MCP RPC timeout for ${method}`));
             }
-        }, 15000);
+        }, 45000);
     });
 }
 
@@ -973,24 +973,42 @@ async function stopControlling() {
     await poll();
 }
 
+let screenshotTimeoutId = null;
+let screenshotLoopActive = false;
+let screenshotInFlight = false;
+
 function startScreenshotLoop() {
-    if (screenshotTimer) return;
-    pullScreenshot();
-    screenshotTimer = setInterval(pullScreenshot, 1000);
+    if (screenshotLoopActive) return;
+    screenshotLoopActive = true;
+    scheduleNextScreenshot(0);
 }
 
 function stopScreenshotLoop() {
-    if (screenshotTimer) {
-        clearInterval(screenshotTimer);
-        screenshotTimer = null;
+    screenshotLoopActive = false;
+    if (screenshotTimeoutId) {
+        clearTimeout(screenshotTimeoutId);
+        screenshotTimeoutId = null;
     }
 }
 
+function scheduleNextScreenshot(delay = 1000) {
+    if (!screenshotLoopActive) return;
+    if (screenshotTimeoutId) clearTimeout(screenshotTimeoutId);
+    screenshotTimeoutId = setTimeout(async () => {
+        if (!screenshotLoopActive || !controllingPeer) return;
+        await pullScreenshot();
+        if (screenshotLoopActive && controllingPeer) {
+            scheduleNextScreenshot(1000);
+        }
+    }, delay);
+}
+
 async function pullScreenshot() {
-    if (!controllingPeer) return;
+    if (!controllingPeer || screenshotInFlight) return;
     const img = document.getElementById('screen');
     const status = document.getElementById('screen-status');
     if (!img) return;
+    screenshotInFlight = true;
     try {
         if (isMcpApp) {
             const r = await callMcpTool('opendesk_app_api', {
@@ -1024,6 +1042,8 @@ async function pullScreenshot() {
         if (status) setText(status, `${img.dataset.logicalWidth}×${img.dataset.logicalHeight}`);
     } catch (e) {
         if (status) setText(status, `error: ${e.message}`);
+    } finally {
+        screenshotInFlight = false;
     }
 }
 
@@ -1077,13 +1097,22 @@ document.body.addEventListener('click', (ev) => {
 // Polling
 // ---------------------------------------------------------------------------
 
+let pollInFlight = false;
 async function poll() {
+    if (pollInFlight) return;
+    pollInFlight = true;
     try {
         const s = await apiGet('/api/state');
         lastState = s;
         render(s);
     } catch (e) {
-        setHtml(root, `<p class="muted">backend unreachable: ${escapeHtml(e.message)}</p>`);
+        if (!lastState) {
+            setHtml(root, `<p class="muted">backend unreachable: ${escapeHtml(e.message)}</p>`);
+        } else {
+            console.warn('Poll error:', e.message);
+        }
+    } finally {
+        pollInFlight = false;
     }
 }
 
