@@ -29,6 +29,9 @@ opendesk pair-with    HOST_OR_CODE [CODE] [--port N] [--name NAME]
 opendesk connect      [PEER]         # PEER optional if a default is set
                       [--rendezvous URL] [--rendezvous-token TOKEN] [--no-p2p]
 opendesk peers        [list | default [NAME|--clear] | rename NAME NEW | remove NAME | rendezvous NAME [URL]]
+opendesk privacy      PEER [--lock-input] [--blackout] [--unlock]
+                      # Remote-only: locks physical input / blanks screen on the remote peer.
+                      # Automatically unlocks when the controller disconnects. Local use prohibited for safety.
 ```
 
 ---

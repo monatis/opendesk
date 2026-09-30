@@ -483,6 +483,7 @@
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#high-performance-streaming-low-latency">⚡ High-Performance Streaming &amp; Low Latency</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-input-locking-privacy-screen-blackout-curtain">🔒 Remote Input Locking &amp; Privacy Screen (Blackout Curtain)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-opendesk-mcp-apps-in-custom-harnesses-e-g-isanagent">Hosting OpenDesk MCP Apps in Custom Harnesses (e.g., <code class="docutils literal notranslate"><span class="pre">isanagent</span></code>)</a><ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#iframe-element">1. Iframe Element</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#postmessage-protocol-bridge-50-lines">2. PostMessage Protocol Bridge (~50 lines)</a></li>
@@ -558,6 +559,19 @@ Standard computer-use tools (like <code class="docutils literal notranslate"><sp
 <li><p><strong>Instant Interactive Feedback Bursts</strong>: When the user clicks on the canvas, types in the control box, or presses special keys, OpenDesk triggers an immediate screenshot fetch within <strong>80ms</strong>, providing near-instant visual feedback.</p></li>
 <li><p><strong>Host Query Tolerant</strong>: <code class="docutils literal notranslate"><span class="pre">resources/read</span></code> cleanly accepts host-specific URI variants with query parameters (e.g. <code class="docutils literal notranslate"><span class="pre">ui://opendesk/viewport?peer=remote-pc</span></code>) or trailing slashes (<code class="docutils literal notranslate"><span class="pre">ui://opendesk/viewport/</span></code>).</p></li>
 </ol>
+</section>
+<hr class="docutils" />
+<section id="remote-input-locking-privacy-screen-blackout-curtain">
+<h2>🔒 Remote Input Locking &amp; Privacy Screen (Blackout Curtain)<a class="headerlink" href="#remote-input-locking-privacy-screen-blackout-curtain" title="Link to this heading">#</a></h2>
+<p>When controlling remote machines, physical operators or onlookers in front of the controlled machine could inadvertently interfere with automated agent actions or view confidential operations on the physical monitor.</p>
+<p>OpenDesk provides integrated input locking and blackout capabilities:</p>
+<ul class="simple">
+<li><p><strong>Physical Input Lock (<code class="docutils literal notranslate"><span class="pre">🔒</span> <span class="pre">Lock</span> <span class="pre">Input</span></code>)</strong>: Intercepts and drops physical keyboard and mouse events on the remote host via low-level hooks while seamlessly permitting injected agent synthetic input (<code class="docutils literal notranslate"><span class="pre">LLKHF_INJECTED</span></code> / <code class="docutils literal notranslate"><span class="pre">LLMHF_INJECTED</span></code>).</p></li>
+<li><p><strong>Privacy Curtain (<code class="docutils literal notranslate"><span class="pre">⬛</span> <span class="pre">Privacy</span> <span class="pre">Screen</span></code>)</strong>: Summons a full-screen topmost blackout overlay on the remote monitor utilizing <code class="docutils literal notranslate"><span class="pre">SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)</span></code> (0x11). The monitor displays a pure black screen to physical onlookers while DXGI and Desktop Duplication capture the true underlying desktop with zero interference.</p></li>
+<li><p><strong>Safety Safeguard (Remote-Only)</strong>: Because a local operator locking their own machine would prevent regaining control, <strong>input locking and privacy curtains are strictly prohibited when controlling the <code class="docutils literal notranslate"><span class="pre">local</span></code> machine</strong>. The Web UI automatically hides these controls, and the <code class="docutils literal notranslate"><span class="pre">opendesk_privacy</span></code> tool rejects <code class="docutils literal notranslate"><span class="pre">local</span></code> targets with a descriptive error.</p></li>
+<li><p><strong>Automatic Disconnect Teardown</strong>: Whenever the controlling session terminates (intentional disconnect, network drop, timeout, or eviction), the remote host automatically and immediately unlocks all physical inputs and closes the blackout screen curtain.</p></li>
+<li><p><strong>Emergency Hardware Escape</strong>: Pressing <code class="docutils literal notranslate"><span class="pre">Escape</span></code> 5 times within 1.5 seconds on the remote physical keyboard instantly disengages all hooks as an emergency safeguard.</p></li>
+</ul>
 </section>
 <section id="hosting-opendesk-mcp-apps-in-custom-harnesses-e-g-isanagent">
 <h2>Hosting OpenDesk MCP Apps in Custom Harnesses (e.g., <code class="docutils literal notranslate"><span class="pre">isanagent</span></code>)<a class="headerlink" href="#hosting-opendesk-mcp-apps-in-custom-harnesses-e-g-isanagent" title="Link to this heading">#</a></h2>
@@ -673,6 +687,7 @@ Standard computer-use tools (like <code class="docutils literal notranslate"><sp
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#high-performance-streaming-low-latency">⚡ High-Performance Streaming &amp; Low Latency</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote-input-locking-privacy-screen-blackout-curtain">🔒 Remote Input Locking &amp; Privacy Screen (Blackout Curtain)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-opendesk-mcp-apps-in-custom-harnesses-e-g-isanagent">Hosting OpenDesk MCP Apps in Custom Harnesses (e.g., <code class="docutils literal notranslate"><span class="pre">isanagent</span></code>)</a><ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#iframe-element">1. Iframe Element</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#postmessage-protocol-bridge-50-lines">2. PostMessage Protocol Bridge (~50 lines)</a></li>
