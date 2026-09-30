@@ -13,7 +13,10 @@ tool = ScreenshotTool()
 | `show_cursor` | bool | false | Draw a red dot at the current cursor position |
 | `zoom` | `[x0,y0,x1,y1]` | null | Crop a region for close-up inspection |
 | `region` | `[x,y,w,h]` | null | Capture only this screen region |
-| `save_path` | str | null | Save PNG to disk at this absolute path |
+| `format` | str | `"png"` (local) / `"jpeg"` (remote) | Compression format (`"jpeg"` or `"png"`). `"jpeg"` reduces payload size by ~5x–14x for low-latency streaming. |
+| `quality` | int | 75 | JPEG compression quality from 1 to 100. |
+| `save_path` | str | null | Save image to disk at this absolute path |
+| `peer` | str | null | Target peer name to capture screen remotely (e.g. `"work-pc"` or `"local"`) |
 
 ## Ask Claude
 

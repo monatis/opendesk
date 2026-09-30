@@ -9,6 +9,7 @@ Run `opendesk install` on the controller as before. The MCP server now exposes:
 
 | Tool | Purpose |
 |---|---|
+| `opendesk_view [peer]` | Open the interactive MCP App remote desktop viewport inline in supported hosts (Goose, Claude Desktop, web frontends). |
 | `opendesk_peers` | List `local` + every trusted peer, marked with `[default (explicit/implicit)]` and `[active]`. |
 | `opendesk_discover` | Browse the LAN for opendesk peers (paired and unpaired). |
 | `opendesk_use <peer>` | Set the default peer for subsequent calls. `peer="local"` reverts. |

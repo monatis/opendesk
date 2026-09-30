@@ -16,13 +16,14 @@ Your AI client (Claude Code / Cursor / Continue)
        v
   opendesk-mcp  <-- the server this package installs
        |
-       +-- screenshot tool  (captures screen, returns PNG to the LLM)
-       +-- ui tool          (clicks elements by name via AX tree)
-       +-- mouse tool       (pixel-level mouse control with Retina scaling)
-       +-- keyboard tool    (types text, presses keys, hotkeys)
-       +-- app tool         (opens, closes, focuses apps)
-       +-- clipboard tool   (read/write clipboard)
-       +-- ocr tool         (extracts text from any screen region)
+       +-- screenshot tool    (captures screen as PNG/JPEG for LLM observation)
+       +-- opendesk_view tool (opens interactive MCP App viewport inline in chat)
+       +-- ui tool            (clicks elements by name via AX tree)
+       +-- mouse tool         (pixel-level mouse control with Retina scaling)
+       +-- keyboard tool      (types text, presses keys, hotkeys)
+       +-- app tool           (opens, closes, focuses apps)
+       +-- clipboard tool     (read/write clipboard)
+       +-- ocr tool           (extracts text from any screen region)
 ```
 
 The LLM decides when to call a tool, calls it, gets the result (including PNG screenshots),
@@ -36,7 +37,8 @@ Once registered, the LLM sees these tools in every conversation:
 
 | Tool | When the LLM uses it |
 |------|---------------------|
-| `screenshot` | "Let me see what's on the screen" |
+| `screenshot` | "Let me see what's on the screen" (PNG or fast JPEG with quality control) |
+| `opendesk_view` | "Open the interactive remote desktop viewport so the user can watch live or take over" |
 | `ui` | "Click the Save button" (finds it via AX tree, no coordinates) |
 | `mouse` | Last resort for canvas areas with no accessible elements |
 | `keyboard` | "Type this text into the field" |

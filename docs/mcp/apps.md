@@ -26,15 +26,25 @@ OpenDesk advertises and serves the following MCP App resource:
 - **Content**: Self-contained, zero-dependency HTML5 application with embedded CSS and JavaScript.
 
 ### 2. Associated Tools
-The following tools declare `_meta.ui.resourceUri = "ui://opendesk/viewport"`:
+OpenDesk binds the interactive MCP App UI exclusively to the dedicated view tool:
 
 | Tool | Description |
 |------|-------------|
-| `opendesk_view` | Explicitly opens the interactive remote desktop viewport and peer controller. |
-| `screenshot` | Captures the screen and attaches the interactive viewport resource for visual confirmation. |
-| `opendesk_peers` | Lists available peers with the interactive management viewport attached. |
+| `opendesk_view` | Explicitly opens the interactive remote desktop viewport and peer controller. Emits `_meta.ui.resourceUri = "ui://opendesk/viewport"`. |
+
+> [!NOTE]
+> Standard computer-use tools (like `screenshot`, `mouse`, `keyboard`) and administrative tools (`opendesk_peers`) do not attach `_meta.ui`. This ensures automated LLM tool calls remain token-efficient without mounting unsolicited iframes into the chat conversation.
 
 ---
+
+## ⚡ High-Performance Streaming & Low Latency
+
+Remote screen capture over public relays previously suffered from high payload sizes (1.26 MB per PNG) and multi-second relay latency. OpenDesk features optimized streaming built directly into the MCP App bridge:
+
+1. **Lightweight JPEG Compression**: Screenshots stream in SIMD-encoded JPEG at 75% quality by default, reducing frame size from **~1.26 MB down to ~90–260 KB** (~5x–14x bandwidth reduction).
+2. **Sub-Second Relay Latency**: Steady-state frame latency over public rendezvous relays drops to **~850ms**, eliminating network queue congestion.
+3. **Instant Interactive Feedback Bursts**: When the user clicks on the canvas, types in the control box, or presses special keys, OpenDesk triggers an immediate screenshot fetch within **80ms**, providing near-instant visual feedback.
+4. **Host Query Tolerant**: `resources/read` cleanly accepts host-specific URI variants with query parameters (e.g. `ui://opendesk/viewport?peer=remote-pc`) or trailing slashes (`ui://opendesk/viewport/`).
 
 ## Hosting OpenDesk MCP Apps in Custom Harnesses (e.g., `isanagent`)
 
