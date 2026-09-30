@@ -224,6 +224,9 @@ async fn test_app_web_endpoints() -> Result<()> {
         pairing_code: Arc::new(tokio::sync::Mutex::new(None)),
         pairing_result: Arc::new(tokio::sync::Mutex::new(None)),
         pairing_abort_tx: Arc::new(tokio::sync::Mutex::new(None)),
+        rendezvous: Arc::new(tokio::sync::Mutex::new(
+            opendesk_rs::protocol::storage::GlobalRendezvousConfig::default(),
+        )),
     };
 
     let router = create_router(state);

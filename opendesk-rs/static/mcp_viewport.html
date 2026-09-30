@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenDesk Viewport</title>
+    <style>
+        :root {
+            --bg-base: #080c14;
+            --bg-surface: #0f172a;
+            --bg-elevated: #1e293b;
+            --bg-card: rgba(30, 41, 59, 0.7);
+            --border: #334155;
+            --border-hover: #475569;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-faint: #64748b;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-glow: rgba(59, 130, 246, 0.25);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --shadow-subtle: 0 4px 12px rgba(0, 0, 0, 0.35);
+        }
+
+        body.light {
+            --bg-base: #f8fafc;
+            --bg-surface: #ffffff;
+            --bg-elevated: #f1f5f9;
+            --bg-card: rgba(255, 255, 255, 0.9);
+            --border: #e2e8f0;
+            --border-hover: #cbd5e1;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --text-faint: #94a3b8;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --accent-glow: rgba(37, 99, 235, 0.15);
+            --shadow-subtle: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            gap: 12px;
+            overflow-x: hidden;
+            font-size: 13px;
+        }
+
+        /* Header bar */
+        .header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px 14px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-subtle);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            font-size: 0.92rem;
+            color: var(--text-main);
+            letter-spacing: -0.01em;
+        }
+
+        .brand-icon {
+            color: var(--accent);
+            font-size: 1.1rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .peer-selector-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        select, button, input {
+            font-size: 0.82rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            outline: none;
+            transition: all 0.15s ease;
+        }
+
+        select {
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        select:hover, select:focus {
+            border-color: var(--accent);
+        }
+
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 5px 10px;
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        button:hover {
+            background: var(--border);
+            border-color: var(--border-hover);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #ffffff;
+            font-weight: 500;
+        }
+
+        button.primary:hover {
+            background: var(--accent-hover);
+        }
+
+        button.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #ffffff;
+        }
+
+        .btn-group {
+            display: inline-flex;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .btn-group button {
+            border: none;
+            border-radius: 0;
+            border-right: 1px solid var(--border);
+            padding: 5px 9px;
+        }
+
+        .btn-group button:last-child {
+            border-right: none;
+        }
+
+        /* Viewport Canvas Container */
+        .viewport-card {
+            position: relative;
+            background: #000000;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 380px;
+            box-shadow: var(--shadow-subtle);
+        }
+
+        .screen-wrapper {
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: crosshair;
+        }
+
+        #screen-img {
+            max-width: 100%;
+            height: auto;
+            max-height: 68vh;
+            display: block;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        .loader-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(8, 12, 20, 0.75);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            color: var(--text-muted);
+            backdrop-filter: blur(4px);
+            z-index: 10;
+        }
+
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Coordinate indicator badge */
+        .coord-badge {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(15, 23, 42, 0.85);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            padding: 3px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 0.72rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+        }
+
+        /* Click ripple effect */
+        .click-ripple {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--accent);
+            background: var(--accent-glow);
+            border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            pointer-events: none;
+            animation: ripple-anim 0.4s ease-out forwards;
+            z-index: 20;
+        }
+
+        @keyframes ripple-anim {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(2.2); }
+        }
+
+        /* Action Toolbar */
+        .action-bar {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            box-shadow: var(--shadow-subtle);
+        }
+
+        .type-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .type-row input {
+            flex: 1;
+            padding: 6px 12px;
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+        }
+
+        .type-row input:focus {
+            border-color: var(--accent);
+        }
+
+        .keys-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .keys-label {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            margin-right: 4px;
+        }
+
+        .key-btn {
+            font-size: 0.75rem;
+            padding: 3px 8px;
+            background: var(--bg-elevated);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        /* Footer bar */
+        .footer-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            padding: 2px 4px;
+        }
+
+        .footer-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 18px;
+        }
+
+        .footer-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Screen reader */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header bar -->
+    <header class="header-bar" role="banner">
+        <div class="header-left">
+            <div class="brand-pill">
+                <span class="brand-icon">◐</span>
+                <span>OpenDesk Viewport</span>
+            </div>
+            <div class="status-badge" id="conn-pill" title="Connection status">
+                <span class="status-dot"></span>
+                <span id="conn-status-text">Connected</span>
+            </div>
+        </div>
+
+        <div class="header-controls">
+            <!-- Peer selector -->
+            <div class="peer-selector-wrap">
+                <label for="peer-select" class="sr-only">Target Peer</label>
+                <select id="peer-select" title="Active Peer Target">
+                    <option value="local">local (this machine)</option>
+                </select>
+                <button type="button" id="btn-refresh-peers" title="Refresh Peers List">↻ Peers</button>
+            </div>
+
+            <!-- Mode group -->
+            <div class="btn-group" role="group" aria-label="Mouse Click Mode">
+                <button type="button" class="active" data-mode="click" id="mode-click" title="Left Click on tap">Click</button>
+                <button type="button" data-mode="right_click" id="mode-right-click" title="Right Click on tap">Right</button>
+                <button type="button" data-mode="double_click" id="mode-double-click" title="Double Click on tap">Double</button>
+            </div>
+
+            <!-- Capture & Auto-refresh -->
+            <button type="button" class="primary" id="btn-capture" title="Take immediate screenshot">
+                <span>↻</span>
+                <span>Capture</span>
+            </button>
+            <select id="auto-refresh-select" title="Auto-refresh Interval">
+                <option value="0">Auto: Off</option>
+                <option value="1500" selected>Auto: 1.5s</option>
+                <option value="3000">Auto: 3s</option>
+                <option value="5000">Auto: 5s</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- Remote Screen Card -->
+    <main class="viewport-card" id="viewport-card">
+        <div class="screen-wrapper" id="screen-wrapper">
+            <img id="screen-img" alt="Remote Desktop View" style="display:none;" />
+            <div class="coord-badge" id="coord-badge">X: 0, Y: 0</div>
+        </div>
+        <div class="loader-overlay" id="loader-overlay">
+            <div class="spinner"></div>
+            <span id="loader-text">Connecting to OpenDesk session…</span>
+        </div>
+    </main>
+
+    <!-- Interactive Actions Strip -->
+    <section class="action-bar" aria-label="Remote Input Controls">
+        <form class="type-row" id="type-form">
+            <input type="text" id="type-input" placeholder="Type text and press Enter to send to remote machine..." autocomplete="off" />
+            <button type="submit" class="primary" id="btn-send-text">Send Text</button>
+        </form>
+
+        <div class="keys-row">
+            <span class="keys-label">Special Keys:</span>
+            <button type="button" class="key-btn" data-key="enter">Enter</button>
+            <button type="button" class="key-btn" data-key="escape">Esc</button>
+            <button type="button" class="key-btn" data-key="tab">Tab</button>
+            <button type="button" class="key-btn" data-key="backspace">⌫ Backspace</button>
+            <button type="button" class="key-btn" data-key="space">Space</button>
+            <button type="button" class="key-btn" data-key="win">Win/Super</button>
+            <button type="button" class="key-btn" data-hotkey="ctrl,c">Ctrl+C</button>
+            <button type="button" class="key-btn" data-hotkey="ctrl,v">Ctrl+V</button>
+            <button type="button" class="key-btn" data-hotkey="alt,tab">Alt+Tab</button>
+        </div>
+    </section>
+
+    <!-- Footer bar -->
+    <footer class="footer-bar">
+        <div class="footer-status">
+            <span id="activity-msg">Ready</span>
+            <span id="screen-dims" style="font-family:ui-monospace, monospace; opacity:0.8;"></span>
+        </div>
+        <div class="footer-actions">
+            <button type="button" id="btn-send-chat" title="Send remote state summary to chat">
+                💬 Send to Chat
+            </button>
+        </div>
+    </footer>
+
+    <div class="sr-only" id="sr-status" role="status" aria-live="polite"></div>
+
+    <script>
+        // -------------------------------------------------------------------
+        // SEP-1865 JSON-RPC PostMessage Client Bridge
+        // -------------------------------------------------------------------
+        let nextRpcId = 1;
+        const pendingRequests = new Map();
+        let currentPeer = "local";
+        let currentClickMode = "click";
+        let autoRefreshTimer = null;
+        let isFetching = false;
+        let logicalWidth = 1920;
+        let logicalHeight = 1080;
+
+        function announce(text) {
+            const el = document.getElementById("sr-status");
+            if (el) el.textContent = text;
+        }
+
+        function setActivity(text, isError = false) {
+            const msgEl = document.getElementById("activity-msg");
+            if (msgEl) {
+                msgEl.textContent = text;
+                msgEl.style.color = isError ? "var(--danger)" : "var(--text-muted)";
+            }
+        }
+
+        function reportSize() {
+            sendNotification("ui/notifications/size-changed", {
+                height: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 440)
+            });
+        }
+
+        function sendRpc(method, params = {}) {
+            const id = nextRpcId++;
+            const payload = { jsonrpc: "2.0", id, method, params };
+            window.parent.postMessage(payload, "*");
+            return new Promise((resolve, reject) => {
+                pendingRequests.set(id, { resolve, reject });
+                setTimeout(() => {
+                    if (pendingRequests.has(id)) {
+                        pendingRequests.delete(id);
+                        reject(new Error(`RPC timeout: ${method}`));
+                    }
+                }, 15000);
+            });
+        }
+
+        function sendNotification(method, params = {}) {
+            const payload = { jsonrpc: "2.0", method, params };
+            window.parent.postMessage(payload, "*");
+        }
+
+        // Host Message Listener
+        window.addEventListener("message", (event) => {
+            const data = event.data;
+            if (!data || typeof data !== "object") return;
+
+            // Handle Response to our RPC
+            if (data.id && pendingRequests.has(data.id)) {
+                const { resolve, reject } = pendingRequests.get(data.id);
+                pendingRequests.delete(data.id);
+                if (data.error) {
+                    reject(new Error(data.error.message || "RPC failed"));
+                } else {
+                    resolve(data.result);
+                }
+            }
+            // Handle Host Notifications
+            else if (data.method === "ui/notifications/host-context-changed") {
+                applyHostContext(data.params);
+            }
+            else if (data.method === "ui/notifications/tool-result") {
+                handleIncomingToolResult(data.params);
+            }
+        });
+
+        function applyHostContext(context) {
+            if (!context) return;
+            if (context.theme) {
+                document.body.className = context.theme;
+            }
+            if (context.styles?.variables) {
+                for (const [k, v] of Object.entries(context.styles.variables)) {
+                    if (v) document.documentElement.style.setProperty(k, v);
+                }
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // Tool Calling Helpers
+        // -------------------------------------------------------------------
+        async function callServerTool(name, args = {}) {
+            const res = await sendRpc("tools/call", { name, arguments: args });
+            return res;
+        }
+
+        // -------------------------------------------------------------------
+        // Core Viewport Mechanics
+        // -------------------------------------------------------------------
+        async function captureScreenshot() {
+            if (isFetching) return;
+            isFetching = true;
+            const startTime = performance.now();
+
+            try {
+                const toolArgs = { peer: currentPeer };
+                const res = await callServerTool("screenshot", toolArgs);
+                const elapsed = Math.round(performance.now() - startTime);
+
+                if (res && res.content) {
+                    const imgItem = res.content.find(c => c.type === "image");
+                    if (imgItem && imgItem.data) {
+                        renderScreenshot(imgItem.data, imgItem.mimeType || "image/png");
+                        setActivity(`✓ Captured screen (${elapsed}ms)`);
+                    } else {
+                        const txtItem = res.content.find(c => c.type === "text");
+                        setActivity(txtItem?.text || "Screenshot captured", false);
+                    }
+                }
+            } catch (err) {
+                setActivity(`Capture error: ${err.message}`, true);
+            } finally {
+                isFetching = false;
+                const overlay = document.getElementById("loader-overlay");
+                if (overlay) overlay.style.display = "none";
+                reportSize();
+            }
+        }
+
+        function renderScreenshot(b64Data, mimeType) {
+            const img = document.getElementById("screen-img");
+            if (!img) return;
+
+            img.onload = () => {
+                img.style.display = "block";
+                logicalWidth = img.naturalWidth || 1920;
+                logicalHeight = img.naturalHeight || 1080;
+                const dimsEl = document.getElementById("screen-dims");
+                if (dimsEl) dimsEl.textContent = `${logicalWidth} × ${logicalHeight}`;
+                reportSize();
+            };
+
+            img.src = `data:${mimeType};base64,${b64Data}`;
+        }
+
+        function handleIncomingToolResult(result) {
+            if (!result || !result.content) return;
+            const imgItem = result.content.find(c => c.type === "image");
+            if (imgItem && imgItem.data) {
+                renderScreenshot(imgItem.data, imgItem.mimeType || "image/png");
+            }
+        }
+
+        // Mouse click on remote desktop
+        async function handleScreenClick(ev) {
+            const img = document.getElementById("screen-img");
+            if (!img) return;
+
+            const rect = img.getBoundingClientRect();
+            const relX = ev.clientX - rect.left;
+            const relY = ev.clientY - rect.top;
+
+            if (relX < 0 || relX > rect.width || relY < 0 || relY > rect.height) return;
+
+            const x = Math.round((relX / rect.width) * logicalWidth);
+            const y = Math.round((relY / rect.height) * logicalHeight);
+
+            // Show visual ripple
+            showClickRipple(ev.clientX, ev.clientY);
+
+            setActivity(`Dispatching ${currentClickMode} at (${x}, ${y})…`);
+            announce(`${currentClickMode} at (${x}, ${y})`);
+
+            try {
+                await callServerTool("mouse", {
+                    action: currentClickMode,
+                    x,
+                    y,
+                    image_width: logicalWidth,
+                    image_height: logicalHeight,
+                    peer: currentPeer
+                });
+
+                setActivity(`✓ ${currentClickMode} at (${x}, ${y})`);
+                // Schedule quick refresh to show result
+                setTimeout(captureScreenshot, 250);
+            } catch (err) {
+                setActivity(`Mouse error: ${err.message}`, true);
+            }
+        }
+
+        function showClickRipple(clientX, clientY) {
+            const wrapper = document.getElementById("screen-wrapper");
+            if (!wrapper) return;
+            const wrapRect = wrapper.getBoundingClientRect();
+
+            const ripple = document.createElement("div");
+            ripple.className = "click-ripple";
+            ripple.style.left = `${clientX - wrapRect.left}px`;
+            ripple.style.top = `${clientY - wrapRect.top}px`;
+            wrapper.appendChild(ripple);
+
+            setTimeout(() => {
+                if (ripple.parentNode) ripple.parentNode.removeChild(ripple);
+            }, 450);
+        }
+
+        // Coordinate tracker on hover
+        function handleMouseMove(ev) {
+            const img = document.getElementById("screen-img");
+            const badge = document.getElementById("coord-badge");
+            if (!img || !badge) return;
+
+            const rect = img.getBoundingClientRect();
+            const relX = ev.clientX - rect.left;
+            const relY = ev.clientY - rect.top;
+
+            if (relX >= 0 && relX <= rect.width && relY >= 0 && relY <= rect.height) {
+                const x = Math.round((relX / rect.width) * logicalWidth);
+                const y = Math.round((relY / rect.height) * logicalHeight);
+                badge.textContent = `X: ${x}, Y: ${y}`;
+            }
+        }
+
+        // Send Text / Key Inputs
+        async function sendTypedText(text) {
+            if (!text) return;
+            setActivity(`Typing text: "${text.length > 20 ? text.slice(0, 20) + '…' : text}"…`);
+            try {
+                await callServerTool("keyboard", {
+                    action: "type",
+                    text,
+                    peer: currentPeer
+                });
+                setActivity(`✓ Typed text`);
+                setTimeout(captureScreenshot, 300);
+            } catch (err) {
+                setActivity(`Type error: ${err.message}`, true);
+            }
+        }
+
+        async function sendKeyAction(key) {
+            setActivity(`Pressing key: ${key}…`);
+            try {
+                await callServerTool("keyboard", {
+                    action: "press",
+                    key,
+                    peer: currentPeer
+                });
+                setActivity(`✓ Pressed key: ${key}`);
+                setTimeout(captureScreenshot, 300);
+            } catch (err) {
+                setActivity(`Key error: ${err.message}`, true);
+            }
+        }
+
+        async function sendHotkey(keys) {
+            setActivity(`Sending hotkey: ${keys.join("+")}…`);
+            try {
+                await callServerTool("keyboard", {
+                    action: "hotkey",
+                    keys,
+                    peer: currentPeer
+                });
+                setActivity(`✓ Hotkey ${keys.join("+")}`);
+                setTimeout(captureScreenshot, 300);
+            } catch (err) {
+                setActivity(`Hotkey error: ${err.message}`, true);
+            }
+        }
+
+        // Peer Management
+        async function loadPeers() {
+            try {
+                const res = await callServerTool("opendesk_peers", {});
+                const select = document.getElementById("peer-select");
+                if (!select) return;
+
+                let txt = "";
+                if (res && res.content && res.content[0]) {
+                    txt = res.content[0].text || "";
+                }
+
+                // Parse peers from textual list
+                const lines = txt.split("\n");
+                const foundPeers = [];
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+                        const parts = trimmed.slice(2).split(" ");
+                        if (parts[0]) foundPeers.push(parts[0].replace(/:$/, ""));
+                    }
+                }
+
+                // Rebuild options preserving local
+                select.innerHTML = '<option value="local">local (this machine)</option>';
+                for (const p of foundPeers) {
+                    if (p !== "local") {
+                        const opt = document.createElement("option");
+                        opt.value = p;
+                        opt.textContent = `peer: ${p}`;
+                        select.appendChild(opt);
+                    }
+                }
+                select.value = currentPeer;
+            } catch (err) {
+                console.warn("Failed loading peers:", err.message);
+            }
+        }
+
+        async function switchPeer(peerName) {
+            currentPeer = peerName;
+            setActivity(`Switching active peer to '${peerName}'…`);
+            try {
+                await callServerTool("opendesk_use", { peer: peerName });
+                setActivity(`✓ Active peer: ${peerName}`);
+                announce(`Switched to peer ${peerName}`);
+                await captureScreenshot();
+            } catch (err) {
+                setActivity(`Peer switch error: ${err.message}`, true);
+            }
+        }
+
+        // Send Summary to Chat (ui/message)
+        async function sendSummaryToChat() {
+            const summary = `OpenDesk Viewport Status:\n- Active Peer: ${currentPeer}\n- Resolution: ${logicalWidth}x${logicalHeight}\n- Time: ${new Date().toLocaleTimeString()}`;
+            try {
+                await sendRpc("ui/message", { content: { type: "text", text: summary } });
+                setActivity("✓ Status summary sent to chat");
+            } catch (err) {
+                setActivity("ui/message not supported by host", true);
+            }
+        }
+
+        // Auto Refresh Timer
+        function setupAutoRefresh(ms) {
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
+            }
+            if (ms > 0) {
+                autoRefreshTimer = setInterval(() => {
+                    if (!isFetching) captureScreenshot();
+                }, ms);
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // Event Listeners & Mounting
+        // -------------------------------------------------------------------
+        function initEvents() {
+            // Screen clicks & hover
+            const screenWrapper = document.getElementById("screen-wrapper");
+            if (screenWrapper) {
+                screenWrapper.addEventListener("click", handleScreenClick);
+                screenWrapper.addEventListener("mousemove", handleMouseMove);
+            }
+
+            // Mode buttons
+            const modeButtons = document.querySelectorAll(".btn-group button");
+            modeButtons.forEach(btn => {
+                btn.addEventListener("click", () => {
+                    modeButtons.forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    currentClickMode = btn.dataset.mode;
+                    setActivity(`Mode: ${currentClickMode}`);
+                });
+            });
+
+            // Capture button
+            document.getElementById("btn-capture").addEventListener("click", () => {
+                captureScreenshot();
+            });
+
+            // Auto-refresh select
+            const autoSelect = document.getElementById("auto-refresh-select");
+            autoSelect.addEventListener("change", (e) => {
+                setupAutoRefresh(Number(e.target.value));
+            });
+
+            // Peer select
+            const peerSelect = document.getElementById("peer-select");
+            peerSelect.addEventListener("change", (e) => {
+                switchPeer(e.target.value);
+            });
+
+            // Refresh peers button
+            document.getElementById("btn-refresh-peers").addEventListener("click", async () => {
+                await loadPeers();
+                setActivity("✓ Peers list updated");
+            });
+
+            // Type text form
+            const typeForm = document.getElementById("type-form");
+            typeForm.addEventListener("submit", (e) => {
+                e.preventDefault();
+                const input = document.getElementById("type-input");
+                const val = input.value;
+                if (!val) return;
+                input.value = "";
+                sendTypedText(val);
+            });
+
+            // Key buttons
+            document.querySelectorAll(".key-btn").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    if (btn.dataset.key) {
+                        sendKeyAction(btn.dataset.key);
+                    } else if (btn.dataset.hotkey) {
+                        sendHotkey(btn.dataset.hotkey.split(","));
+                    }
+                });
+            });
+
+            // Send to chat
+            document.getElementById("btn-send-chat").addEventListener("click", sendSummaryToChat);
+
+            // Resize observer
+            window.addEventListener("resize", reportSize);
+        }
+
+        // -------------------------------------------------------------------
+        // Handshake & Init
+        // -------------------------------------------------------------------
+        async function init() {
+            initEvents();
+
+            try {
+                // SEP-1865 Handshake
+                const initResult = await sendRpc("ui/initialize", {
+                    protocolVersion: "2026-01-26",
+                    appCapabilities: {
+                        availableDisplayModes: ["inline", "fullscreen"]
+                    },
+                    clientInfo: {
+                        name: "opendesk-viewport",
+                        version: "0.3.0"
+                    }
+                });
+
+                if (initResult?.hostInfo) {
+                    const connText = document.getElementById("conn-status-text");
+                    if (connText) connText.textContent = `Host: ${initResult.hostInfo.name}`;
+                }
+                applyHostContext(initResult?.hostContext);
+                sendNotification("ui/notifications/initialized", {});
+
+                await loadPeers();
+                await captureScreenshot();
+                setupAutoRefresh(1500);
+            } catch (err) {
+                // Standalone / Preview Fallback
+                console.warn("Running in standalone / direct mode:", err.message);
+                const connText = document.getElementById("conn-status-text");
+                if (connText) connText.textContent = "Standalone Preview";
+                const overlay = document.getElementById("loader-overlay");
+                if (overlay) overlay.style.display = "none";
+                reportSize();
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

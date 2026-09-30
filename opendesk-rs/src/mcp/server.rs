@@ -16,6 +16,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 use tracing::error;
 
+const MCP_VIEWPORT_HTML: &str = include_str!("../../static/mcp_viewport.html");
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
@@ -278,11 +280,64 @@ impl McpServer {
                     "version": "0.3.0"
                 },
                 "capabilities": {
-                    "tools": {}
+                    "tools": {
+                        "listChanged": false
+                    },
+                    "resources": {
+                        "subscribe": false,
+                        "listChanged": false
+                    }
                 }
             })),
 
             "notifications/initialized" => Ok(json!({})),
+
+            "resources/list" => Ok(json!({
+                "resources": [
+                    {
+                        "uri": "ui://opendesk/viewport",
+                        "name": "OpenDesk Remote Viewport",
+                        "description": "Interactive remote desktop canvas, controls, and peer switcher",
+                        "mimeType": "text/html;profile=mcp-app"
+                    }
+                ]
+            })),
+
+            "resources/templates/list" => Ok(json!({
+                "resourceTemplates": []
+            })),
+
+            "resources/read" => {
+                let uri = params
+                    .get("uri")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("missing uri"))?;
+
+                if uri == "ui://opendesk/viewport" {
+                    Ok(json!({
+                        "contents": [
+                            {
+                                "uri": "ui://opendesk/viewport",
+                                "mimeType": "text/html;profile=mcp-app",
+                                "text": MCP_VIEWPORT_HTML,
+                                "_meta": {
+                                    "ui": {
+                                        "csp": {
+                                            "connectDomains": [],
+                                            "resourceDomains": [],
+                                            "frameDomains": [],
+                                            "baseUriDomains": []
+                                        },
+                                        "prefersBorder": true
+                                    }
+                                }
+                            }
+                        ]
+                    }))
+                } else {
+                    Err(anyhow!("Resource not found: {uri}"))
+                }
+            }
 
             "tools/list" => Ok(json!({
                 "tools": self.list_tools()
@@ -323,10 +378,22 @@ impl McpServer {
                     }
                 };
 
-                Ok(json!({
-                    "content": content,
-                    "isError": is_error
-                }))
+                let mut resp_map = serde_json::Map::new();
+                resp_map.insert("content".to_string(), json!(content));
+                resp_map.insert("isError".to_string(), json!(is_error));
+
+                if !is_error && matches!(tool_name, "screenshot" | "opendesk_view" | "opendesk_peers") {
+                    resp_map.insert(
+                        "_meta".to_string(),
+                        json!({
+                            "ui": {
+                                "resourceUri": "ui://opendesk/viewport"
+                            }
+                        }),
+                    );
+                }
+
+                Ok(Value::Object(resp_map))
             }
 
             _ => Err(anyhow!("Method not found: {method}")),
@@ -369,6 +436,11 @@ impl McpServer {
                             "type": "string",
                             "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
                         }
+                    }
+                },
+                "_meta": {
+                    "ui": {
+                        "resourceUri": "ui://opendesk/viewport"
                     }
                 }
             }),
@@ -527,9 +599,33 @@ impl McpServer {
                 }
             }),
             json!({
+                "name": "opendesk_view",
+                "description": "Open the interactive OpenDesk MCP App remote desktop viewport. Renders an interactive remote desktop canvas, controls, and peer switcher directly inline inside MCP App hosts (Claude Desktop, Goose, isanagent).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "peer": {
+                            "type": "string",
+                            "description": "Optional peer to view and control. Defaults to current or local machine."
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "_meta": {
+                    "ui": {
+                        "resourceUri": "ui://opendesk/viewport"
+                    }
+                }
+            }),
+            json!({
                 "name": "opendesk_peers",
                 "description": "List the peers available to this MCP session. Returns the local machine and every paired remote peer. The current default is marked with [current]; open connections are marked [active].",
-                "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
+                "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                "_meta": {
+                    "ui": {
+                        "resourceUri": "ui://opendesk/viewport"
+                    }
+                }
             }),
             json!({
                 "name": "opendesk_discover",
@@ -599,6 +695,7 @@ impl McpServer {
     pub async fn call_tool(&self, name: &str, args: &Value) -> Result<Vec<Value>> {
         // Handle admin tools
         match name {
+            "opendesk_view" => return self.admin_view(args).await,
             "opendesk_peers" => return self.admin_peers(args).await,
             "opendesk_discover" => return self.admin_discover(args).await,
             "opendesk_use" => return self.admin_use(args).await,
@@ -1372,6 +1469,22 @@ impl McpServer {
     // Admin tools implementation (100% parity with Python Integrations/MCP)
     // -----------------------------------------------------------------------
 
+    async fn admin_view(&self, args: &Value) -> Result<Vec<Value>> {
+        if let Some(peer) = args.get("peer").and_then(|v| v.as_str()) {
+            let mut session = self.session.lock().await;
+            session.use_peer(Some(peer))?;
+        }
+        let (effective_name, source) = {
+            let session = self.session.lock().await;
+            session.effective_peer()
+        };
+        let target = effective_name.unwrap_or_else(|| "local".to_string());
+        Ok(vec![json!({
+            "type": "text",
+            "text": format!("Interactive OpenDesk Viewport opened for peer '{target}' ({source}). Viewport UI is rendered inline.")
+        })])
+    }
+
     async fn admin_peers(&self, _args: &Value) -> Result<Vec<Value>> {
         let session = self.session.lock().await;
         let trusted = session.trusted.list();
@@ -1880,8 +1993,9 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_describe"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_capabilities"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_disconnect"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_view"));
 
-        assert_eq!(tools.len(), 16);
+        assert_eq!(tools.len(), 17);
     }
 
     #[tokio::test]
@@ -2063,5 +2177,105 @@ mod tests {
         let (eff, source) = session.effective_peer();
         assert_eq!(eff.as_deref(), None);
         assert_eq!(source, "local");
+    }
+
+    #[tokio::test]
+    async fn test_mcp_ui_resource_and_view_tool() {
+        let server = McpServer::new();
+
+        // 1. Initialize capabilities check
+        let init_res = server
+            .handle_method("initialize", &json!({}))
+            .await
+            .unwrap();
+        let caps = &init_res["capabilities"];
+        assert!(caps.get("resources").is_some());
+        assert!(caps.get("tools").is_some());
+
+        // 2. List resources
+        let res_list = server
+            .handle_method("resources/list", &json!({}))
+            .await
+            .unwrap();
+        let resources = res_list["resources"].as_array().unwrap();
+        let viewport_res = resources
+            .iter()
+            .find(|r| r["uri"] == "ui://opendesk/viewport")
+            .expect("ui://opendesk/viewport resource not found");
+        assert_eq!(viewport_res["mimeType"], "text/html;profile=mcp-app");
+
+        // 3. Read resource
+        let read_res = server
+            .handle_method(
+                "resources/read",
+                &json!({ "uri": "ui://opendesk/viewport" }),
+            )
+            .await
+            .unwrap();
+        let contents = read_res["contents"].as_array().unwrap();
+        assert_eq!(contents[0]["uri"], "ui://opendesk/viewport");
+        assert_eq!(contents[0]["mimeType"], "text/html;profile=mcp-app");
+        let html_text = contents[0]["text"].as_str().unwrap();
+        assert!(html_text.contains("OpenDesk Viewport"));
+        assert!(html_text.contains("ui/initialize"));
+        assert!(contents[0]["_meta"]["ui"]["csp"].is_object());
+
+        // 4. List tools includes opendesk_view with _meta.ui
+        let tools_res = server
+            .handle_method("tools/list", &json!({}))
+            .await
+            .unwrap();
+        let tools = tools_res["tools"].as_array().unwrap();
+        let view_tool = tools
+            .iter()
+            .find(|t| t["name"] == "opendesk_view")
+            .expect("opendesk_view tool not found");
+        assert_eq!(
+            view_tool["_meta"]["ui"]["resourceUri"],
+            "ui://opendesk/viewport"
+        );
+
+        let screenshot_tool = tools
+            .iter()
+            .find(|t| t["name"] == "screenshot")
+            .expect("screenshot tool not found");
+        assert_eq!(
+            screenshot_tool["_meta"]["ui"]["resourceUri"],
+            "ui://opendesk/viewport"
+        );
+
+        // 5. Call opendesk_view returns _meta.ui
+        let call_res = server
+            .handle_method(
+                "tools/call",
+                &json!({
+                    "name": "opendesk_view",
+                    "arguments": {}
+                }),
+            )
+            .await
+            .unwrap();
+        assert!(!call_res["isError"].as_bool().unwrap());
+        assert_eq!(
+            call_res["_meta"]["ui"]["resourceUri"],
+            "ui://opendesk/viewport"
+        );
+
+        // 6. Call opendesk_peers returns _meta.ui
+        let peers_res = server
+            .handle_method(
+                "tools/call",
+                &json!({
+                    "name": "opendesk_peers",
+                    "arguments": {}
+                }),
+            )
+            .await
+            .unwrap();
+        assert!(!peers_res["isError"].as_bool().unwrap());
+        assert_eq!(
+            peers_res["_meta"]["ui"]["resourceUri"],
+            "ui://opendesk/viewport"
+        );
     }
 }

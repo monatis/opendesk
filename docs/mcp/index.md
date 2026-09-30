@@ -73,7 +73,8 @@ Claude decides which tool to call, calls it, and responds with the result — yo
 
 ---
 
-## Setup
+## Setup & Interfaces
 
 1. [Install](install.md) the package
 2. Register with your client: [Claude Code](claude-code.md) · [Claude Desktop](claude-desktop.md) · [Cursor](cursor.md) · [Continue](continue.md)
+3. [MCP Apps (Interactive UI Viewport)](apps.md) — Embed interactive remote desktop viewports inside Claude Desktop, Goose, or custom harnesses like `isanagent`.
