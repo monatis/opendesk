@@ -183,37 +183,38 @@ impl OpendeskServer {
         println!();
 
         // If rendezvous is configured, open control WebSocket to register
-        let r_control: Option<(String, WebSocketTransport)> = if let Some(ref r_url) = primary_rendezvous {
-            match tokio_tungstenite::connect_async(r_url).await {
-                Ok((ws, _)) => {
-                    let mut tr = WebSocketTransport::new_tls(ws);
-                    let desc = read_description(self.home.as_deref());
-                    let mut reg_msg = serde_json::json!({
-                        "action": "register",
-                        "public_key": pk_hex,
-                        "name": peer_prefix,
-                        "description": desc,
-                    });
-                    if let Some(tok) = &self.rendezvous_token {
-                        reg_msg["token"] = serde_json::json!(tok);
+        let r_control: Option<(String, WebSocketTransport)> =
+            if let Some(ref r_url) = primary_rendezvous {
+                match tokio_tungstenite::connect_async(r_url).await {
+                    Ok((ws, _)) => {
+                        let mut tr = WebSocketTransport::new_tls(ws);
+                        let desc = read_description(self.home.as_deref());
+                        let mut reg_msg = serde_json::json!({
+                            "action": "register",
+                            "public_key": pk_hex,
+                            "name": peer_prefix,
+                            "description": desc,
+                        });
+                        if let Some(tok) = &self.rendezvous_token {
+                            reg_msg["token"] = serde_json::json!(tok);
+                        }
+                        if let Err(e) = tr.send_text(&reg_msg.to_string()).await {
+                            warn!("Failed to register on rendezvous for pairing: {}", e);
+                            None
+                        } else {
+                            let _ = tr.recv_text().await;
+                            info!("Registered on rendezvous for pairing: {}", r_url);
+                            Some((r_url.clone(), tr))
+                        }
                     }
-                    if let Err(e) = tr.send_text(&reg_msg.to_string()).await {
-                        warn!("Failed to register on rendezvous for pairing: {}", e);
+                    Err(e) => {
+                        warn!("Failed to connect to rendezvous {}: {}", r_url, e);
                         None
-                    } else {
-                        let _ = tr.recv_text().await;
-                        info!("Registered on rendezvous for pairing: {}", r_url);
-                        Some((r_url.clone(), tr))
                     }
                 }
-                Err(e) => {
-                    warn!("Failed to connect to rendezvous {}: {}", r_url, e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
+            } else {
+                None
+            };
 
         let pair_code = code.to_string();
         let pair_future = async {
@@ -597,7 +598,9 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     struct PrivacyGuard(Arc<LocalComputer>);
     impl Drop for PrivacyGuard {
         fn drop(&mut self) {
-            tracing::info!("Remote session terminated; resetting privacy screen and unlocking physical inputs");
+            tracing::info!(
+                "Remote session terminated; resetting privacy screen and unlocking physical inputs"
+            );
             self.0.reset_privacy();
         }
     }
@@ -711,10 +714,7 @@ pub(crate) async fn dispatch_call(
                 .get("format")
                 .and_then(|v| v.as_str())
                 .unwrap_or("jpeg");
-            let quality = params
-                .get("quality")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(75) as u8;
+            let quality = params.get("quality").and_then(|v| v.as_i64()).unwrap_or(75) as u8;
             let max_dim = params
                 .get("max_dim")
                 .and_then(|v| v.as_i64())
@@ -727,7 +727,10 @@ pub(crate) async fn dispatch_call(
                 (rmpv::Value::from("data"), rmpv::Value::Binary(bytes)),
                 (rmpv::Value::from("format"), rmpv::Value::from(mime)),
                 (rmpv::Value::from("width"), rmpv::Value::from(width as i64)),
-                (rmpv::Value::from("height"), rmpv::Value::from(height as i64)),
+                (
+                    rmpv::Value::from("height"),
+                    rmpv::Value::from(height as i64),
+                ),
             ]))
         }
         "input.pointer" => {
@@ -1021,17 +1024,35 @@ pub(crate) async fn dispatch_call(
                 .set_privacy(lock_input, blackout)
                 .map_err(|e| e.to_string())?;
             Ok(rmpv::Value::Map(vec![
-                (rmpv::Value::from("lock_input"), rmpv::Value::Boolean(st.lock_input)),
-                (rmpv::Value::from("blackout"), rmpv::Value::Boolean(st.blackout)),
-                (rmpv::Value::from("supported"), rmpv::Value::Boolean(st.supported)),
+                (
+                    rmpv::Value::from("lock_input"),
+                    rmpv::Value::Boolean(st.lock_input),
+                ),
+                (
+                    rmpv::Value::from("blackout"),
+                    rmpv::Value::Boolean(st.blackout),
+                ),
+                (
+                    rmpv::Value::from("supported"),
+                    rmpv::Value::Boolean(st.supported),
+                ),
             ]))
         }
         "system.privacy_status" => {
             let st = computer.get_privacy();
             Ok(rmpv::Value::Map(vec![
-                (rmpv::Value::from("lock_input"), rmpv::Value::Boolean(st.lock_input)),
-                (rmpv::Value::from("blackout"), rmpv::Value::Boolean(st.blackout)),
-                (rmpv::Value::from("supported"), rmpv::Value::Boolean(st.supported)),
+                (
+                    rmpv::Value::from("lock_input"),
+                    rmpv::Value::Boolean(st.lock_input),
+                ),
+                (
+                    rmpv::Value::from("blackout"),
+                    rmpv::Value::Boolean(st.blackout),
+                ),
+                (
+                    rmpv::Value::from("supported"),
+                    rmpv::Value::Boolean(st.supported),
+                ),
             ]))
         }
         other => Err(format!("unknown method: {}", other)),

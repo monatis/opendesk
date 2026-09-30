@@ -1,6 +1,6 @@
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Mutex;
 use anyhow::Result;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Default, PartialEq, Eq)]
 pub struct PrivacyState {
@@ -87,7 +87,12 @@ mod imp {
         ) -> HHOOK;
         fn UnhookWindowsHookEx(hhk: HHOOK) -> BOOL;
         fn CallNextHookEx(hhk: HHOOK, n_code: i32, w_param: usize, l_param: isize) -> isize;
-        fn GetMessageW(lp_msg: *mut MSG, h_wnd: HWND, w_msg_filter_min: u32, w_msg_filter_max: u32) -> BOOL;
+        fn GetMessageW(
+            lp_msg: *mut MSG,
+            h_wnd: HWND,
+            w_msg_filter_min: u32,
+            w_msg_filter_max: u32,
+        ) -> BOOL;
         fn TranslateMessage(lp_msg: *const MSG) -> BOOL;
         fn DispatchMessageW(lp_msg: *const MSG) -> isize;
         fn PostThreadMessageW(id_thread: u32, msg: u32, w_param: usize, l_param: isize) -> BOOL;
@@ -160,7 +165,11 @@ mod imp {
         false
     }
 
-    unsafe extern "system" fn low_level_keyboard_proc(code: i32, w_param: usize, l_param: isize) -> isize {
+    unsafe extern "system" fn low_level_keyboard_proc(
+        code: i32,
+        w_param: usize,
+        l_param: isize,
+    ) -> isize {
         if code >= 0 && ACTIVE_HOOK_KBD.load(Ordering::Relaxed) {
             let kbd = unsafe { &*(l_param as *const KBDLLHOOKSTRUCT) };
             // Injected events have LLKHF_INJECTED (0x01) or LLKHF_LOWER_IL_INJECTED (0x02)
@@ -186,7 +195,11 @@ mod imp {
         unsafe { CallNextHookEx(null_mut(), code, w_param, l_param) }
     }
 
-    unsafe extern "system" fn low_level_mouse_proc(code: i32, w_param: usize, l_param: isize) -> isize {
+    unsafe extern "system" fn low_level_mouse_proc(
+        code: i32,
+        w_param: usize,
+        l_param: isize,
+    ) -> isize {
         if code >= 0 && ACTIVE_HOOK_MOUSE.load(Ordering::Relaxed) {
             let ms = unsafe { &*(l_param as *const MSLLHOOKSTRUCT) };
             let is_injected = (ms.flags & 1) != 0 || (ms.flags & 2) != 0;
@@ -199,7 +212,12 @@ mod imp {
         unsafe { CallNextHookEx(null_mut(), code, w_param, l_param) }
     }
 
-    unsafe extern "system" fn blackout_window_proc(hwnd: HWND, msg: u32, w_param: usize, l_param: isize) -> isize {
+    unsafe extern "system" fn blackout_window_proc(
+        hwnd: HWND,
+        msg: u32,
+        w_param: usize,
+        l_param: isize,
+    ) -> isize {
         match msg {
             WM_CLOSE => {
                 let _ = unsafe { DestroyWindow(hwnd) };
@@ -289,7 +307,8 @@ mod imp {
                             }
 
                             if blackout {
-                                let class_name: Vec<u16> = "OpenDeskBlackoutScreen\0".encode_utf16().collect();
+                                let class_name: Vec<u16> =
+                                    "OpenDeskBlackoutScreen\0".encode_utf16().collect();
                                 let wnd_class = WNDCLASSW {
                                     style: 0,
                                     lpfn_wnd_proc: Some(blackout_window_proc),
@@ -406,7 +425,9 @@ mod imp {
         }
 
         pub fn set_privacy(&self, _lock_input: bool, _blackout: bool) -> Result<PrivacyState> {
-            anyhow::bail!("Privacy screen and physical input locking are currently supported on Windows hosts only.")
+            anyhow::bail!(
+                "Privacy screen and physical input locking are currently supported on Windows hosts only."
+            )
         }
 
         pub fn reset(&self) {

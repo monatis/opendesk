@@ -24,7 +24,10 @@ async fn test_live_oldpc_privacy() -> Result<()> {
     println!("Initial privacy status: {:?}", initial_status);
 
     // 2. Enable Input Lock and Blackout Screen
-    println!("\n[1] Enabling input locking and blackout curtain on {}...", peer);
+    println!(
+        "\n[1] Enabling input locking and blackout curtain on {}...",
+        peer
+    );
     let st = remote.set_privacy(true, true).await?;
     println!("✓ Privacy state applied: {:?}", st);
     assert!(st.lock_input, "Expected lock_input to be true");

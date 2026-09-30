@@ -866,7 +866,8 @@ impl McpServer {
                 let rect = parse_region(args);
                 let fmt = args.get("format").and_then(|v| v.as_str()).unwrap_or("png");
                 let quality = args.get("quality").and_then(|v| v.as_u64()).unwrap_or(75) as u8;
-                let (bytes, mime, width, height) = self.computer.screenshot_format(rect, fmt, quality, None)?;
+                let (bytes, mime, width, height) =
+                    self.computer.screenshot_format(rect, fmt, quality, None)?;
                 let b64 = BASE64.encode(&bytes);
 
                 let mut saved_desc = String::new();
@@ -1312,8 +1313,14 @@ impl McpServer {
     ) -> Result<Vec<Value>> {
         match name {
             "screenshot" => {
-                let fmt = args.get("format").and_then(|v| v.as_str()).unwrap_or("jpeg");
-                let quality = args.get("quality").and_then(|v| v.as_u64()).map(|q| q as u8);
+                let fmt = args
+                    .get("format")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("jpeg");
+                let quality = args
+                    .get("quality")
+                    .and_then(|v| v.as_u64())
+                    .map(|q| q as u8);
                 let (bytes, mime) = remote.screenshot_format(None, Some(fmt), quality).await?;
                 let b64 = BASE64.encode(&bytes);
                 let mut saved_desc = String::new();
@@ -1613,12 +1620,7 @@ impl McpServer {
         })])
     }
 
-    async fn dispatch_app_api(
-        &self,
-        full_path: &str,
-        method: &str,
-        body: &Value,
-    ) -> Result<Value> {
+    async fn dispatch_app_api(&self, full_path: &str, method: &str, body: &Value) -> Result<Value> {
         let path = full_path.split('?').next().unwrap_or(full_path);
 
         if path == "/api/state" {
@@ -1641,11 +1643,11 @@ impl McpServer {
                     "outbound_active": outbound_active,
                 }));
             }
-            let my_fp = match crate::protocol::identity::Identity::load_or_create(Some(&session.home))
-            {
-                Ok(id) => crate::protocol::storage::fingerprint(&id.public_bytes()),
-                Err(_) => "local".to_string(),
-            };
+            let my_fp =
+                match crate::protocol::identity::Identity::load_or_create(Some(&session.home)) {
+                    Ok(id) => crate::protocol::storage::fingerprint(&id.public_bytes()),
+                    Err(_) => "local".to_string(),
+                };
             let my_desc = crate::protocol::storage::read_description(Some(&session.home));
             let r_url = session.rendezvous_url.clone().unwrap_or_default();
             let r_token = session.rendezvous_token.clone();
@@ -1697,7 +1699,11 @@ impl McpServer {
                     session.rendezvous_token = None;
                     return Ok(json!({ "cleared": true, "configured": false, "url": "" }));
                 } else {
-                    let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+                    let url = body
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .trim();
                     let token = body
                         .get("token")
                         .and_then(|v| v.as_str())
@@ -1723,7 +1729,11 @@ impl McpServer {
         }
 
         if path == "/api/rendezvous/test" {
-            let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let url = body
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             let token = body
                 .get("token")
                 .and_then(|v| v.as_str())
@@ -1869,13 +1879,21 @@ impl McpServer {
             let peer_raw = parts.get(3).copied().unwrap_or("local");
             let peer_name = url_decode_simple(peer_raw);
             if peer_name == "local" {
-                bail!("Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout.");
+                bail!(
+                    "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout."
+                );
             }
             let (remote_opt, target) = self.resolve_remote(Some(&peer_name)).await?;
             let remote = remote_opt.ok_or_else(|| anyhow!("Peer '{}' is not remote", target))?;
             if method == "POST" {
-                let lock_input = body.get("lock_input").and_then(|v| v.as_bool()).unwrap_or(false);
-                let blackout = body.get("blackout").and_then(|v| v.as_bool()).unwrap_or(false);
+                let lock_input = body
+                    .get("lock_input")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let blackout = body
+                    .get("blackout")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 let st = remote.set_privacy(lock_input, blackout).await?;
                 return Ok(json!({
                     "ok": true,
@@ -2201,16 +2219,15 @@ impl McpServer {
         };
 
         if chosen_peer == "local" {
-            bail!("Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout.");
+            bail!(
+                "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout."
+            );
         }
 
         let (remote_opt, target) = self.resolve_remote(Some(&chosen_peer)).await?;
         let remote = remote_opt.ok_or_else(|| anyhow!("Peer '{}' is not remote", target))?;
 
-        let action = args
-            .get("action")
-            .and_then(|v| v.as_str())
-            .unwrap_or("set");
+        let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("set");
 
         match action {
             "status" => {

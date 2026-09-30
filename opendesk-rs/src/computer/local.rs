@@ -27,7 +27,11 @@ impl LocalComputer {
         }
     }
 
-    pub fn set_privacy(&self, lock_input: bool, blackout: bool) -> Result<crate::computer::privacy::PrivacyState> {
+    pub fn set_privacy(
+        &self,
+        lock_input: bool,
+        blackout: bool,
+    ) -> Result<crate::computer::privacy::PrivacyState> {
         self.privacy.set_privacy(lock_input, blackout)
     }
 
@@ -88,7 +92,12 @@ impl LocalComputer {
                 let mut out = Vec::new();
                 let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, q);
                 encoder
-                    .encode(&rgb, shot.width, shot.height, image::ExtendedColorType::Rgb8)
+                    .encode(
+                        &rgb,
+                        shot.width,
+                        shot.height,
+                        image::ExtendedColorType::Rgb8,
+                    )
                     .context("JPEG encoding failed")?;
                 Ok((out, "image/jpeg".to_string(), width, height))
             }
