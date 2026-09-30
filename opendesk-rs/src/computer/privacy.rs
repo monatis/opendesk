@@ -10,6 +10,7 @@ pub struct PrivacyState {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::upper_case_acronyms)]
 mod imp {
     use super::*;
     use std::ffi::c_void;
@@ -179,14 +180,15 @@ mod imp {
             }
 
             // Physical keystroke! Check for emergency escape (5x Esc)
-            if kbd.vk_code == VK_ESCAPE && (w_param == WM_KEYDOWN || w_param == WM_SYSKEYDOWN) {
-                if check_emergency_escape() {
-                    warn!("Emergency physical unlock triggered via 5x Escape sequence!");
-                    EMERGENCY_UNLOCKED.store(true, Ordering::SeqCst);
-                    ACTIVE_HOOK_KBD.store(false, Ordering::SeqCst);
-                    ACTIVE_HOOK_MOUSE.store(false, Ordering::SeqCst);
-                    return unsafe { CallNextHookEx(null_mut(), code, w_param, l_param) };
-                }
+            if kbd.vk_code == VK_ESCAPE
+                && (w_param == WM_KEYDOWN || w_param == WM_SYSKEYDOWN)
+                && check_emergency_escape()
+            {
+                warn!("Emergency physical unlock triggered via 5x Escape sequence!");
+                EMERGENCY_UNLOCKED.store(true, Ordering::SeqCst);
+                ACTIVE_HOOK_KBD.store(false, Ordering::SeqCst);
+                ACTIVE_HOOK_MOUSE.store(false, Ordering::SeqCst);
+                return unsafe { CallNextHookEx(null_mut(), code, w_param, l_param) };
             }
 
             // Drop physical input

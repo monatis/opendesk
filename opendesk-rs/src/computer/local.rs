@@ -68,14 +68,14 @@ impl LocalComputer {
             }
         };
 
-        if let Some(max_d) = max_dim {
-            if shot.width > max_d || shot.height > max_d {
-                let scale = (max_d as f64) / (shot.width.max(shot.height) as f64);
-                let new_w = (shot.width as f64 * scale).round().max(1.0) as u32;
-                let new_h = (shot.height as f64 * scale).round().max(1.0) as u32;
-                if let Ok(resized) = shot.resize(new_w, new_h) {
-                    shot = resized;
-                }
+        if let Some(max_d) = max_dim
+            && (shot.width > max_d || shot.height > max_d)
+        {
+            let scale = (max_d as f64) / (shot.width.max(shot.height) as f64);
+            let new_w = (shot.width as f64 * scale).round().max(1.0) as u32;
+            let new_h = (shot.height as f64 * scale).round().max(1.0) as u32;
+            if let Ok(resized) = shot.resize(new_w, new_h) {
+                shot = resized;
             }
         }
 
@@ -86,7 +86,7 @@ impl LocalComputer {
             "jpeg" | "jpg" => {
                 let q = if quality == 0 { 75 } else { quality.min(100) };
                 let mut rgb = Vec::with_capacity((shot.width * shot.height * 3) as usize);
-                for chunk in shot.pixels.chunks_exact(4) {
+                for chunk in shot.pixels.as_chunks::<4>().0 {
                     rgb.extend_from_slice(&chunk[0..3]);
                 }
                 let mut out = Vec::new();
