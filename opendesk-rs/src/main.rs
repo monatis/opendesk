@@ -1,3 +1,4 @@
+use anyhow::bail;
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -274,6 +275,27 @@ enum Commands {
         #[command(subcommand)]
         subcmd: Option<ConfigCommands>,
     },
+
+    /// Configure physical input lock and screen blackout curtain on a REMOTE peer
+    Privacy {
+        /// Name of the remote peer to configure (cannot be 'local')
+        peer: String,
+        /// Lock physical keyboard and mouse inputs on remote machine
+        #[arg(long)]
+        lock_input: bool,
+        /// Unlock physical inputs and remove screen blackout
+        #[arg(long)]
+        unlock: bool,
+        /// Turn on blackout curtain on the remote machine's physical monitor
+        #[arg(long)]
+        blackout: bool,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -484,11 +506,8 @@ async fn main() -> anyhow::Result<()> {
             rendezvous,
             rendezvous_token,
         } => {
-            let r_cfg = resolve_rendezvous_config(
-                home.as_deref(),
-                None,
-                rendezvous_token.as_deref(),
-            );
+            let r_cfg =
+                resolve_rendezvous_config(home.as_deref(), None, rendezvous_token.as_deref());
             let mut all_rendezvous = rendezvous;
             if all_rendezvous.is_empty() && !r_cfg.url.is_empty() {
                 all_rendezvous.push(r_cfg.url);
@@ -540,16 +559,83 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
+        Commands::Privacy {
+            peer,
+            lock_input,
+            unlock,
+            blackout,
+            rendezvous,
+            rendezvous_token,
+            home,
+        } => {
+            if peer.trim() == "local" {
+                bail!(
+                    "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout."
+                );
+            }
+            let r_cfg = resolve_rendezvous_config(
+                home.as_deref(),
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            );
+            let r_url = if !r_cfg.url.is_empty() {
+                Some(r_cfg.url.as_str())
+            } else {
+                None
+            };
+            println!("Connecting to peer '{}'...", peer);
+            let remote =
+                remote_connect(Some(&peer), r_url, r_cfg.token.as_deref(), home.as_deref()).await?;
+
+            if unlock {
+                let _st = remote.set_privacy(false, false).await?;
+                println!("✓ Peer '{}' unlocked successfully.", peer);
+                println!("  Physical Input Lock: Disabled");
+                println!("  Privacy Screen:     Disabled");
+            } else if !lock_input && !blackout {
+                let st = remote.get_privacy().await?;
+                println!("Privacy status for peer '{}':", peer);
+                println!(
+                    "  Physical Input Lock: {}",
+                    if st.lock_input {
+                        "Enabled (Physical inputs blocked)"
+                    } else {
+                        "Disabled"
+                    }
+                );
+                println!(
+                    "  Privacy Screen:     {}",
+                    if st.blackout {
+                        "Enabled (Blackout active)"
+                    } else {
+                        "Disabled"
+                    }
+                );
+                println!(
+                    "  Supported:          {}",
+                    if st.supported { "Yes" } else { "No" }
+                );
+            } else {
+                let st = remote.set_privacy(lock_input, blackout).await?;
+                println!("✓ Privacy updated for peer '{}':", peer);
+                println!(
+                    "  Physical Input Lock: {}",
+                    if st.lock_input { "Enabled" } else { "Disabled" }
+                );
+                println!(
+                    "  Privacy Screen:     {}",
+                    if st.blackout { "Enabled" } else { "Disabled" }
+                );
+            }
+        }
+
         Commands::Discover {
             timeout,
             rendezvous,
             rendezvous_token,
         } => {
-            let r_cfg = resolve_rendezvous_config(
-                None,
-                rendezvous.as_deref(),
-                rendezvous_token.as_deref(),
-            );
+            let r_cfg =
+                resolve_rendezvous_config(None, rendezvous.as_deref(), rendezvous_token.as_deref());
             let r_url = if !r_cfg.url.is_empty() {
                 Some(r_cfg.url)
             } else {
@@ -565,7 +651,10 @@ async fn main() -> anyhow::Result<()> {
                             url,
                             r_tok.as_deref(),
                         );
-                        client.list_peers(Duration::from_secs_f64(timeout)).await.ok()
+                        client
+                            .list_peers(Duration::from_secs_f64(timeout))
+                            .await
+                            .ok()
                     } else {
                         None
                     }
@@ -1046,7 +1135,11 @@ async fn main() -> anyhow::Result<()> {
                         println!("  Rendezvous server: {}", r.url);
                         println!(
                             "  Rendezvous token:  {}",
-                            if r.token.is_some() { "[configured]" } else { "(none)" }
+                            if r.token.is_some() {
+                                "[configured]"
+                            } else {
+                                "(none)"
+                            }
                         );
                     }
                 }
@@ -1129,7 +1222,9 @@ fn handle_set_rendezvous(
         if tok.is_some() {
             println!("  Authentication token: [saved]");
         }
-        println!("  All opendesk commands (pair, pair-with, serve, connect, discover, mcp, app) will now use this rendezvous server by default.");
+        println!(
+            "  All opendesk commands (pair, pair-with, serve, connect, discover, mcp, app) will now use this rendezvous server by default."
+        );
     } else {
         let current = read_rendezvous_config(home);
         if current.url.is_empty() {
@@ -1139,14 +1234,22 @@ fn handle_set_rendezvous(
             println!("Global rendezvous server: {}", current.url);
             println!(
                 "Authentication token:     {}",
-                if current.token.is_some() { "[saved]" } else { "(none)" }
+                if current.token.is_some() {
+                    "[saved]"
+                } else {
+                    "(none)"
+                }
             );
         }
     }
     Ok(())
 }
 
-fn cmd_install(scope: &str, rendezvous: Option<&str>, rendezvous_token: Option<&str>) -> anyhow::Result<()> {
+fn cmd_install(
+    scope: &str,
+    rendezvous: Option<&str>,
+    rendezvous_token: Option<&str>,
+) -> anyhow::Result<()> {
     let claude_bin = which("claude");
     if claude_bin.is_none() {
         eprintln!(
@@ -1188,9 +1291,7 @@ fn cmd_install(scope: &str, rendezvous: Option<&str>, rendezvous_token: Option<&
         args.push(t.to_string());
     }
 
-    let output = std::process::Command::new(&claude)
-        .args(&args)
-        .output()?;
+    let output = std::process::Command::new(&claude).args(&args).output()?;
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);

@@ -112,7 +112,9 @@ impl RemoteComputer {
     }
 
     pub async fn screenshot_bytes(&self, target: Option<&str>) -> Result<Vec<u8>> {
-        self.screenshot_format(target, None, None).await.map(|(b, _)| b)
+        self.screenshot_format(target, None, None)
+            .await
+            .map(|(b, _)| b)
     }
 
     pub async fn screenshot_format(
@@ -484,6 +486,49 @@ impl RemoteComputer {
         self.call("clipboard.write", params).await?;
         Ok(())
     }
+
+    pub async fn set_privacy(
+        &self,
+        lock_input: bool,
+        blackout: bool,
+    ) -> Result<crate::computer::privacy::PrivacyState> {
+        let mut params = HashMap::new();
+        params.insert("lock_input".to_string(), rmpv::Value::Boolean(lock_input));
+        params.insert("blackout".to_string(), rmpv::Value::Boolean(blackout));
+        let res = self.call("system.privacy", params).await?;
+        let lock_input = value_get(&res, "lock_input")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let blackout = value_get(&res, "blackout")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let supported = value_get(&res, "supported")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        Ok(crate::computer::privacy::PrivacyState {
+            lock_input,
+            blackout,
+            supported,
+        })
+    }
+
+    pub async fn get_privacy(&self) -> Result<crate::computer::privacy::PrivacyState> {
+        let res = self.call("system.privacy_status", HashMap::new()).await?;
+        let lock_input = value_get(&res, "lock_input")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let blackout = value_get(&res, "blackout")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let supported = value_get(&res, "supported")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        Ok(crate::computer::privacy::PrivacyState {
+            lock_input,
+            blackout,
+            supported,
+        })
+    }
 }
 
 fn format_rmpv_ui_element(el: &rmpv::Value, depth: usize, out: &mut String) {
@@ -552,7 +597,12 @@ pub async fn pair_with(
                 });
                 match matched {
                     Some(p) => data_encoding::HEXLOWER.encode(&p.public_key),
-                    None => return Err(anyhow!("no peer found on rendezvous matching '{}'. Specify --target-pubkey", h)),
+                    None => {
+                        return Err(anyhow!(
+                            "no peer found on rendezvous matching '{}'. Specify --target-pubkey",
+                            h
+                        ));
+                    }
                 }
             }
         } else {
@@ -561,10 +611,19 @@ pub async fn pair_with(
             if peers.len() == 1 {
                 data_encoding::HEXLOWER.encode(&peers[0].public_key)
             } else if peers.is_empty() {
-                return Err(anyhow!("no peers currently online on rendezvous server. Make sure the host is running 'opendesk pair --rendezvous {}'", r_url));
+                return Err(anyhow!(
+                    "no peers currently online on rendezvous server. Make sure the host is running 'opendesk pair --rendezvous {}'",
+                    r_url
+                ));
             } else {
-                let names: Vec<String> = peers.into_iter().map(|p| format!("{} ({})", p.name, p.fingerprint)).collect();
-                return Err(anyhow!("multiple peers online on rendezvous server ({}). Please specify the peer name or --target-pubkey", names.join(", ")));
+                let names: Vec<String> = peers
+                    .into_iter()
+                    .map(|p| format!("{} ({})", p.name, p.fingerprint))
+                    .collect();
+                return Err(anyhow!(
+                    "multiple peers online on rendezvous server ({}). Please specify the peer name or --target-pubkey",
+                    names.join(", ")
+                ));
             }
         };
 
@@ -703,7 +762,10 @@ pub async fn connect(
                                 ));
                             }
                         } else {
-                            return Err(anyhow!("no trusted peer found matching '{}'", target_name));
+                            return Err(anyhow!(
+                                "no trusted peer found matching '{}'",
+                                target_name
+                            ));
                         }
                     } else {
                         return Err(anyhow!("no trusted peer found matching '{}'", target_name));

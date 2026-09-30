@@ -9,12 +9,38 @@ pub struct AppInfo {
     pub pid: Option<u32>,
 }
 
-#[derive(Default)]
-pub struct LocalComputer;
+#[derive(Clone)]
+pub struct LocalComputer {
+    pub privacy: std::sync::Arc<crate::computer::privacy::PrivacyController>,
+}
+
+impl Default for LocalComputer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl LocalComputer {
     pub fn new() -> Self {
-        Self
+        Self {
+            privacy: std::sync::Arc::new(crate::computer::privacy::PrivacyController::new()),
+        }
+    }
+
+    pub fn set_privacy(
+        &self,
+        lock_input: bool,
+        blackout: bool,
+    ) -> Result<crate::computer::privacy::PrivacyState> {
+        self.privacy.set_privacy(lock_input, blackout)
+    }
+
+    pub fn get_privacy(&self) -> crate::computer::privacy::PrivacyState {
+        self.privacy.get_privacy()
+    }
+
+    pub fn reset_privacy(&self) {
+        self.privacy.reset();
     }
 
     // -----------------------------------------------------------------------
@@ -42,14 +68,14 @@ impl LocalComputer {
             }
         };
 
-        if let Some(max_d) = max_dim {
-            if shot.width > max_d || shot.height > max_d {
-                let scale = (max_d as f64) / (shot.width.max(shot.height) as f64);
-                let new_w = (shot.width as f64 * scale).round().max(1.0) as u32;
-                let new_h = (shot.height as f64 * scale).round().max(1.0) as u32;
-                if let Ok(resized) = shot.resize(new_w, new_h) {
-                    shot = resized;
-                }
+        if let Some(max_d) = max_dim
+            && (shot.width > max_d || shot.height > max_d)
+        {
+            let scale = (max_d as f64) / (shot.width.max(shot.height) as f64);
+            let new_w = (shot.width as f64 * scale).round().max(1.0) as u32;
+            let new_h = (shot.height as f64 * scale).round().max(1.0) as u32;
+            if let Ok(resized) = shot.resize(new_w, new_h) {
+                shot = resized;
             }
         }
 
@@ -60,13 +86,18 @@ impl LocalComputer {
             "jpeg" | "jpg" => {
                 let q = if quality == 0 { 75 } else { quality.min(100) };
                 let mut rgb = Vec::with_capacity((shot.width * shot.height * 3) as usize);
-                for chunk in shot.pixels.chunks_exact(4) {
+                for chunk in shot.pixels.as_chunks::<4>().0 {
                     rgb.extend_from_slice(&chunk[0..3]);
                 }
                 let mut out = Vec::new();
                 let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, q);
                 encoder
-                    .encode(&rgb, shot.width, shot.height, image::ExtendedColorType::Rgb8)
+                    .encode(
+                        &rgb,
+                        shot.width,
+                        shot.height,
+                        image::ExtendedColorType::Rgb8,
+                    )
                     .context("JPEG encoding failed")?;
                 Ok((out, "image/jpeg".to_string(), width, height))
             }

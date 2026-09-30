@@ -792,6 +792,37 @@ impl McpServer {
                     "additionalProperties": false
                 }
             }),
+            json!({
+                "name": "opendesk_privacy",
+                "description": "Control physical input locking and screen blackout (privacy curtain) on a REMOTE peer. Blocks physical mouse/keyboard usage on the remote machine while remote control is active, and optionally displays a privacy blackout curtain on the physical monitor while allowing remote screen capture.\n\nSAFETY: This tool is STRICTLY restricted to remote peers. It is prohibited on 'local' to prevent the operator from being locked out of their own machine.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "peer": {
+                            "type": "string",
+                            "description": "Required. Name of the remote peer to configure privacy/locking for. Cannot be 'local'."
+                        },
+                        "lock_input": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Whether to block physical keyboard and mouse inputs on the remote host."
+                        },
+                        "blackout": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Whether to show a blackout screen curtain on the physical monitor."
+                        },
+                        "action": {
+                            "type": "string",
+                            "enum": ["set", "status", "unlock"],
+                            "default": "set",
+                            "description": "'set' applies lock_input/blackout settings; 'status' queries current state; 'unlock' removes all input locks and blackout."
+                        }
+                    },
+                    "required": ["peer"],
+                    "additionalProperties": false
+                }
+            }),
         ]
     }
 
@@ -807,6 +838,7 @@ impl McpServer {
             "opendesk_describe" => return self.admin_describe(args).await,
             "opendesk_capabilities" => return self.admin_capabilities(args).await,
             "opendesk_disconnect" => return self.admin_disconnect(args).await,
+            "opendesk_privacy" => return self.admin_privacy(args).await,
             "audit" => return self.execute_audit(args).await,
             "schedule" => return self.execute_schedule(args).await,
             "learn" => return self.execute_learn(args).await,
@@ -834,7 +866,8 @@ impl McpServer {
                 let rect = parse_region(args);
                 let fmt = args.get("format").and_then(|v| v.as_str()).unwrap_or("png");
                 let quality = args.get("quality").and_then(|v| v.as_u64()).unwrap_or(75) as u8;
-                let (bytes, mime, width, height) = self.computer.screenshot_format(rect, fmt, quality, None)?;
+                let (bytes, mime, width, height) =
+                    self.computer.screenshot_format(rect, fmt, quality, None)?;
                 let b64 = BASE64.encode(&bytes);
 
                 let mut saved_desc = String::new();
@@ -1280,8 +1313,14 @@ impl McpServer {
     ) -> Result<Vec<Value>> {
         match name {
             "screenshot" => {
-                let fmt = args.get("format").and_then(|v| v.as_str()).unwrap_or("jpeg");
-                let quality = args.get("quality").and_then(|v| v.as_u64()).map(|q| q as u8);
+                let fmt = args
+                    .get("format")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("jpeg");
+                let quality = args
+                    .get("quality")
+                    .and_then(|v| v.as_u64())
+                    .map(|q| q as u8);
                 let (bytes, mime) = remote.screenshot_format(None, Some(fmt), quality).await?;
                 let b64 = BASE64.encode(&bytes);
                 let mut saved_desc = String::new();
@@ -1581,12 +1620,7 @@ impl McpServer {
         })])
     }
 
-    async fn dispatch_app_api(
-        &self,
-        full_path: &str,
-        method: &str,
-        body: &Value,
-    ) -> Result<Value> {
+    async fn dispatch_app_api(&self, full_path: &str, method: &str, body: &Value) -> Result<Value> {
         let path = full_path.split('?').next().unwrap_or(full_path);
 
         if path == "/api/state" {
@@ -1609,11 +1643,11 @@ impl McpServer {
                     "outbound_active": outbound_active,
                 }));
             }
-            let my_fp = match crate::protocol::identity::Identity::load_or_create(Some(&session.home))
-            {
-                Ok(id) => crate::protocol::storage::fingerprint(&id.public_bytes()),
-                Err(_) => "local".to_string(),
-            };
+            let my_fp =
+                match crate::protocol::identity::Identity::load_or_create(Some(&session.home)) {
+                    Ok(id) => crate::protocol::storage::fingerprint(&id.public_bytes()),
+                    Err(_) => "local".to_string(),
+                };
             let my_desc = crate::protocol::storage::read_description(Some(&session.home));
             let r_url = session.rendezvous_url.clone().unwrap_or_default();
             let r_token = session.rendezvous_token.clone();
@@ -1665,7 +1699,11 @@ impl McpServer {
                     session.rendezvous_token = None;
                     return Ok(json!({ "cleared": true, "configured": false, "url": "" }));
                 } else {
-                    let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+                    let url = body
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .trim();
                     let token = body
                         .get("token")
                         .and_then(|v| v.as_str())
@@ -1691,7 +1729,11 @@ impl McpServer {
         }
 
         if path == "/api/rendezvous/test" {
-            let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let url = body
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             let token = body
                 .get("token")
                 .and_then(|v| v.as_str())
@@ -1830,6 +1872,44 @@ impl McpServer {
                 "logical_width": 1920,
                 "logical_height": 1080
             }));
+        }
+
+        if path.starts_with("/api/peer/") && path.ends_with("/privacy") {
+            let parts: Vec<&str> = path.split('/').collect();
+            let peer_raw = parts.get(3).copied().unwrap_or("local");
+            let peer_name = url_decode_simple(peer_raw);
+            if peer_name == "local" {
+                bail!(
+                    "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout."
+                );
+            }
+            let (remote_opt, target) = self.resolve_remote(Some(&peer_name)).await?;
+            let remote = remote_opt.ok_or_else(|| anyhow!("Peer '{}' is not remote", target))?;
+            if method == "POST" {
+                let lock_input = body
+                    .get("lock_input")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let blackout = body
+                    .get("blackout")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let st = remote.set_privacy(lock_input, blackout).await?;
+                return Ok(json!({
+                    "ok": true,
+                    "lock_input": st.lock_input,
+                    "blackout": st.blackout,
+                    "supported": st.supported,
+                }));
+            } else {
+                let st = remote.get_privacy().await?;
+                return Ok(json!({
+                    "ok": true,
+                    "lock_input": st.lock_input,
+                    "blackout": st.blackout,
+                    "supported": st.supported,
+                }));
+            }
         }
 
         if path.starts_with("/api/peer/") && path.ends_with("/action") {
@@ -2120,6 +2200,91 @@ impl McpServer {
             format!("Closed {n} connection(s).")
         };
         Ok(vec![json!({ "type": "text", "text": msg })])
+    }
+
+    async fn admin_privacy(&self, args: &Value) -> Result<Vec<Value>> {
+        let peer_arg = args
+            .get("peer")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
+        let chosen_peer = {
+            let session = self.session.lock().await;
+            let (eff_name, _) = session.effective_peer();
+            peer_arg
+                .map(|s| s.to_string())
+                .or_else(|| session.current_peer.clone())
+                .or(eff_name)
+                .unwrap_or_else(|| "local".to_string())
+        };
+
+        if chosen_peer == "local" {
+            bail!(
+                "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout."
+            );
+        }
+
+        let (remote_opt, target) = self.resolve_remote(Some(&chosen_peer)).await?;
+        let remote = remote_opt.ok_or_else(|| anyhow!("Peer '{}' is not remote", target))?;
+
+        let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("set");
+
+        match action {
+            "status" => {
+                let st = remote.get_privacy().await?;
+                let text = format!(
+                    "Peer: {}\nInput Lock: {}\nBlackout Screen: {}\nSupported: {}",
+                    target,
+                    if st.lock_input {
+                        "Enabled (Physical inputs blocked)"
+                    } else {
+                        "Disabled"
+                    },
+                    if st.blackout {
+                        "Enabled (Physical monitor blanked)"
+                    } else {
+                        "Disabled"
+                    },
+                    if st.supported { "Yes" } else { "No" }
+                );
+                Ok(vec![json!({ "type": "text", "text": text })])
+            }
+            "unlock" => {
+                let _st = remote.set_privacy(false, false).await?;
+                let text = format!(
+                    "Peer: {}\nUnlocked successfully.\nInput Lock: Disabled\nBlackout Screen: Disabled",
+                    target
+                );
+                Ok(vec![json!({ "type": "text", "text": text })])
+            }
+            _ => {
+                let lock_input = args
+                    .get("lock_input")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                let blackout = args
+                    .get("blackout")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let st = remote.set_privacy(lock_input, blackout).await?;
+                let text = format!(
+                    "Peer: {}\nPrivacy configured:\nInput Lock: {}\nBlackout Screen: {}\nSupported: {}",
+                    target,
+                    if st.lock_input {
+                        "Enabled (Physical inputs blocked)"
+                    } else {
+                        "Disabled"
+                    },
+                    if st.blackout {
+                        "Enabled (Physical monitor blanked)"
+                    } else {
+                        "Disabled"
+                    },
+                    if st.supported { "Yes" } else { "No" }
+                );
+                Ok(vec![json!({ "type": "text", "text": text })])
+            }
+        }
     }
 
     async fn execute_audit(&self, args: &Value) -> Result<Vec<Value>> {
@@ -2419,7 +2584,7 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "schedule"));
         assert!(tools.iter().any(|t| t["name"] == "learn"));
 
-        // 8 admin tools
+        // 9 admin tools
         assert!(tools.iter().any(|t| t["name"] == "opendesk_peers"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_discover"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_use"));
@@ -2429,8 +2594,9 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_disconnect"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_view"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_app_api"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_privacy"));
 
-        assert_eq!(tools.len(), 18);
+        assert_eq!(tools.len(), 19);
     }
 
     #[tokio::test]
@@ -2523,6 +2689,21 @@ mod tests {
             .await
             .unwrap();
         assert!(!res["isError"].as_bool().unwrap());
+
+        // privacy safety check: local peer must be rejected
+        let res = server
+            .handle_method(
+                "tools/call",
+                &json!({
+                    "name": "opendesk_privacy",
+                    "arguments": { "peer": "local" }
+                }),
+            )
+            .await
+            .unwrap();
+        assert!(res["isError"].as_bool().unwrap());
+        let err_text = res["content"][0]["text"].as_str().unwrap();
+        assert!(err_text.contains("remote peers"));
     }
 
     #[tokio::test]

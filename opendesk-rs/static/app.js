@@ -348,6 +348,12 @@ document.body.addEventListener('click', async (ev) => {
             case 'stop-controlling':
                 await stopControlling();
                 break;
+            case 'toggle-input-lock':
+                await toggleInputLock();
+                break;
+            case 'toggle-blackout':
+                await toggleBlackout();
+                break;
             case 'set-default':
                 if (peer) await setDefault(peer);
                 break;
@@ -775,10 +781,16 @@ function updateControlPanel() {
     if (controllingPeer) {
         setText(document.getElementById('control-peer'), controllingPeer);
         modal.hidden = false;
+        updatePrivacyUI();
+        if (controllingPeer !== 'local') {
+            fetchPrivacyState();
+        }
         attachScreenInputs();
         startScreenshotLoop();
     } else {
         modal.hidden = true;
+        currentPrivacyState = { lock_input: false, blackout: false, supported: true };
+        updatePrivacyUI();
         stopScreenshotLoop();
     }
 }
@@ -968,9 +980,125 @@ async function stopControlling() {
     if (!controllingPeer) return;
     const name = controllingPeer;
     controllingPeer = null;
+    currentPrivacyState = { lock_input: false, blackout: false, supported: true };
+    updatePrivacyUI();
     stopScreenshotLoop();
     try { await apiDelete(`/api/peer/${encodeURIComponent(name)}`); } catch {}
     await poll();
+}
+
+let currentPrivacyState = { lock_input: false, blackout: false, supported: true };
+
+async function fetchPrivacyState() {
+    if (!controllingPeer || controllingPeer === 'local') return;
+    try {
+        const res = await apiGet(`/api/peer/${encodeURIComponent(controllingPeer)}/privacy`);
+        if (res && res.ok) {
+            currentPrivacyState = {
+                lock_input: !!res.lock_input,
+                blackout: !!res.blackout,
+                supported: res.supported !== false,
+            };
+            updatePrivacyUI();
+        }
+    } catch (e) {
+        console.warn('Could not fetch privacy state:', e);
+    }
+}
+
+function updatePrivacyUI() {
+    const isRemote = Boolean(controllingPeer && controllingPeer !== 'local');
+    const actions = document.getElementById('control-privacy-actions');
+    const lockBadge = document.getElementById('privacy-lock-badge');
+    const blackoutBadge = document.getElementById('privacy-blackout-badge');
+    const btnLock = document.getElementById('btn-toggle-input-lock');
+    const btnBlackout = document.getElementById('btn-toggle-blackout');
+
+    if (!isRemote) {
+        if (actions) actions.hidden = true;
+        if (lockBadge) lockBadge.hidden = true;
+        if (blackoutBadge) blackoutBadge.hidden = true;
+        return;
+    }
+
+    if (actions) actions.hidden = false;
+
+    if (lockBadge) {
+        lockBadge.hidden = !currentPrivacyState.lock_input;
+    }
+    if (blackoutBadge) {
+        blackoutBadge.hidden = !currentPrivacyState.blackout;
+    }
+
+    if (btnLock) {
+        if (currentPrivacyState.lock_input) {
+            btnLock.classList.add('privacy-active');
+            setText(btnLock, '🔓 Unlock Input');
+            btnLock.title = 'Unlock physical keyboard & mouse on remote computer';
+        } else {
+            btnLock.classList.remove('privacy-active');
+            setText(btnLock, '🔒 Lock Input');
+            btnLock.title = 'Lock physical keyboard & mouse on remote computer';
+        }
+    }
+
+    if (btnBlackout) {
+        if (currentPrivacyState.blackout) {
+            btnBlackout.classList.add('blackout-active');
+            setText(btnBlackout, '🖥️ Show Screen');
+            btnBlackout.title = 'Turn off blackout screen on remote monitor';
+        } else {
+            btnBlackout.classList.remove('blackout-active');
+            setText(btnBlackout, '⬛ Privacy Screen');
+            btnBlackout.title = 'Show a blackout screen on remote physical monitor';
+        }
+    }
+}
+
+async function toggleInputLock() {
+    if (!controllingPeer || controllingPeer === 'local') return;
+    const newLock = !currentPrivacyState.lock_input;
+    try {
+        const res = await apiPost(`/api/peer/${encodeURIComponent(controllingPeer)}/privacy`, {
+            lock_input: newLock,
+            blackout: currentPrivacyState.blackout,
+        });
+        currentPrivacyState.lock_input = !!res.lock_input;
+        currentPrivacyState.blackout = !!res.blackout;
+        currentPrivacyState.supported = res.supported !== false;
+        updatePrivacyUI();
+        toast(
+            currentPrivacyState.lock_input
+                ? `Physical input locked on ${controllingPeer}`
+                : `Physical input unlocked on ${controllingPeer}`,
+            'ok'
+        );
+    } catch (e) {
+        toast(e.message, 'error');
+    }
+}
+
+async function toggleBlackout() {
+    if (!controllingPeer || controllingPeer === 'local') return;
+    const newBlackout = !currentPrivacyState.blackout;
+    try {
+        const res = await apiPost(`/api/peer/${encodeURIComponent(controllingPeer)}/privacy`, {
+            lock_input: currentPrivacyState.lock_input,
+            blackout: newBlackout,
+        });
+        currentPrivacyState.lock_input = !!res.lock_input;
+        currentPrivacyState.blackout = !!res.blackout;
+        currentPrivacyState.supported = res.supported !== false;
+        updatePrivacyUI();
+        toast(
+            currentPrivacyState.blackout
+                ? `Privacy screen blackout active on ${controllingPeer}`
+                : `Privacy screen blackout disabled on ${controllingPeer}`,
+            'ok'
+        );
+    } catch (e) {
+        toast(e.message, 'error');
+    }
 }
 
 let screenshotTimeoutId = null;

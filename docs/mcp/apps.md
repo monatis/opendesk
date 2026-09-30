@@ -46,6 +46,20 @@ Remote screen capture over public relays previously suffered from high payload s
 3. **Instant Interactive Feedback Bursts**: When the user clicks on the canvas, types in the control box, or presses special keys, OpenDesk triggers an immediate screenshot fetch within **80ms**, providing near-instant visual feedback.
 4. **Host Query Tolerant**: `resources/read` cleanly accepts host-specific URI variants with query parameters (e.g. `ui://opendesk/viewport?peer=remote-pc`) or trailing slashes (`ui://opendesk/viewport/`).
 
+---
+
+## 🔒 Remote Input Locking & Privacy Screen (Blackout Curtain)
+
+When controlling remote machines, physical operators or onlookers in front of the controlled machine could inadvertently interfere with automated agent actions or view confidential operations on the physical monitor.
+
+OpenDesk provides integrated input locking and blackout capabilities:
+
+- **Physical Input Lock (`🔒 Lock Input`)**: Intercepts and drops physical keyboard and mouse events on the remote host via low-level hooks while seamlessly permitting injected agent synthetic input (`LLKHF_INJECTED` / `LLMHF_INJECTED`).
+- **Privacy Curtain (`⬛ Privacy Screen`)**: Summons a full-screen topmost blackout overlay on the remote monitor utilizing `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` (0x11). The monitor displays a pure black screen to physical onlookers while DXGI and Desktop Duplication capture the true underlying desktop with zero interference.
+- **Safety Safeguard (Remote-Only)**: Because a local operator locking their own machine would prevent regaining control, **input locking and privacy curtains are strictly prohibited when controlling the `local` machine**. The Web UI automatically hides these controls, and the `opendesk_privacy` tool rejects `local` targets with a descriptive error.
+- **Automatic Disconnect Teardown**: Whenever the controlling session terminates (intentional disconnect, network drop, timeout, or eviction), the remote host automatically and immediately unlocks all physical inputs and closes the blackout screen curtain.
+- **Emergency Hardware Escape**: Pressing `Escape` 5 times within 1.5 seconds on the remote physical keyboard instantly disengages all hooks as an emergency safeguard.
+
 ## Hosting OpenDesk MCP Apps in Custom Harnesses (e.g., `isanagent`)
 
 If you are building or extending a custom agent framework with a web frontend, you can host OpenDesk MCP Apps with a lightweight postMessage bridge.

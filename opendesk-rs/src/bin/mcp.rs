@@ -4,7 +4,11 @@ use std::path::PathBuf;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser)]
-#[command(name = "opendesk-mcp", version = "0.3.0", about = "OpenDesk MCP server")]
+#[command(
+    name = "opendesk-mcp",
+    version = "0.3.0",
+    about = "OpenDesk MCP server"
+)]
 struct McpCli {
     #[arg(long)]
     rendezvous: Option<String>,

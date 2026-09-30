@@ -143,7 +143,9 @@ impl TrustedPeers {
 
     pub fn find_by_name(&self, name: &str) -> Option<TrustedPeer> {
         let n = name.trim();
-        self.list().into_iter().find(|p| p.name.eq_ignore_ascii_case(n))
+        self.list()
+            .into_iter()
+            .find(|p| p.name.eq_ignore_ascii_case(n))
     }
 
     pub fn find_by_name_or_key(&self, query: &str) -> Option<TrustedPeer> {
@@ -403,17 +405,15 @@ pub fn read_rendezvous_config(home: Option<&Path>) -> GlobalRendezvousConfig {
     serde_json::from_str(&data).unwrap_or_default()
 }
 
-pub fn write_rendezvous_config(
-    home: Option<&Path>,
-    url: &str,
-    token: Option<&str>,
-) -> Result<()> {
+pub fn write_rendezvous_config(home: Option<&Path>, url: &str, token: Option<&str>) -> Result<()> {
     let home_path = home.map(|h| h.to_path_buf()).unwrap_or_else(default_home);
     std::fs::create_dir_all(&home_path)?;
     let p = home_path.join(RENDEZVOUS_CONFIG_FILE);
     let cfg = GlobalRendezvousConfig {
         url: url.trim().to_string(),
-        token: token.map(|t| t.trim().to_string()).filter(|s| !s.is_empty()),
+        token: token
+            .map(|t| t.trim().to_string())
+            .filter(|s| !s.is_empty()),
     };
     let data = serde_json::to_string_pretty(&cfg)?;
     std::fs::write(&p, data)?;
@@ -443,8 +443,12 @@ pub fn resolve_rendezvous_config(
     cli_token: Option<&str>,
 ) -> GlobalRendezvousConfig {
     let disk_cfg = read_rendezvous_config(home);
-    let env_url = std::env::var("OPENDESK_RENDEZVOUS").ok().filter(|s| !s.trim().is_empty());
-    let env_token = std::env::var("OPENDESK_RENDEZVOUS_TOKEN").ok().filter(|s| !s.trim().is_empty());
+    let env_url = std::env::var("OPENDESK_RENDEZVOUS")
+        .ok()
+        .filter(|s| !s.trim().is_empty());
+    let env_token = std::env::var("OPENDESK_RENDEZVOUS_TOKEN")
+        .ok()
+        .filter(|s| !s.trim().is_empty());
 
     let eff_url = cli_url
         .filter(|s| !s.trim().is_empty())

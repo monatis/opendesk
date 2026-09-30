@@ -47,7 +47,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/static/styles.css", get(styles_handler))
         .route("/static/app.js", get(app_js_handler))
         .route("/api/state", get(get_state))
-        .route("/api/rendezvous/config", get(get_rendezvous_config).post(save_rendezvous_config))
+        .route(
+            "/api/rendezvous/config",
+            get(get_rendezvous_config).post(save_rendezvous_config),
+        )
         .route("/api/rendezvous/test", post(test_rendezvous_connection))
         .route("/api/pair/begin", post(pair_begin))
         .route("/api/pair/cancel", post(pair_cancel))
@@ -63,6 +66,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/peer/{name}", delete(close_outbound))
         .route("/api/peer/{name}/screenshot", get(peer_screenshot))
         .route("/api/peer/{name}/action", post(peer_action))
+        .route(
+            "/api/peer/{name}/privacy",
+            get(get_peer_privacy).post(set_peer_privacy),
+        )
         .route("/api/audit", get(get_audit))
         .route("/api/wsl/setup", post(wsl_setup))
         .route("/api/wsl/enable-mirrored", post(wsl_enable_mirrored))
@@ -189,10 +196,16 @@ async fn save_rendezvous_config(
         let mut r = state.rendezvous.lock().await;
         r.url.clear();
         r.token = None;
-        return Ok(Json(json!({ "cleared": true, "configured": false, "url": "" })));
+        return Ok(Json(
+            json!({ "cleared": true, "configured": false, "url": "" }),
+        ));
     }
 
-    let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+    let url = body
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
     let token = body
         .get("token")
         .and_then(|v| v.as_str())
@@ -200,8 +213,12 @@ async fn save_rendezvous_config(
         .filter(|s| !s.is_empty());
 
     if !url.is_empty() {
-        crate::protocol::storage::write_rendezvous_config(state.home.as_deref(), url, token.as_deref())
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        crate::protocol::storage::write_rendezvous_config(
+            state.home.as_deref(),
+            url,
+            token.as_deref(),
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let mut r = state.rendezvous.lock().await;
         r.url = url.to_string();
         r.token = token;
@@ -219,7 +236,11 @@ async fn save_rendezvous_config(
 async fn test_rendezvous_connection(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+    let url = body
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
     if url.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "missing 'url'".into()));
     }
@@ -471,7 +492,13 @@ async fn do_discover(
     // 2. Rendezvous discovery
     let (r_url, r_token) = {
         let r = state.rendezvous.lock().await;
-        let url = q.rendezvous.clone().or_else(|| if !r.url.is_empty() { Some(r.url.clone()) } else { None });
+        let url = q.rendezvous.clone().or_else(|| {
+            if !r.url.is_empty() {
+                Some(r.url.clone())
+            } else {
+                None
+            }
+        });
         let token = q.rendezvous_token.clone().or_else(|| r.token.clone());
         (url, token)
     };
@@ -483,7 +510,9 @@ async fn do_discover(
                 let pk_hex = data_encoding::HEXLOWER.encode(&p.public_key);
                 if p.public_key != own_pk {
                     // Check if already in list from LAN
-                    if !list.iter().any(|item| item.get("public_key_hex").and_then(|v| v.as_str()) == Some(&pk_hex)) {
+                    if !list.iter().any(|item| {
+                        item.get("public_key_hex").and_then(|v| v.as_str()) == Some(&pk_hex)
+                    }) {
                         list.push(json!({
                             "name": p.name,
                             "host": "rendezvous",
@@ -522,9 +551,21 @@ async fn do_pair_with(
 
     let (r_url, r_token) = {
         let r = state.rendezvous.lock().await;
-        let url = body.get("rendezvous").and_then(|v| v.as_str()).map(|s| s.to_string())
-            .or_else(|| if !r.url.is_empty() { Some(r.url.clone()) } else { None });
-        let token = body.get("rendezvous_token").and_then(|v| v.as_str()).map(|s| s.to_string())
+        let url = body
+            .get("rendezvous")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                if !r.url.is_empty() {
+                    Some(r.url.clone())
+                } else {
+                    None
+                }
+            });
+        let token = body
+            .get("rendezvous_token")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
             .or_else(|| r.token.clone());
         (url, token)
     };
@@ -594,9 +635,21 @@ async fn do_connect(
 
     let (r_url, r_token) = {
         let r = state.rendezvous.lock().await;
-        let url = body.get("rendezvous").and_then(|v| v.as_str()).map(|s| s.to_string())
-            .or_else(|| if !r.url.is_empty() { Some(r.url.clone()) } else { None });
-        let token = body.get("rendezvous_token").and_then(|v| v.as_str()).map(|s| s.to_string())
+        let url = body
+            .get("rendezvous")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                if !r.url.is_empty() {
+                    Some(r.url.clone())
+                } else {
+                    None
+                }
+            });
+        let token = body
+            .get("rendezvous_token")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
             .or_else(|| r.token.clone());
         (url, token)
     };
@@ -646,7 +699,8 @@ async fn peer_screenshot(
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
-        mime.parse().unwrap_or_else(|_| "image/jpeg".parse().unwrap()),
+        mime.parse()
+            .unwrap_or_else(|_| "image/jpeg".parse().unwrap()),
     );
     headers.insert("X-Logical-Width", "1920".parse().unwrap());
     headers.insert("X-Logical-Height", "1080".parse().unwrap());
@@ -720,6 +774,76 @@ async fn peer_action(
     }
 
     Ok(Json(json!({ "ok": true })))
+}
+
+async fn get_peer_privacy(
+    State(state): State<AppState>,
+    AxumPath(name): AxumPath<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if name == "local" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout.".to_string(),
+        ));
+    }
+    let remote = {
+        let outbound = state.outbound.lock().await;
+        outbound
+            .get(&name)
+            .cloned()
+            .ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
+    };
+
+    let st = remote
+        .get_privacy()
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    Ok(Json(json!({
+        "ok": true,
+        "lock_input": st.lock_input,
+        "blackout": st.blackout,
+        "supported": st.supported,
+    })))
+}
+
+async fn set_peer_privacy(
+    State(state): State<AppState>,
+    AxumPath(name): AxumPath<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if name == "local" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Input locking and privacy blackout are only supported for remote peers to prevent local operator lockout.".to_string(),
+        ));
+    }
+    let remote = {
+        let outbound = state.outbound.lock().await;
+        outbound
+            .get(&name)
+            .cloned()
+            .ok_or((StatusCode::NOT_FOUND, format!("not connected: {name}")))?
+    };
+
+    let lock_input = body
+        .get("lock_input")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let blackout = body
+        .get("blackout")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let st = remote
+        .set_privacy(lock_input, blackout)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    Ok(Json(json!({
+        "ok": true,
+        "lock_input": st.lock_input,
+        "blackout": st.blackout,
+        "supported": st.supported,
+    })))
 }
 
 #[derive(Deserialize)]
