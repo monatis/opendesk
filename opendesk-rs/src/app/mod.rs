@@ -18,7 +18,10 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::protocol::identity::generate_pairing_code;
-use crate::protocol::storage::{fingerprint, read_description, write_description};
+use crate::protocol::storage::{
+    GlobalRendezvousConfig, fingerprint, read_description, resolve_rendezvous_config,
+    write_description,
+};
 use crate::remote::client::{RemoteComputer, connect as client_connect, pair_with};
 use crate::remote::discovery::discover;
 use crate::remote::server::OpendeskServer;
@@ -35,6 +38,7 @@ pub struct AppState {
     pub pairing_code: Arc<Mutex<Option<String>>>,
     pub pairing_result: Arc<Mutex<Option<Value>>>,
     pub pairing_abort_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
+    pub rendezvous: Arc<Mutex<GlobalRendezvousConfig>>,
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -43,6 +47,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/static/styles.css", get(styles_handler))
         .route("/static/app.js", get(app_js_handler))
         .route("/api/state", get(get_state))
+        .route("/api/rendezvous/config", get(get_rendezvous_config).post(save_rendezvous_config))
+        .route("/api/rendezvous/test", post(test_rendezvous_connection))
         .route("/api/pair/begin", post(pair_begin))
         .route("/api/pair/cancel", post(pair_cancel))
         .route("/api/disconnect", post(do_disconnect))
@@ -132,6 +138,8 @@ async fn get_state(State(state): State<AppState>) -> Json<Value> {
 
     let local_ips = get_local_ips();
 
+    let r_cfg = state.rendezvous.lock().await.clone();
+
     Json(json!({
         "identity": {
             "fingerprint": my_fp,
@@ -143,6 +151,11 @@ async fn get_state(State(state): State<AppState>) -> Json<Value> {
         "pairing_code": p_code,
         "pairing_result": pairing_result,
         "default_peer": default_peer,
+        "rendezvous": {
+            "url": r_cfg.url,
+            "configured": !r_cfg.url.is_empty(),
+            "has_token": r_cfg.token.is_some(),
+        },
         "host_environment": {
             "wsl": false,
             "wsl_ip": "",
@@ -153,6 +166,85 @@ async fn get_state(State(state): State<AppState>) -> Json<Value> {
             "wslconfig_path": "",
         }
     }))
+}
+
+async fn get_rendezvous_config(State(state): State<AppState>) -> Json<Value> {
+    let r = state.rendezvous.lock().await;
+    Json(json!({
+        "url": r.url,
+        "token": r.token.as_deref().unwrap_or(""),
+        "has_token": r.token.is_some(),
+        "configured": !r.url.trim().is_empty()
+    }))
+}
+
+async fn save_rendezvous_config(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let clear = body.get("clear").and_then(|v| v.as_bool()).unwrap_or(false);
+    if clear {
+        crate::protocol::storage::clear_rendezvous_config(state.home.as_deref())
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let mut r = state.rendezvous.lock().await;
+        r.url.clear();
+        r.token = None;
+        return Ok(Json(json!({ "cleared": true, "configured": false, "url": "" })));
+    }
+
+    let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+    let token = body
+        .get("token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    if !url.is_empty() {
+        crate::protocol::storage::write_rendezvous_config(state.home.as_deref(), url, token.as_deref())
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let mut r = state.rendezvous.lock().await;
+        r.url = url.to_string();
+        r.token = token;
+    }
+
+    let r = state.rendezvous.lock().await;
+    Ok(Json(json!({
+        "ok": true,
+        "url": r.url,
+        "has_token": r.token.is_some(),
+        "configured": !r.url.is_empty()
+    })))
+}
+
+async fn test_rendezvous_connection(
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+    if url.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "missing 'url'".into()));
+    }
+    let token = body
+        .get("token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+
+    let start = std::time::Instant::now();
+    let client = crate::remote::rendezvous::RendezvousClient::new(url, token);
+    match client.list_peers(Duration::from_secs(4)).await {
+        Ok(peers) => {
+            let latency = start.elapsed().as_millis();
+            Ok(Json(json!({
+                "ok": true,
+                "latency_ms": latency,
+                "peers_count": peers.len(),
+            })))
+        }
+        Err(e) => Ok(Json(json!({
+            "ok": false,
+            "error": e.to_string(),
+        }))),
+    }
 }
 
 async fn pair_begin(State(state): State<AppState>) -> Json<Value> {
@@ -346,6 +438,8 @@ async fn set_self_description(
 #[derive(Deserialize)]
 struct DiscoverQuery {
     timeout: Option<f64>,
+    rendezvous: Option<String>,
+    rendezvous_token: Option<String>,
 }
 
 async fn do_discover(
@@ -353,25 +447,58 @@ async fn do_discover(
     Query(q): Query<DiscoverQuery>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
     let timeout = Duration::from_secs_f64(q.timeout.unwrap_or(2.0));
-    let peers = discover(timeout)
-        .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
-    let own_pk = state.server.identity().public_bytes();
+    let mut list = Vec::new();
 
-    let list: Vec<Value> = peers
-        .into_iter()
-        .filter(|p| p.public_key != own_pk)
-        .map(|p| {
-            json!({
-                "name": p.name,
-                "host": p.host,
-                "port": p.port,
-                "fingerprint": p.fingerprint,
-                "description": p.description,
-                "public_key_hex": data_encoding::HEXLOWER.encode(&p.public_key),
-            })
-        })
-        .collect();
+    // 1. LAN mDNS discovery
+    let own_pk = state.server.identity().public_bytes();
+    if let Ok(peers) = discover(timeout).await {
+        for p in peers {
+            if p.public_key != own_pk {
+                list.push(json!({
+                    "name": p.name,
+                    "host": p.host,
+                    "port": p.port,
+                    "fingerprint": p.fingerprint,
+                    "description": p.description,
+                    "public_key_hex": data_encoding::HEXLOWER.encode(&p.public_key),
+                    "source": "lan",
+                    "rendezvous_url": Value::Null,
+                }));
+            }
+        }
+    }
+
+    // 2. Rendezvous discovery
+    let (r_url, r_token) = {
+        let r = state.rendezvous.lock().await;
+        let url = q.rendezvous.clone().or_else(|| if !r.url.is_empty() { Some(r.url.clone()) } else { None });
+        let token = q.rendezvous_token.clone().or_else(|| r.token.clone());
+        (url, token)
+    };
+
+    if let Some(url) = r_url {
+        let r_client = crate::remote::rendezvous::RendezvousClient::new(&url, r_token.as_deref());
+        if let Ok(r_peers) = r_client.list_peers(timeout).await {
+            for p in r_peers {
+                let pk_hex = data_encoding::HEXLOWER.encode(&p.public_key);
+                if p.public_key != own_pk {
+                    // Check if already in list from LAN
+                    if !list.iter().any(|item| item.get("public_key_hex").and_then(|v| v.as_str()) == Some(&pk_hex)) {
+                        list.push(json!({
+                            "name": p.name,
+                            "host": "rendezvous",
+                            "port": 0,
+                            "fingerprint": p.fingerprint,
+                            "description": p.description,
+                            "public_key_hex": pk_hex,
+                            "source": "rendezvous",
+                            "rendezvous_url": url,
+                        }));
+                    }
+                }
+            }
+        }
+    }
 
     Ok(Json(json!({ "peers": list })))
 }
@@ -380,10 +507,7 @@ async fn do_pair_with(
     State(state): State<AppState>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let host = body
-        .get("host")
-        .and_then(|v| v.as_str())
-        .ok_or((StatusCode::BAD_REQUEST, "missing 'host'".into()))?;
+    let host = body.get("host").and_then(|v| v.as_str());
     let code = body
         .get("code")
         .and_then(|v| v.as_str())
@@ -394,15 +518,25 @@ async fn do_pair_with(
         .and_then(|v| v.as_str())
         .unwrap_or("");
     let port = body.get("port").and_then(|v| v.as_u64()).unwrap_or(8423) as u16;
+    let target_pubkey = body.get("target_pubkey").and_then(|v| v.as_str());
+
+    let (r_url, r_token) = {
+        let r = state.rendezvous.lock().await;
+        let url = body.get("rendezvous").and_then(|v| v.as_str()).map(|s| s.to_string())
+            .or_else(|| if !r.url.is_empty() { Some(r.url.clone()) } else { None });
+        let token = body.get("rendezvous_token").and_then(|v| v.as_str()).map(|s| s.to_string())
+            .or_else(|| r.token.clone());
+        (url, token)
+    };
 
     let (remote, server_pub) = pair_with(
-        Some(host),
+        host,
         Some(port),
         code,
         name,
-        None,
-        None,
-        None,
+        r_url.as_deref(),
+        r_token.as_deref(),
+        target_pubkey,
         state.home.as_deref(),
     )
     .await
@@ -458,9 +592,23 @@ async fn do_connect(
         }
     }
 
-    let remote = client_connect(Some(peer), None, None, state.home.as_deref())
-        .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let (r_url, r_token) = {
+        let r = state.rendezvous.lock().await;
+        let url = body.get("rendezvous").and_then(|v| v.as_str()).map(|s| s.to_string())
+            .or_else(|| if !r.url.is_empty() { Some(r.url.clone()) } else { None });
+        let token = body.get("rendezvous_token").and_then(|v| v.as_str()).map(|s| s.to_string())
+            .or_else(|| r.token.clone());
+        (url, token)
+    };
+
+    let remote = client_connect(
+        Some(peer),
+        r_url.as_deref(),
+        r_token.as_deref(),
+        state.home.as_deref(),
+    )
+    .await
+    .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     state
         .outbound
@@ -629,7 +777,14 @@ fn get_local_ips() -> Vec<String> {
     ips
 }
 
-pub async fn run_app(home: Option<&Path>, host: &str, port: u16, open_browser: bool) -> Result<()> {
+pub async fn run_app(
+    home: Option<&Path>,
+    host: &str,
+    port: u16,
+    open_browser: bool,
+    rendezvous_url: Option<&str>,
+    rendezvous_token: Option<&str>,
+) -> Result<()> {
     // Check if UI port or WebSocket port is taken
     for (bind_host, bind_port, label) in [("0.0.0.0", 8423, "WebSocket"), (host, port, "UI")] {
         if std::net::TcpListener::bind(format!("{}:{}", bind_host, bind_port)).is_err() {
@@ -642,7 +797,15 @@ pub async fn run_app(home: Option<&Path>, host: &str, port: u16, open_browser: b
         }
     }
 
-    let server = Arc::new(OpendeskServer::new("0.0.0.0", 8423, home, vec![], None)?);
+    let r_cfg = resolve_rendezvous_config(home, rendezvous_url, rendezvous_token);
+    let r_urls = if !r_cfg.url.is_empty() {
+        vec![r_cfg.url.clone()]
+    } else {
+        vec![]
+    };
+    let r_tok = r_cfg.token.clone();
+
+    let server = Arc::new(OpendeskServer::new("0.0.0.0", 8423, home, r_urls, r_tok)?);
 
     // Boot background OpendeskServer
     let srv_clone = server.clone();
@@ -659,6 +822,7 @@ pub async fn run_app(home: Option<&Path>, host: &str, port: u16, open_browser: b
         pairing_code: Arc::new(Mutex::new(None)),
         pairing_result: Arc::new(Mutex::new(None)),
         pairing_abort_tx: Arc::new(Mutex::new(None)),
+        rendezvous: Arc::new(Mutex::new(r_cfg)),
     };
 
     let router = create_router(app_state);

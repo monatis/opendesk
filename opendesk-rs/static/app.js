@@ -141,6 +141,9 @@ function render(state) {
     }
     renderModeSwitcher();
     updateEnvBanner(state.host_environment);
+    if (state.rendezvous) {
+        updateRendezvousUi(state.rendezvous);
+    }
 
     if (state.pairing_active) {
         ensureView('pairing');
@@ -255,9 +258,18 @@ document.body.addEventListener('click', async (ev) => {
                 await discover();
                 break;
             case 'discover-pair': {
-                pendingDiscoverPair = { host: btn.dataset.host, name: btn.dataset.peerName || '' };
+                pendingDiscoverPair = {
+                    host: btn.dataset.host,
+                    name: btn.dataset.peerName || '',
+                    source: btn.dataset.source || 'lan',
+                    targetPubkey: btn.dataset.targetPubkey || null,
+                    rendezvousUrl: btn.dataset.rendezvousUrl || null,
+                };
                 setText(document.getElementById('pair-modal-name'), pendingDiscoverPair.name || pendingDiscoverPair.host);
-                setText(document.getElementById('pair-modal-host'), pendingDiscoverPair.host);
+                const hostLabel = pendingDiscoverPair.source === 'rendezvous'
+                    ? `🌐 Rendezvous Relay (${pendingDiscoverPair.rendezvousUrl || 'server'})`
+                    : pendingDiscoverPair.host;
+                setText(document.getElementById('pair-modal-host'), hostLabel);
                 document.getElementById('pair-modal-code').value = '';
                 document.getElementById('pair-modal-name-input').value = pendingDiscoverPair.name;
                 document.getElementById('pair-modal-description').value = '';
@@ -271,12 +283,17 @@ document.body.addEventListener('click', async (ev) => {
                 if (!code) { toast('Enter the 6-digit code', 'error'); break; }
                 const nameOverride = document.getElementById('pair-modal-name-input').value.trim();
                 const desc = document.getElementById('pair-modal-description').value.trim();
-                const r = await apiPost('/api/pair-with', {
+                const payload = {
                     host: pendingDiscoverPair.host,
                     code,
                     name: nameOverride || pendingDiscoverPair.name,
                     description: desc,
-                });
+                };
+                if (pendingDiscoverPair.source === 'rendezvous') {
+                    payload.rendezvous = pendingDiscoverPair.rendezvousUrl || undefined;
+                    payload.target_pubkey = pendingDiscoverPair.targetPubkey || undefined;
+                }
+                const r = await apiPost('/api/pair-with', payload);
                 document.getElementById('pair-modal').hidden = true;
                 pendingDiscoverPair = null;
                 toast(`Paired with ${r.peer_name}`, 'ok');
@@ -483,6 +500,19 @@ function updatePairingEndpoints(env, code) {
     if (!el || !env) return;
     const ips = env.reachable_ipv4s || [];
     const port = env.server_port || 8423;
+    const rState = lastState && lastState.rendezvous;
+
+    let relayHtml = '';
+    if (rState && rState.configured) {
+        relayHtml = `
+            <div style="margin-bottom: 14px; width: 100%;">
+                <p class="muted" style="margin-bottom: 4px;">Over Rendezvous Relay (Internet):</p>
+                <pre class="code-hint"><code>opendesk pair-with <span class="code-strong">${escapeHtml(code)}</span></code></pre>
+                <p class="muted small" style="margin-top: 4px;">Relay server: <code>${escapeHtml(rState.url)}</code></p>
+            </div>
+        `;
+    }
+
     if (!ips.length) {
         // No reachable IPs — fall back to the generic instruction.  Inside
         // WSL this happens when ipconfig.exe couldn't be reached.
@@ -490,7 +520,8 @@ function updatePairingEndpoints(env, code) {
             ? 'Could not auto-detect Windows LAN IPs.  Run <code>ipconfig.exe</code> in PowerShell and use that machine\'s IPv4 address.'
             : 'No non-loopback interfaces detected.';
         setHtml(el, `
-            <p class="muted">On the controller, run:</p>
+            ${relayHtml}
+            <p class="muted">On the local network (LAN), run:</p>
             <pre class="code-hint"><code>opendesk pair-with &lt;this-host&gt; <span class="code-strong">${escapeHtml(code)}</span></code></pre>
             <p class="muted small">${note}</p>
         `);
@@ -514,7 +545,8 @@ function updatePairingEndpoints(env, code) {
         }
     }
     setHtml(el, `
-        <p class="muted">On the controller, run one of:</p>
+        ${relayHtml}
+        <p class="muted">On the local network (LAN), run one of:</p>
         ${rows}
         ${wslNote}
     `);
@@ -777,16 +809,26 @@ async function runDiscovery(showSpinner) {
         );
         const html = r.peers.map(p => {
             const isPaired = pairedFps.has(p.fingerprint);
+            const isRelay = p.source === 'rendezvous';
+            const endpoint = isRelay
+                ? `🌐 Relay (${escapeHtml(p.rendezvous_url || 'server')})`
+                : `${escapeHtml(p.host)}:${p.port}`;
+            const relayBadge = isRelay
+                ? `<span class="badge relay-badge">Relay</span>`
+                : '';
             const action = isPaired
                 ? `<span class="badge already-paired">Paired</span>`
                 : `<button class="ghost" data-action="discover-pair"
-                       data-host="${escapeHtml(p.host)}:${p.port}"
-                       data-peer-name="${escapeHtml(p.name)}">Pair</button>`;
+                       data-host="${escapeHtml(isRelay ? p.name : `${p.host}:${p.port}`)}"
+                       data-peer-name="${escapeHtml(p.name)}"
+                       data-source="${escapeHtml(p.source || 'lan')}"
+                       data-target-pubkey="${escapeHtml(p.public_key_hex || '')}"
+                       data-rendezvous-url="${escapeHtml(p.rendezvous_url || '')}">Pair</button>`;
             return `
                 <div class="peer-row">
                     <div class="peer-main">
-                        <div class="peer-name">${escapeHtml(p.name)}</div>
-                        <div class="peer-meta muted small">${escapeHtml(p.host)}:${p.port} · ${escapeHtml(p.fingerprint)}</div>
+                        <div class="peer-name">${escapeHtml(p.name)}${relayBadge}</div>
+                        <div class="peer-meta muted small">${endpoint} · ${escapeHtml(p.fingerprint)}</div>
                         ${p.description ? `<div class="peer-desc muted small">${escapeHtml(p.description)}</div>` : ''}
                     </div>
                     <div class="peer-actions row gap">${action}</div>
@@ -951,5 +993,237 @@ document.getElementById('pair-modal-code').addEventListener('keydown', e => {
     if (e.key === 'Escape') document.querySelector('[data-action="cancel-discover-pair"]').click();
 });
 
+// ---------------------------------------------------------------------------
+// Rendezvous Relay accordion & settings
+// ---------------------------------------------------------------------------
+
+function initRendezvousAccordion() {
+    const card = document.getElementById('rendezvous-card');
+    const toggle = document.getElementById('rendezvous-toggle');
+    const content = document.getElementById('rendezvous-content');
+    const tokenInput = document.getElementById('rendezvous-token-input');
+    const tokenToggle = document.getElementById('rendezvous-token-toggle');
+    const btnSave = document.getElementById('btn-save-rendezvous');
+    const btnTest = document.getElementById('btn-test-rendezvous');
+    const btnClear = document.getElementById('btn-clear-rendezvous');
+
+    if (!card || !toggle || !content) return;
+
+    // Restore open state from localStorage
+    const wasOpen = localStorage.getItem('opendesk.rendezvous_open') === 'true';
+    if (wasOpen) {
+        card.classList.add('open');
+        content.hidden = false;
+    }
+
+    toggle.addEventListener('click', () => {
+        const isOpen = card.classList.toggle('open');
+        content.hidden = !isOpen;
+        localStorage.setItem('opendesk.rendezvous_open', isOpen ? 'true' : 'false');
+    });
+
+    toggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle.click();
+        }
+    });
+
+    if (tokenToggle && tokenInput) {
+        tokenToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (tokenInput.type === 'password') {
+                tokenInput.type = 'text';
+                tokenToggle.textContent = '🔒';
+            } else {
+                tokenInput.type = 'password';
+                tokenToggle.textContent = '👁';
+            }
+        });
+    }
+
+    if (btnSave) {
+        btnSave.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await saveRendezvous();
+        });
+    }
+
+    if (btnTest) {
+        btnTest.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await testRendezvous();
+        });
+    }
+
+    if (btnClear) {
+        btnClear.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await clearRendezvous();
+        });
+    }
+
+    loadRendezvousConfig();
+}
+
+async function loadRendezvousConfig() {
+    try {
+        const cfg = await apiGet('/api/rendezvous/config');
+        updateRendezvousUi(cfg);
+    } catch (e) {
+        console.warn('Failed to load rendezvous config:', e);
+    }
+}
+
+function updateRendezvousUi(cfg) {
+    const card = document.getElementById('rendezvous-card');
+    const summary = document.getElementById('rendezvous-summary');
+    const pill = document.getElementById('rendezvous-status-pill');
+    const urlInput = document.getElementById('rendezvous-url-input');
+    const tokenInput = document.getElementById('rendezvous-token-input');
+
+    if (!card || !summary || !pill) return;
+
+    const hasUrl = cfg && cfg.url && cfg.url.trim().length > 0;
+
+    if (urlInput && document.activeElement !== urlInput) {
+        urlInput.value = (cfg && cfg.url) || '';
+    }
+    if (tokenInput && document.activeElement !== tokenInput) {
+        tokenInput.value = (cfg && cfg.token) || '';
+    }
+
+    if (hasUrl) {
+        card.classList.add('is-active');
+        summary.textContent = `Relay: ${cfg.url}`;
+        pill.className = 'pill pill-good';
+        pill.textContent = 'Active';
+    } else {
+        card.classList.remove('is-active');
+        summary.textContent = 'Direct LAN only';
+        pill.className = 'pill pill-muted';
+        pill.textContent = 'Inactive';
+    }
+}
+
+async function saveRendezvous() {
+    const urlInput = document.getElementById('rendezvous-url-input');
+    const tokenInput = document.getElementById('rendezvous-token-input');
+    const msg = document.getElementById('rendezvous-msg');
+
+    const url = urlInput ? urlInput.value.trim() : '';
+    const token = tokenInput ? tokenInput.value.trim() : '';
+
+    if (!url) {
+        toast('Please enter a rendezvous server URL or click Clear to reset', 'error');
+        return;
+    }
+
+    if (msg) {
+        msg.textContent = 'Saving...';
+        msg.style.color = 'var(--muted)';
+    }
+
+    try {
+        const r = await apiPost('/api/rendezvous/config', { url, token });
+        updateRendezvousUi(r);
+        if (msg) {
+            msg.textContent = '✓ Saved globally to disk';
+            msg.style.color = 'var(--good)';
+            setTimeout(() => { if (msg) msg.textContent = ''; }, 4000);
+        }
+        toast('Rendezvous configuration saved', 'ok');
+        runDiscovery(false);
+    } catch (e) {
+        if (msg) {
+            msg.textContent = `Save failed: ${e.message}`;
+            msg.style.color = 'var(--danger)';
+        }
+        toast(`Save failed: ${e.message}`, 'error');
+    }
+}
+
+async function testRendezvous() {
+    const urlInput = document.getElementById('rendezvous-url-input');
+    const tokenInput = document.getElementById('rendezvous-token-input');
+    const msg = document.getElementById('rendezvous-msg');
+    const pill = document.getElementById('rendezvous-status-pill');
+
+    const url = urlInput ? urlInput.value.trim() : '';
+    const token = tokenInput ? tokenInput.value.trim() : '';
+
+    if (!url) {
+        toast('Enter a server URL to test', 'error');
+        return;
+    }
+
+    if (msg) {
+        msg.textContent = 'Testing connection...';
+        msg.style.color = 'var(--warn)';
+    }
+    if (pill) {
+        pill.className = 'pill pill-warn';
+        pill.textContent = 'Testing...';
+    }
+
+    try {
+        const r = await apiPost('/api/rendezvous/test', { url, token });
+        if (r.ok) {
+            const countText = `${r.peers_count} online peer${r.peers_count === 1 ? '' : 's'}`;
+            if (msg) {
+                msg.textContent = `✓ Connected (${r.latency_ms}ms, ${countText})`;
+                msg.style.color = 'var(--good)';
+            }
+            if (pill) {
+                pill.className = 'pill pill-good';
+                pill.textContent = 'Connected';
+            }
+            toast(`Connection successful (${r.latency_ms}ms, ${countText})`, 'ok');
+        } else {
+            if (msg) {
+                msg.textContent = `✕ Connection failed: ${r.error}`;
+                msg.style.color = 'var(--danger)';
+            }
+            if (pill) {
+                pill.className = 'pill pill-error';
+                pill.textContent = 'Error';
+            }
+            toast(`Connection failed: ${r.error}`, 'error');
+        }
+    } catch (e) {
+        if (msg) {
+            msg.textContent = `✕ Test failed: ${e.message}`;
+            msg.style.color = 'var(--danger)';
+        }
+        if (pill) {
+            pill.className = 'pill pill-error';
+            pill.textContent = 'Error';
+        }
+        toast(`Test failed: ${e.message}`, 'error');
+    }
+}
+
+async function clearRendezvous() {
+    if (!confirm('Reset rendezvous relay? This will clear the saved server configuration and revert to direct LAN connections only.')) {
+        return;
+    }
+
+    const msg = document.getElementById('rendezvous-msg');
+    try {
+        const r = await apiPost('/api/rendezvous/config', { clear: true });
+        updateRendezvousUi(r);
+        if (msg) {
+            msg.textContent = 'Configuration cleared';
+            msg.style.color = 'var(--muted)';
+            setTimeout(() => { if (msg) msg.textContent = ''; }, 4000);
+        }
+        toast('Rendezvous configuration cleared', 'ok');
+        runDiscovery(false);
+    } catch (e) {
+        toast(`Clear failed: ${e.message}`, 'error');
+    }
+}
+
+initRendezvousAccordion();
 applyModeClass();
 startPolling();

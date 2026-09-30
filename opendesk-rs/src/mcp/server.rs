@@ -1,6 +1,6 @@
 use crate::automation::scheduler::ScheduleStore;
 use crate::computer::local::LocalComputer;
-use crate::protocol::storage::{TrustedPeers, default_home};
+use crate::protocol::storage::{TrustedPeers, default_home, resolve_rendezvous_config};
 use crate::remote::audit::AuditLog;
 use crate::remote::client::{RemoteComputer, connect as remote_connect};
 use crate::remote::discovery::discover;
@@ -40,6 +40,8 @@ pub struct McpSession {
     pub current_peer: Option<String>,
     pub connections: HashMap<String, Arc<RemoteComputer>>,
     pub home: PathBuf,
+    pub rendezvous_url: Option<String>,
+    pub rendezvous_token: Option<String>,
 }
 
 impl Default for McpSession {
@@ -50,12 +52,39 @@ impl Default for McpSession {
 
 impl McpSession {
     pub fn new() -> Self {
-        let home = default_home();
+        Self::with_config(None, None, None)
+    }
+
+    pub fn with_config(
+        home: Option<PathBuf>,
+        rendezvous_url: Option<String>,
+        rendezvous_token: Option<String>,
+    ) -> Self {
+        let home_path = home.unwrap_or_else(|| {
+            std::env::var("OPENDESK_HOME")
+                .ok()
+                .map(PathBuf::from)
+                .unwrap_or_else(default_home)
+        });
+        let r_cfg = resolve_rendezvous_config(
+            Some(&home_path),
+            rendezvous_url.as_deref(),
+            rendezvous_token.as_deref(),
+        );
+        let r_url = if !r_cfg.url.is_empty() {
+            Some(r_cfg.url)
+        } else {
+            None
+        };
+        let r_token = r_cfg.token;
+
         Self {
-            trusted: TrustedPeers::new(None),
+            trusted: TrustedPeers::new(Some(&home_path)),
             current_peer: None,
             connections: HashMap::new(),
-            home,
+            home: home_path,
+            rendezvous_url: r_url,
+            rendezvous_token: r_token,
         }
     }
 
@@ -122,7 +151,13 @@ impl McpSession {
         if let Some(r) = self.connections.get(peer_name) {
             return Ok(r.clone());
         }
-        let client = remote_connect(Some(peer_name), None, None, None).await?;
+        let client = remote_connect(
+            Some(peer_name),
+            self.rendezvous_url.as_deref(),
+            self.rendezvous_token.as_deref(),
+            Some(&self.home),
+        )
+        .await?;
         let client_arc = Arc::new(client);
         self.connections
             .insert(peer_name.to_string(), client_arc.clone());
@@ -164,9 +199,21 @@ impl Default for McpServer {
 
 impl McpServer {
     pub fn new() -> Self {
+        Self::with_config(None, None, None)
+    }
+
+    pub fn with_config(
+        home: Option<PathBuf>,
+        rendezvous_url: Option<String>,
+        rendezvous_token: Option<String>,
+    ) -> Self {
         Self {
             computer: Arc::new(LocalComputer::new()),
-            session: Arc::new(Mutex::new(McpSession::new())),
+            session: Arc::new(Mutex::new(McpSession::with_config(
+                home,
+                rendezvous_url,
+                rendezvous_token,
+            ))),
         }
     }
 

@@ -10,6 +10,7 @@ pub use super::identity::default_home;
 pub const TRUSTED_PEERS_FILE: &str = "trusted-peers.json";
 pub const DEFAULT_PEER_FILE: &str = "default-peer";
 pub const DESCRIPTION_FILE: &str = "description.txt";
+pub const RENDEZVOUS_CONFIG_FILE: &str = "rendezvous.json";
 
 /// Eight colon-separated groups of four hex digits — matches Python's fingerprint function:
 /// `":".join(h[i : i + 4] for i in range(0, 16, 4))`
@@ -141,15 +142,21 @@ impl TrustedPeers {
     }
 
     pub fn find_by_name(&self, name: &str) -> Option<TrustedPeer> {
-        self.list().into_iter().find(|p| p.name == name)
+        let n = name.trim();
+        self.list().into_iter().find(|p| p.name.eq_ignore_ascii_case(n))
     }
 
     pub fn find_by_name_or_key(&self, query: &str) -> Option<TrustedPeer> {
+        let q = query.trim();
+        let q_lower = q.to_lowercase();
+        let q_hex = q_lower.strip_prefix("peer-").unwrap_or(&q_lower);
         self.list().into_iter().find(|p| {
-            p.name == query
-                || p.public_key.eq_ignore_ascii_case(query)
-                || p.fingerprint() == query
-                || p.public_key.starts_with(query)
+            p.name.eq_ignore_ascii_case(q)
+                || p.public_key.eq_ignore_ascii_case(q)
+                || p.fingerprint().eq_ignore_ascii_case(q)
+                || p.fingerprint().replace(':', "").eq_ignore_ascii_case(q)
+                || p.public_key.to_lowercase().starts_with(&q_lower)
+                || (!q_hex.is_empty() && p.public_key.to_lowercase().starts_with(q_hex))
         })
     }
 
@@ -373,6 +380,94 @@ pub fn clear_description(home: Option<&Path>) -> Result<bool> {
         Ok(true)
     } else {
         Ok(false)
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GlobalRendezvousConfig {
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
+pub fn read_rendezvous_config(home: Option<&Path>) -> GlobalRendezvousConfig {
+    let p = home
+        .map(|h| h.to_path_buf())
+        .unwrap_or_else(default_home)
+        .join(RENDEZVOUS_CONFIG_FILE);
+    if !p.exists() {
+        return GlobalRendezvousConfig::default();
+    }
+    let data = std::fs::read_to_string(&p).ok().unwrap_or_default();
+    serde_json::from_str(&data).unwrap_or_default()
+}
+
+pub fn write_rendezvous_config(
+    home: Option<&Path>,
+    url: &str,
+    token: Option<&str>,
+) -> Result<()> {
+    let home_path = home.map(|h| h.to_path_buf()).unwrap_or_else(default_home);
+    std::fs::create_dir_all(&home_path)?;
+    let p = home_path.join(RENDEZVOUS_CONFIG_FILE);
+    let cfg = GlobalRendezvousConfig {
+        url: url.trim().to_string(),
+        token: token.map(|t| t.trim().to_string()).filter(|s| !s.is_empty()),
+    };
+    let data = serde_json::to_string_pretty(&cfg)?;
+    std::fs::write(&p, data)?;
+    Ok(())
+}
+
+pub fn clear_rendezvous_config(home: Option<&Path>) -> Result<bool> {
+    let p = home
+        .map(|h| h.to_path_buf())
+        .unwrap_or_else(default_home)
+        .join(RENDEZVOUS_CONFIG_FILE);
+    if p.exists() {
+        std::fs::remove_file(p)?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Helper to resolve the effective rendezvous configuration taking into account:
+/// 1. Command-line args (if any)
+/// 2. Environment variables (`OPENDESK_RENDEZVOUS`, `OPENDESK_RENDEZVOUS_TOKEN`)
+/// 3. Global config on disk (`rendezvous.json`)
+pub fn resolve_rendezvous_config(
+    home: Option<&Path>,
+    cli_url: Option<&str>,
+    cli_token: Option<&str>,
+) -> GlobalRendezvousConfig {
+    let disk_cfg = read_rendezvous_config(home);
+    let env_url = std::env::var("OPENDESK_RENDEZVOUS").ok().filter(|s| !s.trim().is_empty());
+    let env_token = std::env::var("OPENDESK_RENDEZVOUS_TOKEN").ok().filter(|s| !s.trim().is_empty());
+
+    let eff_url = cli_url
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .or(env_url)
+        .or_else(|| {
+            if !disk_cfg.url.trim().is_empty() {
+                Some(disk_cfg.url.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+
+    let eff_token = cli_token
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .or(env_token)
+        .or_else(|| disk_cfg.token.filter(|s| !s.trim().is_empty()));
+
+    GlobalRendezvousConfig {
+        url: eff_url,
+        token: eff_token,
     }
 }
 

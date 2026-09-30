@@ -507,8 +507,39 @@ pub async fn pair_with(
 
     let mut resolved_endpoint = ("127.0.0.1".to_string(), 8423u16);
     let (mut transport, _server_pubkey) = if let Some(r_url) = rendezvous_url {
-        let target_pk = target_pubkey
-            .ok_or_else(|| anyhow!("target_pubkey is required when pairing via rendezvous"))?;
+        let target_pk = if let Some(tp) = target_pubkey {
+            tp.to_string()
+        } else if let Some(h) = host {
+            let h_clean = h.strip_prefix("peer-").unwrap_or(h);
+            if h_clean.len() == 64 && data_encoding::HEXLOWER.decode(h_clean.as_bytes()).is_ok() {
+                h_clean.to_string()
+            } else {
+                let r_client = super::rendezvous::RendezvousClient::new(r_url, rendezvous_token);
+                let peers = r_client.list_peers(Duration::from_secs(3)).await?;
+                let matched = peers.into_iter().find(|p| {
+                    let pk_hex = data_encoding::HEXLOWER.encode(&p.public_key);
+                    p.name.eq_ignore_ascii_case(h)
+                        || pk_hex.eq_ignore_ascii_case(h_clean)
+                        || pk_hex.starts_with(h_clean)
+                });
+                match matched {
+                    Some(p) => data_encoding::HEXLOWER.encode(&p.public_key),
+                    None => return Err(anyhow!("no peer found on rendezvous matching '{}'. Specify --target-pubkey", h)),
+                }
+            }
+        } else {
+            let r_client = super::rendezvous::RendezvousClient::new(r_url, rendezvous_token);
+            let peers = r_client.list_peers(Duration::from_secs(3)).await?;
+            if peers.len() == 1 {
+                data_encoding::HEXLOWER.encode(&peers[0].public_key)
+            } else if peers.is_empty() {
+                return Err(anyhow!("no peers currently online on rendezvous server. Make sure the host is running 'opendesk pair --rendezvous {}'", r_url));
+            } else {
+                let names: Vec<String> = peers.into_iter().map(|p| format!("{} ({})", p.name, p.fingerprint)).collect();
+                return Err(anyhow!("multiple peers online on rendezvous server ({}). Please specify the peer name or --target-pubkey", names.join(", ")));
+            }
+        };
+
         let pk_bytes = data_encoding::HEXLOWER
             .decode(target_pk.as_bytes())
             .or_else(|_| data_encoding::HEXUPPER.decode(target_pk.as_bytes()))
@@ -617,9 +648,46 @@ pub async fn connect(
             .ok_or_else(|| anyhow!("no peer specified and no default peer set"))?,
     };
 
-    let peer = trusted
-        .find_by_name_or_key(&target_name)
-        .ok_or_else(|| anyhow!("no trusted peer found matching '{}'", target_name))?;
+    let peer = match trusted.find_by_name_or_key(&target_name) {
+        Some(p) => p,
+        None => {
+            if let Some(r_url) = rendezvous_url {
+                let r_client = super::rendezvous::RendezvousClient::new(r_url, rendezvous_token);
+                if let Ok(peers) = r_client.list_peers(Duration::from_secs(3)).await {
+                    let t_clean = target_name.strip_prefix("peer-").unwrap_or(&target_name);
+                    let matched = peers.into_iter().find(|p| {
+                        let pk_hex = data_encoding::HEXLOWER.encode(&p.public_key);
+                        p.name.eq_ignore_ascii_case(&target_name)
+                            || pk_hex.eq_ignore_ascii_case(t_clean)
+                            || pk_hex.starts_with(t_clean)
+                    });
+                    if let Some(mp) = matched {
+                        if mp.public_key.len() == 32 {
+                            let mut arr = [0u8; 32];
+                            arr.copy_from_slice(&mp.public_key);
+                            if let Some(tp) = trusted.find(&arr) {
+                                tp
+                            } else {
+                                return Err(anyhow!(
+                                    "peer '{}' ({}) is online on rendezvous relay, but not yet paired with this machine. Run 'opendesk pair-with ...' first.",
+                                    mp.name,
+                                    mp.fingerprint
+                                ));
+                            }
+                        } else {
+                            return Err(anyhow!("no trusted peer found matching '{}'", target_name));
+                        }
+                    } else {
+                        return Err(anyhow!("no trusted peer found matching '{}'", target_name));
+                    }
+                } else {
+                    return Err(anyhow!("no trusted peer found matching '{}'", target_name));
+                }
+            } else {
+                return Err(anyhow!("no trusted peer found matching '{}'", target_name));
+            }
+        }
+    };
 
     let peer_pub = peer.public_bytes()?;
 

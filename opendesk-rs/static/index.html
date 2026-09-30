@@ -26,6 +26,55 @@
      the view. -->
 <div id="env-banner" class="env-banner" hidden></div>
 
+<!-- Rendezvous Relay accordion -->
+<div class="container rendezvous-wrap">
+    <div id="rendezvous-card" class="rendezvous-card">
+        <div class="rendezvous-header" id="rendezvous-toggle" role="button" tabindex="0">
+            <div class="rendezvous-header-left">
+                <span class="rendezvous-icon">🌐</span>
+                <div class="rendezvous-title-wrap">
+                    <span class="rendezvous-title">Rendezvous Relay</span>
+                    <span id="rendezvous-summary" class="rendezvous-summary muted small">Direct LAN only</span>
+                </div>
+            </div>
+            <div class="rendezvous-header-right">
+                <span id="rendezvous-status-pill" class="pill pill-muted">Inactive</span>
+                <span class="rendezvous-chevron">▼</span>
+            </div>
+        </div>
+        <div class="rendezvous-content" id="rendezvous-content" hidden>
+            <p class="muted small" style="margin-top:0;margin-bottom:14px;">
+                Connect and pair across the Internet when machines are on different networks or behind NATs. Settings are saved globally on disk.
+            </p>
+            <div class="rendezvous-grid">
+                <div class="field-labeled">
+                    <label for="rendezvous-url-input">
+                        Relay Server URL
+                        <span class="tip">?<span class="tip-body">WebSocket address of your rendezvous server, e.g. ws://relay-host:80 or wss://relay.example.com</span></span>
+                    </label>
+                    <input id="rendezvous-url-input" type="text" placeholder="ws://relay.example.com:80">
+                </div>
+                <div class="field-labeled">
+                    <label for="rendezvous-token-input">
+                        Auth Token (Optional)
+                        <span class="tip">?<span class="tip-body">Authentication token configured on the rendezvous server.</span></span>
+                    </label>
+                    <div class="password-wrap">
+                        <input id="rendezvous-token-input" type="password" placeholder="Leave empty if none">
+                        <button type="button" class="btn-eye" id="rendezvous-token-toggle" title="Show or hide token">👁</button>
+                    </div>
+                </div>
+            </div>
+            <div class="row gap rendezvous-actions">
+                <button class="primary" id="btn-save-rendezvous">Save</button>
+                <button class="ghost" id="btn-test-rendezvous">Test Connection</button>
+                <button class="danger ghost" id="btn-clear-rendezvous">Clear</button>
+                <span id="rendezvous-msg" class="small" style="margin-left:auto;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
 <main id="root" class="container">
     <!-- View switches based on state.  Templates rendered by app.js. -->
     <div class="loader">loading…</div>

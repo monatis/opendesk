@@ -130,6 +130,8 @@ impl OpendeskServer {
             .with_context(|| format!("failed to bind to {}", bind_addr))?;
 
         let fp = fingerprint(&self.identity.public_bytes());
+        let pk_hex = data_encoding::HEXLOWER.encode(&self.identity.public_bytes());
+        let peer_prefix = format!("peer-{}", &pk_hex[..6]);
 
         // Advertise via mDNS if enabled
         let mut _ad: Option<Advertisement> = None;
@@ -155,64 +157,174 @@ impl OpendeskServer {
             }
         }
 
+        let primary_rendezvous = self.rendezvous_urls.first().cloned();
+
         println!();
-        println!("┌──────────────────────────────────────────────┐");
-        println!("│  opendesk pairing                            │");
-        println!("│  port:        {:<31}│", self.port);
-        println!("│  fingerprint: {:<31}│", fp);
-        println!("│                                              │");
-        println!("│   pairing code:   {:<27}│", code);
-        println!("│                                              │");
-        println!("│  Run on the controller:                      │");
-        println!("│    opendesk pair-with <host> {:<16}│", code);
-        println!("└──────────────────────────────────────────────┘");
+        println!("┌────────────────────────────────────────────────────────┐");
+        println!("│  opendesk pairing                                      │");
+        if let Some(ref r_url) = primary_rendezvous {
+            println!("│  relay:       {:<41}│", r_url);
+            println!("│  peer alias:  {:<41}│", peer_prefix);
+        } else {
+            println!("│  port:        {:<41}│", self.port);
+        }
+        println!("│  fingerprint: {:<41}│", fp);
+        println!("│                                                        │");
+        println!("│   pairing code:   {:<37}│", code);
+        println!("│                                                        │");
+        println!("│  Run on the controller:                                │");
+        if let Some(ref r_url) = primary_rendezvous {
+            println!("│    opendesk pair-with {} {:<21}│", peer_prefix, code);
+            println!("│      --rendezvous {:<37}│", r_url);
+        } else {
+            println!("│    opendesk pair-with <host> {:<26}│", code);
+        }
+        println!("└────────────────────────────────────────────────────────┘");
         println!();
 
-        let pair_future = async {
-            loop {
-                let (stream, peer_addr) = listener.accept().await?;
-                let ws_stream = tokio_tungstenite::accept_async(stream).await?;
-                let mut transport = WebSocketTransport::new_plain(ws_stream);
-
-                match pair_server(&mut transport, &self.identity, code).await {
-                    Ok(session) => {
-                        let peer_pub = session.peer_public;
-                        let peer_name = default_peer_name(&peer_pub);
-                        self.trusted.add(&peer_pub, &peer_name, "")?;
-                        self.trusted.cache_endpoint(
-                            &peer_pub,
-                            &peer_addr.ip().to_string(),
-                            peer_addr.port(),
-                        )?;
-
-                        let peer_fp = fingerprint(&peer_pub);
-                        println!("✓ Paired with {} ({})", peer_name, peer_fp);
-
-                        let comp = self.computer.clone();
-                        let home = self.home.clone();
-                        let audit = self.audit.clone();
-                        let no_audit = self.no_audit;
-                        tokio::spawn(async move {
-                            let (_tx, mut rx) = mpsc::channel(1);
-                            let _ = run_session_loop(
-                                &mut transport,
-                                session.channel,
-                                comp,
-                                home.as_deref(),
-                                &mut rx,
-                                &peer_pub,
-                                &peer_name,
-                                "pairing-session",
-                                &audit,
-                                no_audit,
-                            )
-                            .await;
-                        });
-
-                        return Ok(peer_pub);
+        // If rendezvous is configured, open control WebSocket to register
+        let r_control: Option<(String, WebSocketTransport)> = if let Some(ref r_url) = primary_rendezvous {
+            match tokio_tungstenite::connect_async(r_url).await {
+                Ok((ws, _)) => {
+                    let mut tr = WebSocketTransport::new_tls(ws);
+                    let desc = read_description(self.home.as_deref());
+                    let mut reg_msg = serde_json::json!({
+                        "action": "register",
+                        "public_key": pk_hex,
+                        "name": peer_prefix,
+                        "description": desc,
+                    });
+                    if let Some(tok) = &self.rendezvous_token {
+                        reg_msg["token"] = serde_json::json!(tok);
                     }
-                    Err(e) => {
-                        warn!("Pairing attempt failed from {}: {}", peer_addr, e);
+                    if let Err(e) = tr.send_text(&reg_msg.to_string()).await {
+                        warn!("Failed to register on rendezvous for pairing: {}", e);
+                        None
+                    } else {
+                        let _ = tr.recv_text().await;
+                        info!("Registered on rendezvous for pairing: {}", r_url);
+                        Some((r_url.clone(), tr))
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to connect to rendezvous {}: {}", r_url, e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let pair_code = code.to_string();
+        let pair_future = async {
+            let mut r_opt = r_control;
+            let mut ping_interval = tokio::time::interval(Duration::from_secs(20));
+            ping_interval.tick().await;
+
+            loop {
+                tokio::select! {
+                    accept_res = listener.accept() => {
+                        let (stream, peer_addr) = accept_res?;
+                        let ws_stream = tokio_tungstenite::accept_async(stream).await?;
+                        let mut transport = WebSocketTransport::new_plain(ws_stream);
+
+                        match pair_server(&mut transport, &self.identity, &pair_code).await {
+                            Ok(session) => {
+                                let peer_pub = session.peer_public;
+                                let peer_name = default_peer_name(&peer_pub);
+                                self.trusted.add(&peer_pub, &peer_name, "")?;
+                                self.trusted.cache_endpoint(
+                                    &peer_pub,
+                                    &peer_addr.ip().to_string(),
+                                    peer_addr.port(),
+                                )?;
+
+                                let peer_fp = fingerprint(&peer_pub);
+                                println!("✓ Paired with {} ({})", peer_name, peer_fp);
+
+                                let comp = self.computer.clone();
+                                let home = self.home.clone();
+                                let audit = self.audit.clone();
+                                let no_audit = self.no_audit;
+                                tokio::spawn(async move {
+                                    let (_tx, mut rx) = mpsc::channel(1);
+                                    let _ = run_session_loop(
+                                        &mut transport,
+                                        session.channel,
+                                        comp,
+                                        home.as_deref(),
+                                        &mut rx,
+                                        &peer_pub,
+                                        &peer_name,
+                                        "pairing-session",
+                                        &audit,
+                                        no_audit,
+                                    )
+                                    .await;
+                                });
+
+                                return Ok(peer_pub);
+                            }
+                            Err(e) => {
+                                warn!("Pairing attempt failed from {}: {}", peer_addr, e);
+                            }
+                        }
+                    }
+                    r_msg = async {
+                        if let Some((_, ref mut tr)) = r_opt {
+                            tr.recv_text().await
+                        } else {
+                            std::future::pending().await
+                        }
+                    } => {
+                        match r_msg {
+                            Ok(text) => {
+                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text)
+                                    && val.get("action").and_then(|v| v.as_str()) == Some("session_request")
+                                    && let Some(session_id) = val.get("session_id").and_then(|v| v.as_str())
+                                {
+                                    let r_url = r_opt.as_ref().unwrap().0.clone();
+                                    info!("Incoming rendezvous session request for pairing: {}", session_id);
+                                    let (join_ws, _) = tokio_tungstenite::connect_async(&r_url).await?;
+                                    let mut join_tr = WebSocketTransport::new_tls(join_ws);
+                                    let mut join_msg = serde_json::json!({
+                                        "action": "join",
+                                        "session_id": session_id,
+                                    });
+                                    if let Some(tok) = &self.rendezvous_token {
+                                        join_msg["token"] = serde_json::json!(tok);
+                                    }
+                                    join_tr.send_text(&join_msg.to_string()).await?;
+                                    let _ = join_tr.recv_text().await?;
+                                    join_tr.send_text(&serde_json::json!({ "action": "ready" }).to_string()).await?;
+                                    let _ = join_tr.recv_text().await?;
+
+                                    // Now perform pair_server over rendezvous relay!
+                                    match pair_server(&mut join_tr, &self.identity, &pair_code).await {
+                                        Ok(session) => {
+                                            let peer_pub = session.peer_public;
+                                            let peer_name = default_peer_name(&peer_pub);
+                                            self.trusted.add(&peer_pub, &peer_name, &r_url)?;
+                                            let peer_fp = fingerprint(&peer_pub);
+                                            println!("✓ Paired with {} ({}) via rendezvous relay", peer_name, peer_fp);
+                                            return Ok(peer_pub);
+                                        }
+                                        Err(e) => {
+                                            warn!("Rendezvous pairing handshake failed: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                warn!("Rendezvous control connection closed");
+                                r_opt = None;
+                            }
+                        }
+                    }
+                    _ = ping_interval.tick() => {
+                        if let Some((_, ref mut tr)) = r_opt {
+                            let _ = tr.send_text(&serde_json::json!({ "action": "ping" }).to_string()).await;
+                        }
                     }
                 }
             }

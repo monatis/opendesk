@@ -7,7 +7,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use opendesk_rs::mcp::server::McpServer;
 use opendesk_rs::protocol::identity::generate_pairing_code;
 use opendesk_rs::protocol::storage::{
-    TrustedPeers, clear_description, fingerprint, read_description, write_description,
+    TrustedPeers, clear_description, clear_rendezvous_config, fingerprint, read_description,
+    read_rendezvous_config, resolve_rendezvous_config, write_description, write_rendezvous_config,
 };
 use opendesk_rs::remote::client::{connect as remote_connect, pair_with};
 use opendesk_rs::remote::rendezvous::RendezvousServer;
@@ -27,7 +28,14 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Run as an MCP (Model Context Protocol) stdio server for agents
-    Mcp,
+    Mcp {
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
 
     /// Run quick diagnostic test of local accessibility and input
     Test,
@@ -36,6 +44,10 @@ enum Commands {
     Install {
         #[arg(long, default_value = "user")]
         scope: String,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
     },
 
     /// Remove opendesk MCP server from Claude Code
@@ -55,6 +67,10 @@ enum Commands {
         home: Option<PathBuf>,
         #[arg(long)]
         no_mdns: bool,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
     },
 
     /// Pair this machine with a peer running `opendesk pair`
@@ -127,6 +143,10 @@ enum Commands {
         home: Option<PathBuf>,
         #[arg(long)]
         no_browser: bool,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
     },
 
     /// Verify platform permissions (macOS Accessibility / Screen Recording)
@@ -233,6 +253,49 @@ enum Commands {
     /// Uninstall the user-scoped opendesk OS service
     #[command(name = "uninstall-service")]
     UninstallService,
+
+    /// View, set, or clear default global rendezvous server URL and optional token
+    #[command(name = "set-rendezvous")]
+    SetRendezvous {
+        /// Rendezvous server URL (e.g. ws://relay:80 or wss://relay.example.com)
+        url: Option<String>,
+        /// Optional authentication token
+        #[arg(long)]
+        token: Option<String>,
+        /// Clear the saved rendezvous configuration
+        #[arg(long)]
+        clear: bool,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
+
+    /// View or update global configuration settings
+    Config {
+        #[command(subcommand)]
+        subcmd: Option<ConfigCommands>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommands {
+    /// Show current global configuration
+    Show {
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
+    /// Configure global rendezvous relay server
+    Rendezvous {
+        /// Rendezvous server URL
+        url: Option<String>,
+        /// Optional authentication token
+        #[arg(long)]
+        token: Option<String>,
+        /// Clear the saved rendezvous configuration
+        #[arg(long)]
+        clear: bool,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -275,15 +338,47 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_default();
 
     if exe_name == "opendesk-mcp" {
-        let server = McpServer::new();
+        let r_cfg = resolve_rendezvous_config(None, None, None);
+        let server = McpServer::with_config(
+            None,
+            if !r_cfg.url.is_empty() {
+                Some(r_cfg.url)
+            } else {
+                None
+            },
+            r_cfg.token,
+        );
         return server.run_stdio().await;
     }
 
     let cli = Cli::parse();
 
-    match cli.command.unwrap_or(Commands::Mcp) {
-        Commands::Mcp => {
-            let server = McpServer::new();
+    let default_cmd = Commands::Mcp {
+        rendezvous: None,
+        rendezvous_token: None,
+        home: None,
+    };
+
+    match cli.command.unwrap_or(default_cmd) {
+        Commands::Mcp {
+            rendezvous,
+            rendezvous_token,
+            home,
+        } => {
+            let r_cfg = resolve_rendezvous_config(
+                home.as_deref(),
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            );
+            let server = McpServer::with_config(
+                home,
+                if !r_cfg.url.is_empty() {
+                    Some(r_cfg.url)
+                } else {
+                    None
+                },
+                r_cfg.token,
+            );
             server.run_stdio().await?;
         }
 
@@ -301,8 +396,12 @@ async fn main() -> anyhow::Result<()> {
             println!("Diagnostic test completed.");
         }
 
-        Commands::Install { scope } => {
-            cmd_install(&scope)?;
+        Commands::Install {
+            scope,
+            rendezvous,
+            rendezvous_token,
+        } => {
+            cmd_install(&scope, rendezvous.as_deref(), rendezvous_token.as_deref())?;
         }
 
         Commands::Uninstall => {
@@ -316,8 +415,21 @@ async fn main() -> anyhow::Result<()> {
             timeout,
             home,
             no_mdns,
+            rendezvous,
+            rendezvous_token,
         } => {
-            let mut server = OpendeskServer::new(&host, port, home.as_deref(), vec![], None)?;
+            let r_cfg = resolve_rendezvous_config(
+                home.as_deref(),
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            );
+            let r_urls = if !r_cfg.url.is_empty() {
+                vec![r_cfg.url]
+            } else {
+                vec![]
+            };
+            let mut server =
+                OpendeskServer::new(&host, port, home.as_deref(), r_urls, r_cfg.token)?;
             server.set_advertise_mdns(!no_mdns);
             let pair_code = code.unwrap_or_else(|| generate_pairing_code(6));
             server.run_pair(&pair_code, timeout).await?;
@@ -333,13 +445,23 @@ async fn main() -> anyhow::Result<()> {
             rendezvous_token,
             home,
         } => {
+            let r_cfg = resolve_rendezvous_config(
+                home.as_deref(),
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            );
+            let r_url = if !r_cfg.url.is_empty() {
+                Some(r_cfg.url.as_str())
+            } else {
+                None
+            };
             let (_, server_pub) = pair_with(
                 host.as_deref(),
                 Some(port),
                 &code,
                 name.as_deref(),
-                rendezvous.as_deref(),
-                rendezvous_token.as_deref(),
+                r_url,
+                r_cfg.token.as_deref(),
                 target_pubkey.as_deref(),
                 home.as_deref(),
             )
@@ -362,8 +484,18 @@ async fn main() -> anyhow::Result<()> {
             rendezvous,
             rendezvous_token,
         } => {
+            let r_cfg = resolve_rendezvous_config(
+                home.as_deref(),
+                None,
+                rendezvous_token.as_deref(),
+            );
+            let mut all_rendezvous = rendezvous;
+            if all_rendezvous.is_empty() && !r_cfg.url.is_empty() {
+                all_rendezvous.push(r_cfg.url);
+            }
+            let token = rendezvous_token.or(r_cfg.token);
             let mut server =
-                OpendeskServer::new(&host, port, home.as_deref(), rendezvous, rendezvous_token)?;
+                OpendeskServer::new(&host, port, home.as_deref(), all_rendezvous, token)?;
             server.set_advertise_mdns(!no_mdns);
             server.set_no_audit(no_audit);
             server.serve_forever().await?;
@@ -376,11 +508,21 @@ async fn main() -> anyhow::Result<()> {
             screenshot,
             home,
         } => {
+            let r_cfg = resolve_rendezvous_config(
+                home.as_deref(),
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            );
+            let r_url = if !r_cfg.url.is_empty() {
+                Some(r_cfg.url.as_str())
+            } else {
+                None
+            };
             println!("Connecting to peer...");
             let remote = remote_connect(
                 peer.as_deref(),
-                rendezvous.as_deref(),
-                rendezvous_token.as_deref(),
+                r_url,
+                r_cfg.token.as_deref(),
                 home.as_deref(),
             )
             .await?;
@@ -403,45 +545,61 @@ async fn main() -> anyhow::Result<()> {
             rendezvous,
             rendezvous_token,
         } => {
-            if let Some(r_url) = rendezvous {
-                let client = opendesk_rs::remote::rendezvous::RendezvousClient::new(
-                    &r_url,
-                    rendezvous_token.as_deref(),
-                );
-                let peers = client.list_peers(Duration::from_secs_f64(timeout)).await?;
-                if peers.is_empty() {
-                    println!("No online opendesk peers found on rendezvous {}.", r_url);
-                    return Ok(());
-                }
-                println!(
-                    "{:<24}  {:<22}  {:<22}  DESCRIPTION",
-                    "NAME", "ADDR", "FINGERPRINT"
-                );
-                for p in peers {
-                    let desc = if p.description.len() > 80 {
-                        &p.description[..80]
+            let r_cfg = resolve_rendezvous_config(
+                None,
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            );
+            let r_url = if !r_cfg.url.is_empty() {
+                Some(r_cfg.url)
+            } else {
+                None
+            };
+            let r_tok = r_cfg.token;
+
+            let (lan_peers, r_peers) = tokio::join!(
+                opendesk_rs::remote::discovery::discover(Duration::from_secs_f64(timeout)),
+                async {
+                    if let Some(url) = &r_url {
+                        let client = opendesk_rs::remote::rendezvous::RendezvousClient::new(
+                            url,
+                            r_tok.as_deref(),
+                        );
+                        client.list_peers(Duration::from_secs_f64(timeout)).await.ok()
                     } else {
-                        &p.description
-                    };
-                    println!(
-                        "{:<24}  {:<22}  {:<22}  {}",
-                        p.name, "rendezvous", p.fingerprint, desc
-                    );
+                        None
+                    }
+                }
+            );
+
+            let lan_peers = lan_peers.unwrap_or_default();
+            let rendezvous_peers = r_peers.unwrap_or_default();
+
+            if lan_peers.is_empty() && rendezvous_peers.is_empty() {
+                if let Some(url) = r_url {
+                    println!("No opendesk peers found on LAN or rendezvous ({}).", url);
+                } else {
+                    println!("No opendesk peers found on the LAN.");
                 }
                 return Ok(());
             }
 
-            let peers =
-                opendesk_rs::remote::discovery::discover(Duration::from_secs_f64(timeout)).await?;
-            if peers.is_empty() {
-                println!("No opendesk peers found on the LAN.");
-                return Ok(());
-            }
             println!(
                 "{:<24}  {:<22}  {:<22}  DESCRIPTION",
                 "NAME", "ADDR", "FINGERPRINT"
             );
-            for p in peers {
+            for p in rendezvous_peers {
+                let desc = if p.description.len() > 80 {
+                    &p.description[..80]
+                } else {
+                    &p.description
+                };
+                println!(
+                    "{:<24}  {:<22}  {:<22}  {}",
+                    p.name, "rendezvous", p.fingerprint, desc
+                );
+            }
+            for p in lan_peers {
                 let desc = if p.description.len() > 80 {
                     &p.description[..80]
                 } else {
@@ -460,8 +618,18 @@ async fn main() -> anyhow::Result<()> {
             host,
             home,
             no_browser,
+            rendezvous,
+            rendezvous_token,
         } => {
-            opendesk_rs::app::run_app(home.as_deref(), &host, port, !no_browser).await?;
+            opendesk_rs::app::run_app(
+                home.as_deref(),
+                &host,
+                port,
+                !no_browser,
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            )
+            .await?;
         }
 
         Commands::Check { r#open, no_open } => {
@@ -798,16 +966,26 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::InstallService {
             port,
-            home: _,
+            home,
             no_start,
             rendezvous,
             rendezvous_token,
         } => {
+            let r_cfg = resolve_rendezvous_config(
+                home.as_deref(),
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+            );
+            let r_url = if !r_cfg.url.is_empty() {
+                Some(r_cfg.url.as_str())
+            } else {
+                None
+            };
             match opendesk_rs::service::install_service(
                 port,
                 !no_start,
-                rendezvous.as_deref(),
-                rendezvous_token.as_deref(),
+                r_url,
+                r_cfg.token.as_deref(),
             ) {
                 Ok(result) => {
                     println!(
@@ -847,6 +1025,41 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         },
+
+        Commands::SetRendezvous {
+            url,
+            token,
+            clear,
+            home,
+        } => {
+            handle_set_rendezvous(url, token, clear, home.as_deref())?;
+        }
+
+        Commands::Config { subcmd } => {
+            match subcmd.unwrap_or(ConfigCommands::Show { home: None }) {
+                ConfigCommands::Show { home } => {
+                    let r = read_rendezvous_config(home.as_deref());
+                    println!("OpenDesk Global Configuration:");
+                    if r.url.is_empty() {
+                        println!("  Rendezvous server: (none)");
+                    } else {
+                        println!("  Rendezvous server: {}", r.url);
+                        println!(
+                            "  Rendezvous token:  {}",
+                            if r.token.is_some() { "[configured]" } else { "(none)" }
+                        );
+                    }
+                }
+                ConfigCommands::Rendezvous {
+                    url,
+                    token,
+                    clear,
+                    home,
+                } => {
+                    handle_set_rendezvous(url, token, clear, home.as_deref())?;
+                }
+            }
+        }
     }
 
     Ok(())
@@ -889,7 +1102,51 @@ async fn do_unpair(
     Ok(())
 }
 
-fn cmd_install(scope: &str) -> anyhow::Result<()> {
+fn handle_set_rendezvous(
+    url: Option<String>,
+    token: Option<String>,
+    clear: bool,
+    home: Option<&Path>,
+) -> anyhow::Result<()> {
+    if clear {
+        if clear_rendezvous_config(home)? {
+            println!("✓ Cleared saved rendezvous configuration.");
+        } else {
+            println!("No rendezvous configuration was saved.");
+        }
+        return Ok(());
+    }
+
+    if let Some(u) = url {
+        let u = u.trim().to_string();
+        if u.is_empty() {
+            eprintln!("ERROR: Rendezvous URL cannot be empty.");
+            std::process::exit(1);
+        }
+        let tok = token.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty());
+        write_rendezvous_config(home, &u, tok)?;
+        println!("✓ Global rendezvous server set to: {}", u);
+        if tok.is_some() {
+            println!("  Authentication token: [saved]");
+        }
+        println!("  All opendesk commands (pair, pair-with, serve, connect, discover, mcp, app) will now use this rendezvous server by default.");
+    } else {
+        let current = read_rendezvous_config(home);
+        if current.url.is_empty() {
+            println!("No global rendezvous server is currently configured.");
+            println!("Set one with: opendesk set-rendezvous ws://<host>:<port> [--token <token>]");
+        } else {
+            println!("Global rendezvous server: {}", current.url);
+            println!(
+                "Authentication token:     {}",
+                if current.token.is_some() { "[saved]" } else { "(none)" }
+            );
+        }
+    }
+    Ok(())
+}
+
+fn cmd_install(scope: &str, rendezvous: Option<&str>, rendezvous_token: Option<&str>) -> anyhow::Result<()> {
     let claude_bin = which("claude");
     if claude_bin.is_none() {
         eprintln!(
@@ -914,15 +1171,25 @@ fn cmd_install(scope: &str) -> anyhow::Result<()> {
         .args(["mcp", "remove", "opendesk"])
         .output();
 
+    let mut args = vec![
+        "mcp".to_string(),
+        "add".to_string(),
+        "opendesk".to_string(),
+        format!("--scope={scope}"),
+        "--".to_string(),
+        mcp_path.to_string_lossy().to_string(),
+    ];
+    if let Some(r) = rendezvous {
+        args.push("--rendezvous".to_string());
+        args.push(r.to_string());
+    }
+    if let Some(t) = rendezvous_token {
+        args.push("--rendezvous-token".to_string());
+        args.push(t.to_string());
+    }
+
     let output = std::process::Command::new(&claude)
-        .args([
-            "mcp",
-            "add",
-            "opendesk",
-            &format!("--scope={scope}"),
-            "--",
-            &mcp_path.to_string_lossy(),
-        ])
+        .args(&args)
         .output()?;
 
     if !output.status.success() {
@@ -933,6 +1200,9 @@ fn cmd_install(scope: &str) -> anyhow::Result<()> {
 
     println!("opendesk MCP server registered ({}).", scope);
     println!("  Binary: {}", mcp_path.display());
+    if let Some(r) = rendezvous {
+        println!("  Rendezvous: {}", r);
+    }
     println!("Start a Claude Code conversation and say 'take a screenshot' to verify.");
     Ok(())
 }
