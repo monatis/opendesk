@@ -16,7 +16,46 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 use tracing::error;
 
-const MCP_VIEWPORT_HTML: &str = include_str!("../../static/mcp_viewport.html");
+const INDEX_HTML: &str = include_str!("../../static/index.html");
+const STYLES_CSS: &str = include_str!("../../static/styles.css");
+const APP_JS: &str = include_str!("../../static/app.js");
+
+pub fn build_mcp_app_html() -> String {
+    let mut html = INDEX_HTML.to_string();
+    html = html.replace(
+        r#"<link rel="stylesheet" href="/static/styles.css">"#,
+        &format!("<style>\n{STYLES_CSS}\n</style>"),
+    );
+    html = html.replace(
+        r#"<script src="/static/app.js" type="module"></script>"#,
+        &format!("<script type=\"module\">\n{APP_JS}\n</script>"),
+    );
+    html
+}
+
+fn url_decode_simple(s: &str) -> String {
+    let mut res = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let h1 = chars.next().unwrap_or(' ');
+            let h2 = chars.next().unwrap_or(' ');
+            let hex = format!("{h1}{h2}");
+            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                res.push(byte as char);
+            } else {
+                res.push('%');
+                res.push(h1);
+                res.push(h2);
+            }
+        } else if c == '+' {
+            res.push(' ');
+        } else {
+            res.push(c);
+        }
+    }
+    res
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
@@ -319,7 +358,7 @@ impl McpServer {
                             {
                                 "uri": "ui://opendesk/viewport",
                                 "mimeType": "text/html;profile=mcp-app",
-                                "text": MCP_VIEWPORT_HTML,
+                                "text": build_mcp_app_html(),
                                 "_meta": {
                                     "ui": {
                                         "csp": {
@@ -679,6 +718,19 @@ impl McpServer {
                 }
             }),
             json!({
+                "name": "opendesk_app_api",
+                "description": "Internal REST-to-MCP bridge tool powering the embedded OpenDesk web UI when rendered as an MCP App.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "The API path (e.g. /api/state, /api/rendezvous/config)" },
+                        "method": { "type": "string", "description": "HTTP method (GET, POST, DELETE)" },
+                        "body": { "type": "object", "description": "Optional JSON payload" }
+                    },
+                    "required": ["path"]
+                }
+            }),
+            json!({
                 "name": "opendesk_disconnect",
                 "description": "Close a cached remote connection. Pass `peer` to close one, or omit it to close all remote connections.",
                 "inputSchema": {
@@ -695,6 +747,7 @@ impl McpServer {
     pub async fn call_tool(&self, name: &str, args: &Value) -> Result<Vec<Value>> {
         // Handle admin tools
         match name {
+            "opendesk_app_api" => return Box::pin(self.admin_app_api(args)).await,
             "opendesk_view" => return self.admin_view(args).await,
             "opendesk_peers" => return self.admin_peers(args).await,
             "opendesk_discover" => return self.admin_discover(args).await,
@@ -1469,6 +1522,331 @@ impl McpServer {
     // Admin tools implementation (100% parity with Python Integrations/MCP)
     // -----------------------------------------------------------------------
 
+    async fn admin_app_api(&self, args: &Value) -> Result<Vec<Value>> {
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+        let method = args
+            .get("method")
+            .and_then(|v| v.as_str())
+            .unwrap_or("GET")
+            .to_uppercase();
+        let body = args.get("body").cloned().unwrap_or(Value::Null);
+
+        let res = self.dispatch_app_api(path, &method, &body).await?;
+        Ok(vec![json!({
+            "type": "text",
+            "text": serde_json::to_string(&res)?
+        })])
+    }
+
+    async fn dispatch_app_api(
+        &self,
+        full_path: &str,
+        method: &str,
+        body: &Value,
+    ) -> Result<Value> {
+        let path = full_path.split('?').next().unwrap_or(full_path);
+
+        if path == "/api/state" {
+            let session = self.session.lock().await;
+            let trusted = session.trusted.list();
+            let default_peer = session.trusted.get_default();
+            let active = session.active_peer_names();
+            let mut peers_list = Vec::new();
+            for p in trusted {
+                let is_default = default_peer.as_ref() == Some(&p.name);
+                let outbound_active = active.contains(&p.name);
+                peers_list.push(json!({
+                    "name": p.name,
+                    "fingerprint": p.fingerprint(),
+                    "paired_at": p.paired_at,
+                    "description": p.effective_description(),
+                    "description_override": p.description_override,
+                    "description_broadcast": p.description,
+                    "is_default": is_default,
+                    "outbound_active": outbound_active,
+                }));
+            }
+            let my_fp = match crate::protocol::identity::Identity::load_or_create(Some(&session.home))
+            {
+                Ok(id) => crate::protocol::storage::fingerprint(&id.public_bytes()),
+                Err(_) => "local".to_string(),
+            };
+            let my_desc = crate::protocol::storage::read_description(Some(&session.home));
+            let r_url = session.rendezvous_url.clone().unwrap_or_default();
+            let r_token = session.rendezvous_token.clone();
+
+            return Ok(json!({
+                "identity": {
+                    "fingerprint": my_fp,
+                    "description": my_desc,
+                },
+                "trusted_peers": peers_list,
+                "active_session": null,
+                "pairing_active": false,
+                "pairing_code": null,
+                "pairing_result": null,
+                "default_peer": default_peer,
+                "rendezvous": {
+                    "url": r_url,
+                    "configured": !r_url.is_empty(),
+                    "has_token": r_token.is_some(),
+                },
+                "host_environment": {
+                    "wsl": false,
+                    "wsl_ip": "",
+                    "reachable_ipv4s": vec!["127.0.0.1".to_string()],
+                    "server_port": 8423,
+                    "mirrored_active": false,
+                    "mirrored_configured": false,
+                    "wslconfig_path": "",
+                }
+            }));
+        }
+
+        if path == "/api/rendezvous/config" {
+            if method == "GET" {
+                let session = self.session.lock().await;
+                let r_cfg = resolve_rendezvous_config(Some(&session.home), None, None);
+                return Ok(json!({
+                    "url": r_cfg.url,
+                    "token": r_cfg.token.as_deref().unwrap_or(""),
+                    "has_token": r_cfg.token.is_some(),
+                    "configured": !r_cfg.url.trim().is_empty()
+                }));
+            } else if method == "POST" {
+                let clear = body.get("clear").and_then(|v| v.as_bool()).unwrap_or(false);
+                let mut session = self.session.lock().await;
+                if clear {
+                    let _ = crate::protocol::storage::clear_rendezvous_config(Some(&session.home));
+                    session.rendezvous_url = None;
+                    session.rendezvous_token = None;
+                    return Ok(json!({ "cleared": true, "configured": false, "url": "" }));
+                } else {
+                    let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+                    let token = body
+                        .get("token")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty());
+                    if !url.is_empty() {
+                        let _ = crate::protocol::storage::write_rendezvous_config(
+                            Some(&session.home),
+                            url,
+                            token.as_deref(),
+                        );
+                        session.rendezvous_url = Some(url.to_string());
+                        session.rendezvous_token = token.clone();
+                    }
+                    return Ok(json!({
+                        "ok": true,
+                        "url": url,
+                        "has_token": token.is_some(),
+                        "configured": !url.is_empty()
+                    }));
+                }
+            }
+        }
+
+        if path == "/api/rendezvous/test" {
+            let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let token = body
+                .get("token")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty());
+            let start = std::time::Instant::now();
+            let client = crate::remote::rendezvous::RendezvousClient::new(url, token);
+            return match client.list_peers(Duration::from_secs(4)).await {
+                Ok(peers) => Ok(json!({
+                    "ok": true,
+                    "latency_ms": start.elapsed().as_millis(),
+                    "peers_count": peers.len(),
+                })),
+                Err(e) => Ok(json!({
+                    "ok": false,
+                    "error": e.to_string(),
+                })),
+            };
+        }
+
+        if path == "/api/discover" {
+            let peers = discover(Duration::from_secs(2)).await.unwrap_or_default();
+            let mut list = Vec::new();
+            for p in peers {
+                list.push(json!({
+                    "name": p.name,
+                    "host": p.host,
+                    "port": p.port,
+                    "fingerprint": p.fingerprint,
+                    "description": p.description,
+                    "direct_reachable": true,
+                }));
+            }
+            return Ok(json!({ "peers": list }));
+        }
+
+        if path == "/api/connect" {
+            let peer = body.get("peer").and_then(|v| v.as_str()).unwrap_or("local");
+            let mut session = self.session.lock().await;
+            session.use_peer(Some(peer))?;
+            return Ok(json!({ "ok": true, "peer": peer }));
+        }
+
+        if path == "/api/peers/default" {
+            let clear = body.get("clear").and_then(|v| v.as_bool()).unwrap_or(false);
+            let session = self.session.lock().await;
+            if clear {
+                session.trusted.clear_default()?;
+            } else if let Some(name) = body.get("name").and_then(|v| v.as_str()) {
+                session.trusted.set_default(name)?;
+            }
+            return Ok(json!({ "ok": true }));
+        }
+
+        if path == "/api/describe" {
+            let clear = body.get("clear").and_then(|v| v.as_bool()).unwrap_or(false);
+            let session = self.session.lock().await;
+            if clear {
+                crate::protocol::storage::write_description(Some(&session.home), "")?;
+            } else if let Some(text) = body.get("text").and_then(|v| v.as_str()) {
+                crate::protocol::storage::write_description(Some(&session.home), text)?;
+            }
+            return Ok(json!({ "ok": true }));
+        }
+
+        if path == "/api/unpair" {
+            if let Some(name) = body.get("name").and_then(|v| v.as_str()) {
+                let mut session = self.session.lock().await;
+                session.trusted.remove(name)?;
+                session.disconnect(Some(name));
+            }
+            return Ok(json!({ "ok": true }));
+        }
+
+        if path == "/api/unpair-all" {
+            let mut session = self.session.lock().await;
+            let names: Vec<String> = session.trusted.list().into_iter().map(|p| p.name).collect();
+            for n in names {
+                let _ = session.trusted.remove(&n);
+                session.disconnect(Some(&n));
+            }
+            return Ok(json!({ "ok": true }));
+        }
+
+        if path == "/api/disconnect" {
+            let mut session = self.session.lock().await;
+            session.disconnect(None);
+            return Ok(json!({ "ok": true }));
+        }
+
+        if path.starts_with("/api/audit") {
+            let session = self.session.lock().await;
+            let audit = AuditLog::new(Some(&session.home));
+            let mut entries = audit.iter_entries(None);
+            if entries.len() > 50 {
+                entries = entries.split_off(entries.len() - 50);
+            }
+            return Ok(json!({ "entries": entries }));
+        }
+
+        if path.starts_with("/api/peer/") && path.ends_with("/screenshot") {
+            let parts: Vec<&str> = path.split('/').collect();
+            let peer_raw = parts.get(3).copied().unwrap_or("local");
+            let peer_name = url_decode_simple(peer_raw);
+            let tool_args = json!({ "peer": peer_name });
+            let res = self.call_tool("screenshot", &tool_args).await?;
+            let b64 = res
+                .iter()
+                .find_map(|item| {
+                    if item.get("type").and_then(|v| v.as_str()) == Some("image") {
+                        item.get("data")
+                            .and_then(|v| v.as_str())
+                            .map(ToString::to_string)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
+
+            return Ok(json!({
+                "image_b64": b64,
+                "mime_type": "image/png",
+                "logical_width": 1920,
+                "logical_height": 1080
+            }));
+        }
+
+        if path.starts_with("/api/peer/") && path.ends_with("/action") {
+            let parts: Vec<&str> = path.split('/').collect();
+            let peer_raw = parts.get(3).copied().unwrap_or("local");
+            let peer_name = url_decode_simple(peer_raw);
+            let kind = body.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+            match kind {
+                "click" => {
+                    let x = body.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as i64;
+                    let y = body.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as i64;
+                    let w = body.get("image_width").and_then(|v| v.as_i64());
+                    let h = body.get("image_height").and_then(|v| v.as_i64());
+                    let mut mouse_args = json!({
+                        "action": "click",
+                        "x": x,
+                        "y": y,
+                        "peer": peer_name
+                    });
+                    if let (Some(width), Some(height)) = (w, h) {
+                        mouse_args["image_width"] = json!(width);
+                        mouse_args["image_height"] = json!(height);
+                    }
+                    self.call_tool("mouse", &mouse_args).await?;
+                }
+                "type" => {
+                    let text = body.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                    self.call_tool(
+                        "keyboard",
+                        &json!({
+                            "action": "type",
+                            "text": text,
+                            "peer": peer_name
+                        }),
+                    )
+                    .await?;
+                }
+                "key" => {
+                    let keysym = body.get("keysym").and_then(|v| v.as_str()).unwrap_or("");
+                    let key_name = match keysym {
+                        "return" => "enter",
+                        "backspace" => "backspace",
+                        "tab" => "tab",
+                        "escape" => "escape",
+                        k => k,
+                    };
+                    self.call_tool(
+                        "keyboard",
+                        &json!({
+                            "action": "press",
+                            "key": key_name,
+                            "peer": peer_name
+                        }),
+                    )
+                    .await?;
+                }
+                _ => {}
+            }
+            return Ok(json!({ "ok": true }));
+        }
+
+        if method == "DELETE" && path.starts_with("/api/peer/") {
+            let parts: Vec<&str> = path.split('/').collect();
+            let peer_raw = parts.get(3).copied().unwrap_or("");
+            let peer_name = url_decode_simple(peer_raw);
+            let mut session = self.session.lock().await;
+            let closed = session.disconnect(Some(&peer_name)) > 0;
+            return Ok(json!({ "closed": closed }));
+        }
+
+        Ok(json!({ "ok": true }))
+    }
+
     async fn admin_view(&self, args: &Value) -> Result<Vec<Value>> {
         if let Some(peer) = args.get("peer").and_then(|v| v.as_str()) {
             let mut session = self.session.lock().await;
@@ -1985,7 +2363,7 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "schedule"));
         assert!(tools.iter().any(|t| t["name"] == "learn"));
 
-        // 7 admin tools
+        // 8 admin tools
         assert!(tools.iter().any(|t| t["name"] == "opendesk_peers"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_discover"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_use"));
@@ -1994,8 +2372,9 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_capabilities"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_disconnect"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_view"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_app_api"));
 
-        assert_eq!(tools.len(), 17);
+        assert_eq!(tools.len(), 18);
     }
 
     #[tokio::test]
@@ -2216,7 +2595,7 @@ mod tests {
         assert_eq!(contents[0]["uri"], "ui://opendesk/viewport");
         assert_eq!(contents[0]["mimeType"], "text/html;profile=mcp-app");
         let html_text = contents[0]["text"].as_str().unwrap();
-        assert!(html_text.contains("OpenDesk Viewport"));
+        assert!(html_text.contains("<title>opendesk</title>"));
         assert!(html_text.contains("ui/initialize"));
         assert!(contents[0]["_meta"]["ui"]["csp"].is_object());
 
@@ -2277,5 +2656,24 @@ mod tests {
             peers_res["_meta"]["ui"]["resourceUri"],
             "ui://opendesk/viewport"
         );
+
+        // 7. Call opendesk_app_api handles GET /api/state
+        let api_res = server
+            .handle_method(
+                "tools/call",
+                &json!({
+                    "name": "opendesk_app_api",
+                    "arguments": {
+                        "path": "/api/state",
+                        "method": "GET"
+                    }
+                }),
+            )
+            .await
+            .unwrap();
+        assert!(!api_res["isError"].as_bool().unwrap());
+        let api_text = api_res["content"][0]["text"].as_str().unwrap();
+        let state_json: serde_json::Value = serde_json::from_str(api_text).unwrap();
+        assert!(state_json.get("trusted_peers").is_some());
     }
 }
