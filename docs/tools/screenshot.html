@@ -528,10 +528,25 @@
 <td><p>null</p></td>
 <td><p>Capture only this screen region</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">format</span></code></p></td>
+<td><p>str</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;png&quot;</span></code> (local) / <code class="docutils literal notranslate"><span class="pre">&quot;jpeg&quot;</span></code> (remote)</p></td>
+<td><p>Compression format (<code class="docutils literal notranslate"><span class="pre">&quot;jpeg&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;png&quot;</span></code>). <code class="docutils literal notranslate"><span class="pre">&quot;jpeg&quot;</span></code> reduces payload size by ~5x–14x for low-latency streaming.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">quality</span></code></p></td>
+<td><p>int</p></td>
+<td><p>75</p></td>
+<td><p>JPEG compression quality from 1 to 100.</p></td>
+</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">save_path</span></code></p></td>
 <td><p>str</p></td>
 <td><p>null</p></td>
-<td><p>Save PNG to disk at this absolute path</p></td>
+<td><p>Save image to disk at this absolute path</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">peer</span></code></p></td>
+<td><p>str</p></td>
+<td><p>null</p></td>
+<td><p>Target peer name to capture screen remotely (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;work-pc&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code>)</p></td>
 </tr>
 </tbody>
 </table>

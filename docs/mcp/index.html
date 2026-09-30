@@ -479,7 +479,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-it-works">How it works</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-llm-sees">What the LLM sees</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup">Setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-interfaces">Setup &amp; Interfaces</a></li>
 </ul>
             </nav>
         </div>
@@ -506,13 +506,14 @@ app, clipboard, and ocr without any extra setup.</p>
        <span class="n">v</span>
   <span class="n">opendesk</span><span class="o">-</span><span class="n">mcp</span>  <span class="o">&lt;--</span> <span class="n">the</span> <span class="n">server</span> <span class="n">this</span> <span class="n">package</span> <span class="n">installs</span>
        <span class="o">|</span>
-       <span class="o">+--</span> <span class="n">screenshot</span> <span class="n">tool</span>  <span class="p">(</span><span class="n">captures</span> <span class="n">screen</span><span class="p">,</span> <span class="n">returns</span> <span class="n">PNG</span> <span class="n">to</span> <span class="n">the</span> <span class="n">LLM</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">ui</span> <span class="n">tool</span>          <span class="p">(</span><span class="n">clicks</span> <span class="n">elements</span> <span class="n">by</span> <span class="n">name</span> <span class="n">via</span> <span class="n">AX</span> <span class="n">tree</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">mouse</span> <span class="n">tool</span>       <span class="p">(</span><span class="n">pixel</span><span class="o">-</span><span class="n">level</span> <span class="n">mouse</span> <span class="n">control</span> <span class="k">with</span> <span class="n">Retina</span> <span class="n">scaling</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">keyboard</span> <span class="n">tool</span>    <span class="p">(</span><span class="n">types</span> <span class="n">text</span><span class="p">,</span> <span class="n">presses</span> <span class="n">keys</span><span class="p">,</span> <span class="n">hotkeys</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">app</span> <span class="n">tool</span>         <span class="p">(</span><span class="n">opens</span><span class="p">,</span> <span class="n">closes</span><span class="p">,</span> <span class="n">focuses</span> <span class="n">apps</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">clipboard</span> <span class="n">tool</span>   <span class="p">(</span><span class="n">read</span><span class="o">/</span><span class="n">write</span> <span class="n">clipboard</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">ocr</span> <span class="n">tool</span>         <span class="p">(</span><span class="n">extracts</span> <span class="n">text</span> <span class="kn">from</span><span class="w"> </span><span class="nn">any</span> <span class="n">screen</span> <span class="n">region</span><span class="p">)</span>
+       <span class="o">+--</span> <span class="n">screenshot</span> <span class="n">tool</span>    <span class="p">(</span><span class="n">captures</span> <span class="n">screen</span> <span class="k">as</span> <span class="n">PNG</span><span class="o">/</span><span class="n">JPEG</span> <span class="k">for</span> <span class="n">LLM</span> <span class="n">observation</span><span class="p">)</span>
+       <span class="o">+--</span> <span class="n">opendesk_view</span> <span class="n">tool</span> <span class="p">(</span><span class="n">opens</span> <span class="n">interactive</span> <span class="n">MCP</span> <span class="n">App</span> <span class="n">viewport</span> <span class="n">inline</span> <span class="ow">in</span> <span class="n">chat</span><span class="p">)</span>
+       <span class="o">+--</span> <span class="n">ui</span> <span class="n">tool</span>            <span class="p">(</span><span class="n">clicks</span> <span class="n">elements</span> <span class="n">by</span> <span class="n">name</span> <span class="n">via</span> <span class="n">AX</span> <span class="n">tree</span><span class="p">)</span>
+       <span class="o">+--</span> <span class="n">mouse</span> <span class="n">tool</span>         <span class="p">(</span><span class="n">pixel</span><span class="o">-</span><span class="n">level</span> <span class="n">mouse</span> <span class="n">control</span> <span class="k">with</span> <span class="n">Retina</span> <span class="n">scaling</span><span class="p">)</span>
+       <span class="o">+--</span> <span class="n">keyboard</span> <span class="n">tool</span>      <span class="p">(</span><span class="n">types</span> <span class="n">text</span><span class="p">,</span> <span class="n">presses</span> <span class="n">keys</span><span class="p">,</span> <span class="n">hotkeys</span><span class="p">)</span>
+       <span class="o">+--</span> <span class="n">app</span> <span class="n">tool</span>           <span class="p">(</span><span class="n">opens</span><span class="p">,</span> <span class="n">closes</span><span class="p">,</span> <span class="n">focuses</span> <span class="n">apps</span><span class="p">)</span>
+       <span class="o">+--</span> <span class="n">clipboard</span> <span class="n">tool</span>     <span class="p">(</span><span class="n">read</span><span class="o">/</span><span class="n">write</span> <span class="n">clipboard</span><span class="p">)</span>
+       <span class="o">+--</span> <span class="n">ocr</span> <span class="n">tool</span>           <span class="p">(</span><span class="n">extracts</span> <span class="n">text</span> <span class="kn">from</span><span class="w"> </span><span class="nn">any</span> <span class="n">screen</span> <span class="n">region</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The LLM decides when to call a tool, calls it, gets the result (including PNG screenshots),
@@ -530,24 +531,27 @@ and continues. You never write tool-calling code yourself.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">screenshot</span></code></p></td>
-<td><p>“Let me see what’s on the screen”</p></td>
+<td><p>“Let me see what’s on the screen” (PNG or fast JPEG with quality control)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ui</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opendesk_view</span></code></p></td>
+<td><p>“Open the interactive remote desktop viewport so the user can watch live or take over”</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ui</span></code></p></td>
 <td><p>“Click the Save button” (finds it via AX tree, no coordinates)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mouse</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mouse</span></code></p></td>
 <td><p>Last resort for canvas areas with no accessible elements</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">keyboard</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">keyboard</span></code></p></td>
 <td><p>“Type this text into the field”</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">app</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">app</span></code></p></td>
 <td><p>“Open Terminal” / “List running apps”</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">clipboard</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">clipboard</span></code></p></td>
 <td><p>“Copy this to clipboard” / “What did I copy?”</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ocr</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ocr</span></code></p></td>
 <td><p>“Read the text in that region”</p></td>
 </tr>
 </tbody>
@@ -587,11 +591,12 @@ and continues. You never write tool-calling code yourself.</p>
 <p>Claude decides which tool to call, calls it, and responds with the result — you never write any code.</p>
 </section>
 <hr class="docutils" />
-<section id="setup">
-<h2>Setup<a class="headerlink" href="#setup" title="Link to this heading">#</a></h2>
+<section id="setup-interfaces">
+<h2>Setup &amp; Interfaces<a class="headerlink" href="#setup-interfaces" title="Link to this heading">#</a></h2>
 <ol class="arabic simple">
 <li><p><a class="reference internal" href="install.html"><span class="std std-doc">Install</span></a> the package</p></li>
 <li><p>Register with your client: <a class="reference internal" href="claude-code.html"><span class="std std-doc">Claude Code</span></a> · <a class="reference internal" href="claude-desktop.html"><span class="std std-doc">Claude Desktop</span></a> · <a class="reference internal" href="cursor.html"><span class="std std-doc">Cursor</span></a> · <a class="reference internal" href="continue.html"><span class="std std-doc">Continue</span></a></p></li>
+<li><p><a class="reference internal" href="apps.html"><span class="std std-doc">MCP Apps (Interactive UI Viewport)</span></a> — Embed interactive remote desktop viewports inside Claude Desktop, Goose, or custom harnesses like <code class="docutils literal notranslate"><span class="pre">isanagent</span></code>.</p></li>
 </ol>
 </section>
 </section>
@@ -646,7 +651,7 @@ and continues. You never write tool-calling code yourself.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-it-works">How it works</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-llm-sees">What the LLM sees</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup">Setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-interfaces">Setup &amp; Interfaces</a></li>
 </ul>
   </nav></div>
 
