@@ -620,6 +620,9 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     caps.insert("ui.action".to_string(), rmpv::Value::Boolean(true));
     caps.insert("clipboard.read".to_string(), rmpv::Value::Boolean(true));
     caps.insert("clipboard.write".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("input.sequence".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("process.exec".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("process.shell".to_string(), rmpv::Value::Boolean(true));
     caps.insert("system.privacy".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
@@ -858,6 +861,92 @@ pub(crate) async fn dispatch_call(
                 }
             }
         }
+        "input.sequence" => {
+            let steps_val = params
+                .get("steps")
+                .and_then(|v| v.as_array())
+                .ok_or("missing 'steps'")?;
+            let mut steps = Vec::new();
+            for step_val in steps_val {
+                let key = value_get(step_val, "key")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let text = value_get(step_val, "text")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let delay_ms = value_get(step_val, "delay_ms").and_then(|v| v.as_u64());
+                let action = value_get(step_val, "action")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let keys = value_get(step_val, "keys").and_then(|v| v.as_array()).map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<_>>()
+                });
+                let hotkey = value_get(step_val, "hotkey").and_then(|v| {
+                    if let Some(arr) = v.as_array() {
+                        let jarr: Vec<serde_json::Value> = arr
+                            .iter()
+                            .filter_map(|item| item.as_str().map(|s| serde_json::Value::String(s.to_string())))
+                            .collect();
+                        Some(serde_json::Value::Array(jarr))
+                    } else if let Some(s) = v.as_str() {
+                        Some(serde_json::Value::String(s.to_string()))
+                    } else {
+                        None
+                    }
+                });
+                steps.push(crate::computer::local::KeyboardStep {
+                    action,
+                    key,
+                    keys,
+                    hotkey,
+                    text,
+                    delay_ms,
+                });
+            }
+            computer
+                .keyboard_sequence(&steps)
+                .map(|_| rmpv::Value::Nil)
+                .map_err(|e| e.to_string())
+        }
+        "process.exec" | "process.shell" => {
+            let cmd_str = params.get("command").and_then(|v| v.as_str());
+            let shell = params.get("shell").and_then(|v| v.as_str());
+            let timeout_secs = params.get("timeout_secs").and_then(|v| v.as_u64());
+
+            if let Some(argv) = params.get("argv").and_then(|v| v.as_array()) {
+                let argv_strs: Vec<&str> = argv.iter().filter_map(|v| v.as_str()).collect();
+                if !argv_strs.is_empty() {
+                    let res = computer
+                        .execute_argv(&argv_strs, timeout_secs)
+                        .map_err(|e| e.to_string())?;
+                    return Ok(rmpv::Value::Map(vec![
+                        (rmpv::Value::from("stdout"), rmpv::Value::from(res.stdout)),
+                        (rmpv::Value::from("stderr"), rmpv::Value::from(res.stderr)),
+                        (
+                            rmpv::Value::from("exit_code"),
+                            rmpv::Value::from(res.exit_code as i64),
+                        ),
+                        (rmpv::Value::from("success"), rmpv::Value::Boolean(res.success)),
+                    ]));
+                }
+            }
+
+            let command = cmd_str.ok_or("missing 'command'")?;
+            let res = computer
+                .execute_command(command, shell, timeout_secs)
+                .map_err(|e| e.to_string())?;
+            Ok(rmpv::Value::Map(vec![
+                (rmpv::Value::from("stdout"), rmpv::Value::from(res.stdout)),
+                (rmpv::Value::from("stderr"), rmpv::Value::from(res.stderr)),
+                (
+                    rmpv::Value::from("exit_code"),
+                    rmpv::Value::from(res.exit_code as i64),
+                ),
+                (rmpv::Value::from("success"), rmpv::Value::Boolean(res.success)),
+            ]))
+        }
         "apps.open" => {
             let path = params
                 .get("name")
@@ -987,6 +1076,9 @@ pub(crate) async fn dispatch_call(
                 rmpv::Value::from("ui.action"),
                 rmpv::Value::from("clipboard.read"),
                 rmpv::Value::from("clipboard.write"),
+                rmpv::Value::from("input.sequence"),
+                rmpv::Value::from("process.exec"),
+                rmpv::Value::from("process.shell"),
                 rmpv::Value::from("system.privacy"),
             ];
             Ok(rmpv::Value::Map(vec![

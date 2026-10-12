@@ -363,6 +363,121 @@ impl RemoteComputer {
         Ok(())
     }
 
+    pub async fn keyboard_sequence(&self, steps: &[crate::computer::local::KeyboardStep]) -> Result<()> {
+        let mut steps_val = Vec::with_capacity(steps.len());
+        for s in steps {
+            let mut map = Vec::new();
+            if let Some(ref a) = s.action {
+                map.push((rmpv::Value::from("action"), rmpv::Value::from(a.as_str())));
+            }
+            if let Some(ref k) = s.key {
+                map.push((rmpv::Value::from("key"), rmpv::Value::from(k.as_str())));
+            }
+            if let Some(ref t) = s.text {
+                map.push((rmpv::Value::from("text"), rmpv::Value::from(t.as_str())));
+            }
+            if let Some(ref d) = s.delay_ms {
+                map.push((rmpv::Value::from("delay_ms"), rmpv::Value::from(*d as i64)));
+            }
+            if let Some(ref ks) = s.keys {
+                let arr = ks.iter().map(|item| rmpv::Value::from(item.as_str())).collect();
+                map.push((rmpv::Value::from("keys"), rmpv::Value::Array(arr)));
+            }
+            if let Some(ref hk) = s.hotkey {
+                match hk {
+                    serde_json::Value::Array(arr) => {
+                        let rarr = arr
+                            .iter()
+                            .filter_map(|v| v.as_str())
+                            .map(rmpv::Value::from)
+                            .collect();
+                        map.push((rmpv::Value::from("hotkey"), rmpv::Value::Array(rarr)));
+                    }
+                    serde_json::Value::String(str_val) => {
+                        map.push((rmpv::Value::from("hotkey"), rmpv::Value::from(str_val.as_str())));
+                    }
+                    _ => {}
+                }
+            }
+            steps_val.push(rmpv::Value::Map(map));
+        }
+        let mut params = HashMap::new();
+        params.insert("steps".to_string(), rmpv::Value::Array(steps_val));
+        self.call("input.sequence", params).await?;
+        Ok(())
+    }
+
+    pub async fn exec(
+        &self,
+        command: &str,
+        shell: Option<&str>,
+        timeout_secs: Option<u64>,
+    ) -> Result<crate::computer::local::ExecResult> {
+        let mut params = HashMap::new();
+        params.insert("command".to_string(), rmpv::Value::from(command));
+        if let Some(s) = shell {
+            params.insert("shell".to_string(), rmpv::Value::from(s));
+        }
+        if let Some(t) = timeout_secs {
+            params.insert("timeout_secs".to_string(), rmpv::Value::from(t as i64));
+        }
+        let res = self.call("process.shell", params).await?;
+        let stdout = value_get(&res, "stdout")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let stderr = value_get(&res, "stderr")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let exit_code = value_get(&res, "exit_code")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+        let success = value_get(&res, "success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(exit_code == 0);
+        Ok(crate::computer::local::ExecResult {
+            stdout,
+            stderr,
+            exit_code,
+            success,
+        })
+    }
+
+    pub async fn exec_argv(
+        &self,
+        argv: &[&str],
+        timeout_secs: Option<u64>,
+    ) -> Result<crate::computer::local::ExecResult> {
+        let mut params = HashMap::new();
+        let arr = argv.iter().map(|s| rmpv::Value::from(*s)).collect();
+        params.insert("argv".to_string(), rmpv::Value::Array(arr));
+        if let Some(t) = timeout_secs {
+            params.insert("timeout_secs".to_string(), rmpv::Value::from(t as i64));
+        }
+        let res = self.call("process.exec", params).await?;
+        let stdout = value_get(&res, "stdout")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let stderr = value_get(&res, "stderr")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let exit_code = value_get(&res, "exit_code")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+        let success = value_get(&res, "success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(exit_code == 0);
+        Ok(crate::computer::local::ExecResult {
+            stdout,
+            stderr,
+            exit_code,
+            success,
+        })
+    }
+
     pub async fn app_open(&self, path: &str) -> Result<()> {
         let mut params = HashMap::new();
         params.insert("name".to_string(), rmpv::Value::from(path));

@@ -296,6 +296,27 @@ enum Commands {
         #[arg(long)]
         home: Option<PathBuf>,
     },
+
+    /// Execute a command directly on local or remote peer
+    Exec {
+        /// Command string to execute
+        command: String,
+        /// Optional peer name (defaults to 'local')
+        #[arg(long)]
+        peer: Option<String>,
+        /// Shell interpreter to use ('powershell', 'cmd', 'bash', 'sh')
+        #[arg(long)]
+        shell: Option<String>,
+        /// Timeout in seconds (default: 30)
+        #[arg(long, default_value_t = 30)]
+        timeout: u64,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -626,6 +647,65 @@ async fn main() -> anyhow::Result<()> {
                     "  Privacy Screen:     {}",
                     if st.blackout { "Enabled" } else { "Disabled" }
                 );
+            }
+        }
+
+        Commands::Exec {
+            command,
+            peer,
+            shell,
+            timeout,
+            rendezvous,
+            rendezvous_token,
+            home,
+        } => {
+            let is_remote = if let Some(ref p) = peer {
+                p.trim() != "local" && !p.trim().is_empty()
+            } else {
+                false
+            };
+
+            if is_remote {
+                let peer_name = peer.unwrap();
+                let r_cfg = resolve_rendezvous_config(
+                    home.as_deref(),
+                    rendezvous.as_deref(),
+                    rendezvous_token.as_deref(),
+                );
+                let r_url = if !r_cfg.url.is_empty() {
+                    Some(r_cfg.url.as_str())
+                } else {
+                    None
+                };
+                let remote = remote_connect(
+                    Some(&peer_name),
+                    r_url,
+                    r_cfg.token.as_deref(),
+                    home.as_deref(),
+                )
+                .await?;
+                let res = remote.exec(&command, shell.as_deref(), Some(timeout)).await?;
+                if !res.stdout.is_empty() {
+                    print!("{}", res.stdout);
+                }
+                if !res.stderr.is_empty() {
+                    eprint!("{}", res.stderr);
+                }
+                if res.exit_code != 0 {
+                    std::process::exit(res.exit_code);
+                }
+            } else {
+                let computer = opendesk_rs::computer::local::LocalComputer::new();
+                let res = computer.execute_command(&command, shell.as_deref(), Some(timeout))?;
+                if !res.stdout.is_empty() {
+                    print!("{}", res.stdout);
+                }
+                if !res.stderr.is_empty() {
+                    eprint!("{}", res.stderr);
+                }
+                if res.exit_code != 0 {
+                    std::process::exit(res.exit_code);
+                }
             }
         }
 
