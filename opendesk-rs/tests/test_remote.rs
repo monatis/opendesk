@@ -95,6 +95,33 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
 
     // Test privacy RPC capabilities and set/get
     assert!(remote.capabilities().contains_key("system.privacy"));
+    assert!(remote.capabilities().contains_key("process.exec"));
+    assert!(remote.capabilities().contains_key("input.sequence"));
+
+    #[cfg(target_os = "windows")]
+    let exec_res = remote
+        .exec(
+            "Write-Output 'OPENDESK_REMOTE_EXEC_SUCCESS'",
+            Some("powershell"),
+            Some(10),
+        )
+        .await?;
+    #[cfg(not(target_os = "windows"))]
+    let exec_res = remote
+        .exec("echo OPENDESK_REMOTE_EXEC_SUCCESS", Some("sh"), Some(10))
+        .await?;
+
+    assert!(exec_res.success);
+    assert!(exec_res.stdout.contains("OPENDESK_REMOTE_EXEC_SUCCESS"));
+    assert_eq!(exec_res.exit_code, 0);
+
+    // Test remote sequence RPC
+    let seq_steps = vec![opendesk_rs::computer::local::KeyboardStep {
+        delay_ms: Some(20),
+        ..Default::default()
+    }];
+    remote.keyboard_sequence(&seq_steps).await?;
+
     let st = remote.set_privacy(true, false).await?;
     assert!(st.lock_input);
     let st_status = remote.get_privacy().await?;

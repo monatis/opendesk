@@ -576,14 +576,31 @@ impl McpServer {
             }),
             json!({
                 "name": "keyboard",
-                "description": "Simulate keyboard input: type a string of text, press a single key, or send a key combination (hotkey). Unicode text is fully supported.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
+                "description": "Simulate keyboard input: type a string of text, press a single key, send a key combination (hotkey), or execute an atomic sequence of timed keystrokes (sequence). Unicode text is fully supported without clobbering the clipboard.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["type", "press", "hotkey", "hold"], "description": "Keyboard action: type, press, hotkey, or hold." },
+                        "action": { "type": "string", "enum": ["type", "press", "hotkey", "hold", "sequence"], "description": "Keyboard action: type, press, hotkey, hold, or sequence." },
                         "text": { "type": "string", "description": "Text to type. Required for action='type'." },
-                        "key": { "type": "string", "description": "Key name to press/hold: 'enter', 'escape', 'tab', 'f5', etc." },
-                        "keys": { "type": "array", "items": { "type": "string" }, "description": "Key names for hotkey, e.g. ['ctrl','c']." },
+                        "key": { "type": "string", "description": "Key name to press/hold: 'enter', 'escape', 'tab', 'f5', 'capslock', etc." },
+                        "keys": { "type": "array", "items": { "type": "string" }, "description": "Key names for hotkey, e.g. ['ctrl','c'] or ['capslock', 'space']." },
+                        "steps": {
+                            "type": "array",
+                            "description": "List of keystroke steps for action='sequence'. Each step is an object with 'hotkey' (array of keys or chord string), 'key' (string), or 'text' (string), plus optional 'delay_ms' (milliseconds to wait after step). Executed atomically on target.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "hotkey": {
+                                        "description": "Array of keys for hotkey/chord (e.g. ['insert', 'space']) or chord string",
+                                        "items": { "type": "string" },
+                                        "type": "array"
+                                    },
+                                    "key": { "type": "string", "description": "Single key name to press" },
+                                    "text": { "type": "string", "description": "Text to type" },
+                                    "delay_ms": { "type": "integer", "description": "Delay in milliseconds after this step" }
+                                }
+                            }
+                        },
                         "interval": { "type": "number", "default": 0.02, "description": "Seconds between keystrokes (action='type')." },
                         "settle_ms": { "type": "integer", "default": 300, "description": "Milliseconds to wait after the action." },
                         "hold_duration": { "type": "number", "default": 1.0, "description": "Seconds to hold key for action='hold'." },
@@ -651,6 +668,33 @@ impl McpServer {
                         }
                     },
                     "required": ["action"]
+                }
+            }),
+            json!({
+                "name": "exec",
+                "description": "Execute a shell command or process directly on the target machine (local or remote peer) and return its stdout, stderr, and exit code. Useful for inspecting system state (processes, query session, config files) directly without driving GUI dialogs.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "Command string to execute."
+                        },
+                        "shell": {
+                            "type": "string",
+                            "description": "Optional shell interpreter ('powershell', 'cmd', 'bash', 'sh'). Defaults to PowerShell on Windows and sh on Unix."
+                        },
+                        "timeout_secs": {
+                            "type": "number",
+                            "default": 30.0,
+                            "description": "Maximum execution time in seconds before terminating process (default: 30)."
+                        },
+                        "peer": {
+                            "type": "string",
+                            "description": "Optional. Name of the peer to run this command on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
+                        }
+                    },
+                    "required": ["command"]
                 }
             }),
             json!({
@@ -1090,6 +1134,19 @@ impl McpServer {
                             json!({ "type": "text", "text": format!("{prefix}Held key '{key}' for {duration:.2}s then released.") }),
                         ])
                     }
+                    "sequence" => {
+                        let steps_val = args
+                            .get("steps")
+                            .and_then(|v| v.as_array())
+                            .ok_or_else(|| anyhow!("missing steps array for sequence"))?;
+                        let steps: Vec<crate::computer::local::KeyboardStep> =
+                            serde_json::from_value(serde_json::Value::Array(steps_val.clone()))?;
+                        let count = steps.len();
+                        self.computer.keyboard_sequence(&steps)?;
+                        Ok(vec![
+                            json!({ "type": "text", "text": format!("{prefix}Executed keystroke sequence ({} steps)", count) }),
+                        ])
+                    }
                     _ => Err(anyhow!("Unknown keyboard action: {action}")),
                 }
             }
@@ -1299,6 +1356,28 @@ impl McpServer {
                 }
             }
 
+            "exec" => {
+                let command = args
+                    .get("command")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("missing command"))?;
+                let shell = args.get("shell").and_then(|v| v.as_str());
+                let timeout_secs = args
+                    .get("timeout_secs")
+                    .and_then(|v| v.as_f64())
+                    .map(|s| s as u64);
+                let res = self.computer.execute_command(command, shell, timeout_secs)?;
+                let out_text = format!(
+                    "Exit code: {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
+                    res.exit_code,
+                    if res.stdout.trim().is_empty() { "(empty)" } else { res.stdout.trim() },
+                    if res.stderr.trim().is_empty() { "(empty)" } else { res.stderr.trim() },
+                );
+                Ok(vec![
+                    json!({ "type": "text", "text": format!("{prefix}{out_text}") })
+                ])
+            }
+
             _ => Err(anyhow!("Unknown tool: {name}")),
         }
     }
@@ -1478,6 +1557,19 @@ impl McpServer {
                             json!({ "type": "text", "text": format!("{prefix}Pressed hotkey: {}", key_strs.join("+")) }),
                         ])
                     }
+                    "sequence" => {
+                        let steps_val = args
+                            .get("steps")
+                            .and_then(|v| v.as_array())
+                            .ok_or_else(|| anyhow!("missing steps array for sequence"))?;
+                        let steps: Vec<crate::computer::local::KeyboardStep> =
+                            serde_json::from_value(serde_json::Value::Array(steps_val.clone()))?;
+                        let count = steps.len();
+                        remote.keyboard_sequence(&steps).await?;
+                        Ok(vec![
+                            json!({ "type": "text", "text": format!("{prefix}Executed remote keystroke sequence ({} steps)", count) }),
+                        ])
+                    }
                     _ => Err(anyhow!("Unknown remote keyboard action: {action}")),
                 }
             }
@@ -1595,6 +1687,27 @@ impl McpServer {
                     }
                     _ => Err(anyhow!("Unknown remote clipboard action: {action}")),
                 }
+            }
+            "exec" => {
+                let command = args
+                    .get("command")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("missing command"))?;
+                let shell = args.get("shell").and_then(|v| v.as_str());
+                let timeout_secs = args
+                    .get("timeout_secs")
+                    .and_then(|v| v.as_f64())
+                    .map(|s| s as u64);
+                let res = remote.exec(command, shell, timeout_secs).await?;
+                let out_text = format!(
+                    "Exit code: {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
+                    res.exit_code,
+                    if res.stdout.trim().is_empty() { "(empty)" } else { res.stdout.trim() },
+                    if res.stderr.trim().is_empty() { "(empty)" } else { res.stderr.trim() },
+                );
+                Ok(vec![
+                    json!({ "type": "text", "text": format!("{prefix}{out_text}") })
+                ])
             }
             _ => Err(anyhow!("Unknown remote tool: {name}")),
         }
@@ -2176,11 +2289,11 @@ impl McpServer {
         };
 
         if remote_opt.is_none() {
-            let text = "Peer: local\nBackend: xa11y\nProtocol: 1\nCapabilities:\n  - app_close\n  - app_focus\n  - app_list\n  - app_open\n  - clipboard_read\n  - clipboard_write\n  - keyboard_hold\n  - keyboard_hotkey\n  - keyboard_press\n  - keyboard_type\n  - mouse_click\n  - mouse_drag\n  - mouse_move\n  - mouse_scroll\n  - screenshot\n  - ui_click\n  - ui_tree\n  - ui_type";
+            let text = "Peer: local\nBackend: xa11y\nProtocol: 1\nCapabilities:\n  - app_close\n  - app_focus\n  - app_list\n  - app_open\n  - clipboard_read\n  - clipboard_write\n  - exec\n  - keyboard_hold\n  - keyboard_hotkey\n  - keyboard_press\n  - keyboard_sequence\n  - keyboard_type\n  - mouse_click\n  - mouse_drag\n  - mouse_move\n  - mouse_scroll\n  - screenshot\n  - ui_click\n  - ui_tree\n  - ui_type";
             Ok(vec![json!({ "type": "text", "text": text })])
         } else {
             let text = format!(
-                "Peer: {resolved}\nBackend: opendesk-remote\nProtocol: 1\nCapabilities:\n  - app\n  - clipboard\n  - keyboard\n  - mouse\n  - screenshot\n  - ui"
+                "Peer: {resolved}\nBackend: opendesk-remote\nProtocol: 1\nCapabilities:\n  - app\n  - clipboard\n  - exec\n  - keyboard\n  - mouse\n  - screenshot\n  - ui"
             );
             Ok(vec![json!({ "type": "text", "text": text })])
         }
@@ -2571,13 +2684,14 @@ mod tests {
             .unwrap();
         let tools = res["tools"].as_array().unwrap();
 
-        // 6 core computer-use tools
+        // 7 core computer-use tools
         assert!(tools.iter().any(|t| t["name"] == "screenshot"));
         assert!(tools.iter().any(|t| t["name"] == "mouse"));
         assert!(tools.iter().any(|t| t["name"] == "keyboard"));
         assert!(tools.iter().any(|t| t["name"] == "app"));
         assert!(tools.iter().any(|t| t["name"] == "ui"));
         assert!(tools.iter().any(|t| t["name"] == "clipboard"));
+        assert!(tools.iter().any(|t| t["name"] == "exec"));
 
         // 3 session & automation tools
         assert!(tools.iter().any(|t| t["name"] == "audit"));
@@ -2596,7 +2710,7 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_app_api"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_privacy"));
 
-        assert_eq!(tools.len(), 19);
+        assert_eq!(tools.len(), 20);
     }
 
     #[tokio::test]

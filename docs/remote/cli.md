@@ -32,6 +32,8 @@ opendesk peers        [list | default [NAME|--clear] | rename NAME NEW | remove 
 opendesk privacy      PEER [--lock-input] [--blackout] [--unlock]
                       # Remote-only: locks physical input / blanks screen on the remote peer.
                       # Automatically unlocks when the controller disconnects. Local use prohibited for safety.
+opendesk exec         COMMAND [--peer PEER] [--shell powershell|cmd|sh] [--timeout S]
+                      # Run non-GUI command or script directly on local host or remote peer
 ```
 
 ---
