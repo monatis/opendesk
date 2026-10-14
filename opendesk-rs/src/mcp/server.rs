@@ -671,7 +671,7 @@ impl McpServer {
                 }
             }),
             json!({
-                "name": "exec",
+                "name": "opendesk_exec",
                 "description": "Execute a shell command or process directly on the target machine (local or remote peer) and return its stdout, stderr, and exit code. Useful for inspecting system state (processes, query session, config files) directly without driving GUI dialogs.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
                 "inputSchema": {
                     "type": "object",
@@ -1356,7 +1356,7 @@ impl McpServer {
                 }
             }
 
-            "exec" => {
+            "opendesk_exec" => {
                 let command = args
                     .get("command")
                     .and_then(|v| v.as_str())
@@ -1688,7 +1688,7 @@ impl McpServer {
                     _ => Err(anyhow!("Unknown remote clipboard action: {action}")),
                 }
             }
-            "exec" => {
+            "opendesk_exec" => {
                 let command = args
                     .get("command")
                     .and_then(|v| v.as_str())
@@ -2289,11 +2289,11 @@ impl McpServer {
         };
 
         if remote_opt.is_none() {
-            let text = "Peer: local\nBackend: xa11y\nProtocol: 1\nCapabilities:\n  - app_close\n  - app_focus\n  - app_list\n  - app_open\n  - clipboard_read\n  - clipboard_write\n  - exec\n  - keyboard_hold\n  - keyboard_hotkey\n  - keyboard_press\n  - keyboard_sequence\n  - keyboard_type\n  - mouse_click\n  - mouse_drag\n  - mouse_move\n  - mouse_scroll\n  - screenshot\n  - ui_click\n  - ui_tree\n  - ui_type";
+            let text = "Peer: local\nBackend: xa11y\nProtocol: 1\nCapabilities:\n  - app_close\n  - app_focus\n  - app_list\n  - app_open\n  - clipboard_read\n  - clipboard_write\n  - keyboard_hold\n  - keyboard_hotkey\n  - keyboard_press\n  - keyboard_sequence\n  - keyboard_type\n  - mouse_click\n  - mouse_drag\n  - mouse_move\n  - mouse_scroll\n  - opendesk_exec\n  - screenshot\n  - ui_click\n  - ui_tree\n  - ui_type";
             Ok(vec![json!({ "type": "text", "text": text })])
         } else {
             let text = format!(
-                "Peer: {resolved}\nBackend: opendesk-remote\nProtocol: 1\nCapabilities:\n  - app\n  - clipboard\n  - exec\n  - keyboard\n  - mouse\n  - screenshot\n  - ui"
+                "Peer: {resolved}\nBackend: opendesk-remote\nProtocol: 1\nCapabilities:\n  - app\n  - clipboard\n  - keyboard\n  - mouse\n  - opendesk_exec\n  - screenshot\n  - ui"
             );
             Ok(vec![json!({ "type": "text", "text": text })])
         }
@@ -2691,7 +2691,7 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "app"));
         assert!(tools.iter().any(|t| t["name"] == "ui"));
         assert!(tools.iter().any(|t| t["name"] == "clipboard"));
-        assert!(tools.iter().any(|t| t["name"] == "exec"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_exec"));
 
         // 3 session & automation tools
         assert!(tools.iter().any(|t| t["name"] == "audit"));
