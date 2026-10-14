@@ -23,7 +23,7 @@ Your AI client (Claude Code / Cursor / Continue)
        +-- keyboard tool      (types text, presses keys, hotkeys, atomic sequences)
        +-- app tool           (opens, closes, focuses apps)
        +-- clipboard tool     (read/write clipboard)
-       +-- exec tool          (runs shell commands directly on host or remote peer)
+       +-- opendesk_exec tool (runs shell commands directly on host or remote peer)
        +-- ocr tool           (extracts text from any screen region)
 ```
 
@@ -45,7 +45,7 @@ Once registered, the LLM sees these tools in every conversation:
 | `keyboard` | "Type this text into the field" / atomic chords & sequences |
 | `app` | "Open Terminal" / "List running apps" |
 | `clipboard` | "Copy this to clipboard" / "What did I copy?" |
-| `exec` | "Run a command or script directly on the local or remote machine" |
+| `opendesk_exec` | "Run a command or script directly on the local or remote machine" |
 | `ocr` | "Read the text in that region" |
 
 The LLM follows the priority rule automatically because it's in each tool's description:
