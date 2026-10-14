@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio_tungstenite::connect_async;
 
@@ -17,11 +17,29 @@ use crate::protocol::handshake::{Transport, auth_client, pair_client};
 use crate::protocol::identity::Identity;
 use crate::protocol::storage::{TrustedPeers, default_peer_name};
 
+/// The connection to the peer failed while performing an RPC.
+///
+/// Once a `RemoteComputer` returns this error it is permanently unusable
+/// (see [`RemoteComputer::is_broken`]); callers should drop it and reconnect.
+#[derive(Debug, thiserror::Error)]
+pub enum ConnectionError {
+    /// The request was never delivered to the peer, so it did not run there.
+    #[error("{0:#}")]
+    Send(anyhow::Error),
+    /// The request was sent but no response could be read; it may or may not
+    /// have run on the peer.
+    #[error("{0:#}")]
+    Recv(anyhow::Error),
+}
+
 pub struct RemoteComputer {
     transport: Arc<Mutex<WebSocketTransport>>,
     channel: Arc<Mutex<EncryptedChannel>>,
     capabilities: HashMap<String, rmpv::Value>,
     req_counter: AtomicU64,
+    requests_sent: AtomicU64,
+    broken: AtomicBool,
+    last_used: std::sync::Mutex<Instant>,
 }
 
 impl RemoteComputer {
@@ -35,6 +53,9 @@ impl RemoteComputer {
             channel: Arc::new(Mutex::new(channel)),
             capabilities,
             req_counter: AtomicU64::new(1),
+            requests_sent: AtomicU64::new(0),
+            broken: AtomicBool::new(false),
+            last_used: std::sync::Mutex::new(Instant::now()),
         }
     }
 
@@ -42,11 +63,50 @@ impl RemoteComputer {
         &self.capabilities
     }
 
+    /// True once an RPC has failed with a [`ConnectionError`].
+    pub fn is_broken(&self) -> bool {
+        self.broken.load(Ordering::SeqCst)
+    }
+
+    /// Number of requests successfully written to the transport so far.
+    ///
+    /// If this is unchanged across a failed operation, nothing reached the
+    /// peer and the operation is safe to retry on a fresh connection.
+    pub fn requests_sent(&self) -> u64 {
+        self.requests_sent.load(Ordering::SeqCst)
+    }
+
+    /// Time since the last successful RPC (or since the connection was made).
+    pub fn idle_for(&self) -> Duration {
+        self.last_used
+            .lock()
+            .map(|t| t.elapsed())
+            .unwrap_or_default()
+    }
+
+    /// Round-trip a cheap read-only RPC to confirm the peer is still reachable
+    /// end to end. Marks the connection broken on failure or timeout; an error
+    /// *reply* from the peer still counts as alive.
+    pub async fn ping(&self, timeout: Duration) -> Result<()> {
+        match tokio::time::timeout(timeout, self.call("system.environment", HashMap::new())).await {
+            Ok(Err(e)) if e.is::<ConnectionError>() => Err(e),
+            Ok(_) => Ok(()),
+            Err(_) => {
+                // A late response would desync the request/response stream.
+                self.broken.store(true, Ordering::SeqCst);
+                Err(ConnectionError::Recv(anyhow!("ping timed out after {timeout:?}")).into())
+            }
+        }
+    }
+
     pub async fn call(
         &self,
         method: &str,
         params: HashMap<String, rmpv::Value>,
     ) -> Result<rmpv::Value> {
+        if self.is_broken() {
+            return Err(ConnectionError::Send(anyhow!("connection to peer is closed")).into());
+        }
         let id = self.req_counter.fetch_add(1, Ordering::SeqCst);
         let req = Frame::Req(ReqFrame::new(id, method, params));
         let req_bytes = req.to_msgpack()?;
@@ -57,14 +117,24 @@ impl RemoteComputer {
 
         {
             let mut tr = self.transport.lock().await;
-            tr.send(&ct).await?;
+            if let Err(e) = tr.send(&ct).await {
+                self.broken.store(true, Ordering::SeqCst);
+                return Err(ConnectionError::Send(e).into());
+            }
         }
+        self.requests_sent.fetch_add(1, Ordering::SeqCst);
 
         // Await ResFrame
         loop {
             let res_ct = {
                 let mut tr = self.transport.lock().await;
-                tr.recv().await?
+                match tr.recv().await {
+                    Ok(ct) => ct,
+                    Err(e) => {
+                        self.broken.store(true, Ordering::SeqCst);
+                        return Err(ConnectionError::Recv(e).into());
+                    }
+                }
             };
 
             let pt = {
@@ -76,6 +146,9 @@ impl RemoteComputer {
             match frame {
                 Frame::Res(res) => {
                     if res.id == id {
+                        if let Ok(mut t) = self.last_used.lock() {
+                            *t = Instant::now();
+                        }
                         if res.error.is_none() {
                             return Ok(res.result.unwrap_or(rmpv::Value::Nil));
                         } else {
@@ -363,7 +436,10 @@ impl RemoteComputer {
         Ok(())
     }
 
-    pub async fn keyboard_sequence(&self, steps: &[crate::computer::local::KeyboardStep]) -> Result<()> {
+    pub async fn keyboard_sequence(
+        &self,
+        steps: &[crate::computer::local::KeyboardStep],
+    ) -> Result<()> {
         let mut steps_val = Vec::with_capacity(steps.len());
         for s in steps {
             let mut map = Vec::new();
@@ -380,7 +456,10 @@ impl RemoteComputer {
                 map.push((rmpv::Value::from("delay_ms"), rmpv::Value::from(*d as i64)));
             }
             if let Some(ref ks) = s.keys {
-                let arr = ks.iter().map(|item| rmpv::Value::from(item.as_str())).collect();
+                let arr = ks
+                    .iter()
+                    .map(|item| rmpv::Value::from(item.as_str()))
+                    .collect();
                 map.push((rmpv::Value::from("keys"), rmpv::Value::Array(arr)));
             }
             if let Some(ref hk) = s.hotkey {
@@ -394,7 +473,10 @@ impl RemoteComputer {
                         map.push((rmpv::Value::from("hotkey"), rmpv::Value::Array(rarr)));
                     }
                     serde_json::Value::String(str_val) => {
-                        map.push((rmpv::Value::from("hotkey"), rmpv::Value::from(str_val.as_str())));
+                        map.push((
+                            rmpv::Value::from("hotkey"),
+                            rmpv::Value::from(str_val.as_str()),
+                        ));
                     }
                     _ => {}
                 }

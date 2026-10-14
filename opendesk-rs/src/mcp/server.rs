@@ -2,7 +2,7 @@ use crate::automation::scheduler::ScheduleStore;
 use crate::computer::local::LocalComputer;
 use crate::protocol::storage::{TrustedPeers, default_home, resolve_rendezvous_config};
 use crate::remote::audit::AuditLog;
-use crate::remote::client::{RemoteComputer, connect as remote_connect};
+use crate::remote::client::{ConnectionError, RemoteComputer, connect as remote_connect};
 use crate::remote::discovery::discover;
 use anyhow::{Result, anyhow, bail};
 use data_encoding::BASE64;
@@ -183,13 +183,20 @@ impl McpSession {
     }
 
     pub fn active_peer_names(&self) -> Vec<String> {
-        let mut v: Vec<String> = self.connections.keys().cloned().collect();
+        let mut v: Vec<String> = self
+            .connections
+            .iter()
+            .filter(|(_, r)| !r.is_broken())
+            .map(|(k, _)| k.clone())
+            .collect();
         v.sort();
         v
     }
 
     pub async fn get_remote(&mut self, peer_name: &str) -> Result<Arc<RemoteComputer>> {
-        if let Some(r) = self.connections.get(peer_name) {
+        if let Some(r) = self.connections.get(peer_name)
+            && !r.is_broken()
+        {
             return Ok(r.clone());
         }
         let client = remote_connect(
@@ -227,10 +234,15 @@ impl McpSession {
     }
 }
 
+/// Cached connections idle for longer than this are pinged before reuse.
+const DEFAULT_IDLE_PING_AFTER: Duration = Duration::from_secs(30);
+const PING_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Clone)]
 pub struct McpServer {
     computer: Arc<LocalComputer>,
     session: Arc<Mutex<McpSession>>,
+    idle_ping_after: Duration,
 }
 
 impl Default for McpServer {
@@ -256,6 +268,25 @@ impl McpServer {
                 rendezvous_url,
                 rendezvous_token,
             ))),
+            idle_ping_after: DEFAULT_IDLE_PING_AFTER,
+        }
+    }
+
+    /// Override how long a cached connection may sit idle before it is pinged
+    /// on reuse. `Duration::ZERO` pings on every reuse.
+    pub fn set_idle_ping_after(&mut self, idle: Duration) {
+        self.idle_ping_after = idle;
+    }
+
+    /// Drop `conn` from the cache, unless it has already been replaced.
+    async fn evict_connection(&self, peer: &str, conn: &Arc<RemoteComputer>) {
+        let mut session = self.session.lock().await;
+        if session
+            .connections
+            .get(peer)
+            .is_some_and(|c| Arc::ptr_eq(c, conn))
+        {
+            session.connections.remove(peer);
         }
     }
 
@@ -287,7 +318,13 @@ impl McpServer {
         };
 
         if let Some(r) = existing_conn {
-            return Ok((Some(r), chosen));
+            let alive = !r.is_broken()
+                && (r.idle_for() < self.idle_ping_after || r.ping(PING_TIMEOUT).await.is_ok());
+            if alive {
+                return Ok((Some(r), chosen));
+            }
+            tracing::info!("Cached connection to '{chosen}' is dead; reconnecting");
+            self.evict_connection(&chosen, &r).await;
         }
 
         // Establish remote connection without holding the session lock
@@ -900,7 +937,7 @@ impl McpServer {
 
         if let Some(remote) = remote_opt {
             return self
-                .call_remote_tool(&remote, &target_name, &prefix, name, args)
+                .call_remote_tool_with_retry(remote, &target_name, &prefix, name, args)
                 .await;
         }
 
@@ -1366,20 +1403,73 @@ impl McpServer {
                     .get("timeout_secs")
                     .and_then(|v| v.as_f64())
                     .map(|s| s as u64);
-                let res = self.computer.execute_command(command, shell, timeout_secs)?;
+                let res = self
+                    .computer
+                    .execute_command(command, shell, timeout_secs)?;
                 let out_text = format!(
                     "Exit code: {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
                     res.exit_code,
-                    if res.stdout.trim().is_empty() { "(empty)" } else { res.stdout.trim() },
-                    if res.stderr.trim().is_empty() { "(empty)" } else { res.stderr.trim() },
+                    if res.stdout.trim().is_empty() {
+                        "(empty)"
+                    } else {
+                        res.stdout.trim()
+                    },
+                    if res.stderr.trim().is_empty() {
+                        "(empty)"
+                    } else {
+                        res.stderr.trim()
+                    },
                 );
                 Ok(vec![
-                    json!({ "type": "text", "text": format!("{prefix}{out_text}") })
+                    json!({ "type": "text", "text": format!("{prefix}{out_text}") }),
                 ])
             }
 
             _ => Err(anyhow!("Unknown tool: {name}")),
         }
+    }
+
+    /// Run a remote tool, recovering from a dead cached connection.
+    ///
+    /// On a [`ConnectionError`] the connection is evicted from the cache. The
+    /// tool is retried once on a fresh connection only if *no* request of this
+    /// tool reached the peer (e.g. the very first send failed), so
+    /// non-idempotent actions are never executed twice. If something was
+    /// already delivered (a later step of a multi-RPC tool, or a lost
+    /// response), the error is surfaced and the next call reconnects.
+    async fn call_remote_tool_with_retry(
+        &self,
+        remote: Arc<RemoteComputer>,
+        target: &str,
+        prefix: &str,
+        name: &str,
+        args: &Value,
+    ) -> Result<Vec<Value>> {
+        let sent_before = remote.requests_sent();
+        let err = match self
+            .call_remote_tool(&remote, target, prefix, name, args)
+            .await
+        {
+            Err(e) if e.is::<ConnectionError>() => e,
+            other => return other,
+        };
+        self.evict_connection(target, &remote).await;
+
+        if remote.requests_sent() != sent_before {
+            bail!(
+                "{err:#} (connection to '{target}' was lost after the request was sent, so it may or may not have run on the peer; not retried. The next call will reconnect.)"
+            );
+        }
+
+        tracing::warn!("Connection to '{target}' was dead ({err:#}); reconnecting and retrying");
+        let (fresh, _) = self
+            .resolve_remote(Some(target))
+            .await
+            .map_err(|e| anyhow!("{err:#} (reconnect to '{target}' failed: {e:#})"))?;
+        let fresh = fresh.ok_or_else(|| anyhow!("Peer '{target}' is not remote"))?;
+        // A failure here marks `fresh` broken, so the next resolve evicts it.
+        self.call_remote_tool(&fresh, target, prefix, name, args)
+            .await
     }
 
     async fn call_remote_tool(
@@ -1702,11 +1792,19 @@ impl McpServer {
                 let out_text = format!(
                     "Exit code: {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
                     res.exit_code,
-                    if res.stdout.trim().is_empty() { "(empty)" } else { res.stdout.trim() },
-                    if res.stderr.trim().is_empty() { "(empty)" } else { res.stderr.trim() },
+                    if res.stdout.trim().is_empty() {
+                        "(empty)"
+                    } else {
+                        res.stdout.trim()
+                    },
+                    if res.stderr.trim().is_empty() {
+                        "(empty)"
+                    } else {
+                        res.stderr.trim()
+                    },
                 );
                 Ok(vec![
-                    json!({ "type": "text", "text": format!("{prefix}{out_text}") })
+                    json!({ "type": "text", "text": format!("{prefix}{out_text}") }),
                 ])
             }
             _ => Err(anyhow!("Unknown remote tool: {name}")),
