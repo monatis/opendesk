@@ -1121,7 +1121,7 @@ impl McpServer {
                             .ok_or_else(|| anyhow!("missing text"))?;
                         self.computer.keyboard_type(text)?;
                         let preview = if text.len() > 40 {
-                            format!("{}...", &text[..40])
+                            format!("{}...", crate::util::truncate_bytes(text, 40))
                         } else {
                             text.to_string()
                         };
@@ -1145,10 +1145,8 @@ impl McpServer {
                         {
                             keys.iter().filter_map(|v| v.as_str()).collect()
                         } else if let Some(key) = args.get("key").and_then(|v| v.as_str()) {
-                            key.split(['+', '-'])
-                                .map(|s| s.trim())
-                                .filter(|s| !s.is_empty())
-                                .collect()
+                            // Split by keyboard_hotkey, which handles `ctrl+-`.
+                            vec![key]
                         } else {
                             return Err(anyhow!("missing keys array or key parameter for hotkey"));
                         };
@@ -1321,7 +1319,7 @@ impl McpServer {
                             self.computer.keyboard_type(text)?;
                         }
                         let preview = if text.len() > 40 {
-                            format!("{}...", &text[..40])
+                            format!("{}...", crate::util::truncate_bytes(text, 40))
                         } else {
                             text.to_string()
                         };
@@ -1381,7 +1379,7 @@ impl McpServer {
                             .ok_or_else(|| anyhow!("'text' required"))?;
                         self.computer.clipboard_write(text)?;
                         let preview = if text.len() > 60 {
-                            format!("{}...", &text[..60])
+                            format!("{}...", crate::util::truncate_bytes(text, 60))
                         } else {
                             text.to_string()
                         };
@@ -1600,7 +1598,7 @@ impl McpServer {
                             .ok_or_else(|| anyhow!("missing text"))?;
                         remote.keyboard_type(text).await?;
                         let preview = if text.len() > 40 {
-                            format!("{}...", &text[..40])
+                            format!("{}...", crate::util::truncate_bytes(text, 40))
                         } else {
                             text.to_string()
                         };
@@ -1624,10 +1622,8 @@ impl McpServer {
                         {
                             keys.iter().filter_map(|v| v.as_str()).collect()
                         } else if let Some(key) = args.get("key").and_then(|v| v.as_str()) {
-                            key.split(['+', '-'])
-                                .map(|s| s.trim())
-                                .filter(|s| !s.is_empty())
-                                .collect()
+                            // Split by keyboard_hotkey, which handles `ctrl+-`.
+                            vec![key]
                         } else {
                             return Err(anyhow!("missing keys array or key parameter for hotkey"));
                         };
@@ -2214,7 +2210,7 @@ impl McpServer {
             if !desc.is_empty() {
                 let first_line = desc.lines().next().unwrap_or("");
                 let truncated = if first_line.len() > 160 {
-                    format!("{}…", &first_line[..160])
+                    format!("{}…", crate::util::truncate_bytes(first_line, 160))
                 } else {
                     first_line.to_string()
                 };
@@ -2267,7 +2263,7 @@ impl McpServer {
             if !p.description.is_empty() {
                 let first_line = p.description.lines().next().unwrap_or("");
                 let truncated = if first_line.len() > 160 {
-                    format!("{}…", &first_line[..160])
+                    format!("{}…", crate::util::truncate_bytes(first_line, 160))
                 } else {
                     first_line.to_string()
                 };

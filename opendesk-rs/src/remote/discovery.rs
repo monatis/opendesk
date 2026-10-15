@@ -95,7 +95,7 @@ pub fn advertise(
     properties.insert("fp".to_string(), fp);
     if !description.is_empty() {
         let desc = if description.len() > 120 {
-            &description[..120]
+            crate::util::truncate_bytes(description, 120)
         } else {
             description
         };

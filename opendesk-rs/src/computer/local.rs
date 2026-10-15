@@ -97,6 +97,7 @@ pub mod win_input {
 #[derive(Clone)]
 pub struct LocalComputer {
     pub privacy: std::sync::Arc<crate::computer::privacy::PrivacyController>,
+    held: std::sync::Arc<std::sync::Mutex<super::keys::HeldInput>>,
 }
 
 impl Default for LocalComputer {
@@ -109,6 +110,33 @@ impl LocalComputer {
     pub fn new() -> Self {
         Self {
             privacy: std::sync::Arc::new(crate::computer::privacy::PrivacyController::new()),
+            held: Default::default(),
+        }
+    }
+
+    fn track_held(&self, update: impl FnOnce(&mut super::keys::HeldInput)) {
+        if let Ok(mut h) = self.held.lock() {
+            update(&mut h);
+        }
+    }
+
+    /// Release every key and mouse button left down via `keyboard_down` /
+    /// `mouse_down`, e.g. when the controller that pressed them disconnects.
+    pub fn release_held_input(&self) {
+        let held = self
+            .held
+            .lock()
+            .map(|mut h| std::mem::take(&mut *h))
+            .unwrap_or_default();
+        for key in held.keys.iter().rev() {
+            if let Err(e) = self.keyboard_up(key) {
+                tracing::warn!("releasing held key {key}: {e}");
+            }
+        }
+        for button in &held.buttons {
+            if let Err(e) = self.mouse_up(Some(button)) {
+                tracing::warn!("releasing held mouse button {button}: {e}");
+            }
         }
     }
 
@@ -261,7 +289,11 @@ impl LocalComputer {
         };
         sim.mouse()
             .down(btn)
-            .map_err(|e| anyhow!("mouse_down failed: {e}"))
+            .map_err(|e| anyhow!("mouse_down failed: {e}"))?;
+        self.track_held(|h| {
+            super::keys::HeldInput::press(&mut h.buttons, button.unwrap_or("left"))
+        });
+        Ok(())
     }
 
     pub fn mouse_up(&self, button: Option<&str>) -> Result<()> {
@@ -271,6 +303,9 @@ impl LocalComputer {
             "middle" => xa11y::MouseButton::Middle,
             _ => xa11y::MouseButton::Left,
         };
+        self.track_held(|h| {
+            super::keys::HeldInput::release(&mut h.buttons, button.unwrap_or("left"))
+        });
         sim.mouse()
             .up(btn)
             .map_err(|e| anyhow!("mouse_up failed: {e}"))
@@ -402,33 +437,50 @@ impl LocalComputer {
     }
 
     pub fn keyboard_press(&self, key_str: &str) -> Result<()> {
-        if key_str.contains('+') || key_str.contains('-') {
-            let parts: Vec<&str> = key_str
-                .split(['+', '-'])
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .collect();
-            return self.keyboard_hotkey(&parts);
+        let parts = super::keys::split_chord(key_str);
+        match parts.as_slice() {
+            [] => bail!("empty key"),
+            [key] => self.press_single(key),
+            _ => {
+                let refs: Vec<&str> = parts.iter().map(String::as_str).collect();
+                self.keyboard_hotkey(&refs)
+            }
         }
+    }
 
+    fn press_single(&self, key: &str) -> Result<()> {
         #[cfg(target_os = "windows")]
         {
-            if let Some((vk, ext)) = parse_key_vk(key_str) {
-                win_send_vk(vk, ext, true)?;
-                std::thread::sleep(Duration::from_millis(15));
-                win_send_vk(vk, ext, false)?;
-                return Ok(());
+            let mut chars = key.chars();
+            if let (Some(c), None) = (chars.next(), chars.next()) {
+                // A literal character: press the key that types it on the
+                // target's layout, as a real keystroke. (Turkish-Q types "ı"
+                // on VK_I; and hooks such as screen-reader quick keys ignore
+                // injected Unicode packets, so those are only the fallback.)
+                return match super::keys::layout_key(c) {
+                    Some(lk) => send_chord(&layout_key_vks(lk)),
+                    None => self.keyboard_type(key),
+                };
+            }
+            if let Some((vk, ext)) = parse_key_vk(key) {
+                return send_chord(&[(vk, ext)]);
             }
         }
 
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
-        let key = parse_key(key_str).ok_or_else(|| anyhow!("unknown key: {key_str}"))?;
+        let k = parse_key(key).ok_or_else(|| anyhow!("unknown key: {key}"))?;
         sim.keyboard()
-            .press(key)
+            .press(k)
             .map_err(|e| anyhow!("press failed: {e}"))
     }
 
     pub fn keyboard_down(&self, key_str: &str) -> Result<()> {
+        self.keyboard_down_untracked(key_str)?;
+        self.track_held(|h| super::keys::HeldInput::press(&mut h.keys, key_str));
+        Ok(())
+    }
+
+    fn keyboard_down_untracked(&self, key_str: &str) -> Result<()> {
         #[cfg(target_os = "windows")]
         {
             if let Some((vk, ext)) = parse_key_vk(key_str) {
@@ -444,6 +496,7 @@ impl LocalComputer {
     }
 
     pub fn keyboard_up(&self, key_str: &str) -> Result<()> {
+        self.track_held(|h| super::keys::HeldInput::release(&mut h.keys, key_str));
         #[cfg(target_os = "windows")]
         {
             if let Some((vk, ext)) = parse_key_vk(key_str) {
@@ -459,46 +512,19 @@ impl LocalComputer {
     }
 
     pub fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
-        if keys.is_empty() {
-            return Ok(());
-        }
-        // Flatten any composite tokens like ["ctrl+s"] or ["ctrl", "shift+s"]
-        let mut flat_keys = Vec::new();
-        for k in keys {
-            for part in k.split(['+', '-']) {
-                let trimmed = part.trim();
-                if !trimmed.is_empty() {
-                    flat_keys.push(trimmed);
-                }
-            }
-        }
+        // Flatten composite tokens like ["ctrl+s"] or ["ctrl", "shift+s"].
+        let flat_keys: Vec<String> = keys
+            .iter()
+            .flat_map(|k| super::keys::split_chord(k))
+            .collect();
         if flat_keys.is_empty() {
-            return Ok(());
+            bail!("empty key combination");
         }
 
         #[cfg(target_os = "windows")]
         {
-            let mut vks = Vec::with_capacity(flat_keys.len());
-            let mut all_vk = true;
-            for k in &flat_keys {
-                if let Some(vk) = parse_key_vk(k) {
-                    vks.push(vk);
-                } else {
-                    all_vk = false;
-                    break;
-                }
-            }
-            if all_vk {
-                // Press down in sequence
-                for &(vk, ext) in &vks {
-                    win_send_vk(vk, ext, true)?;
-                }
-                std::thread::sleep(Duration::from_millis(20));
-                // Release in reverse order
-                for &(vk, ext) in vks.iter().rev() {
-                    win_send_vk(vk, ext, false)?;
-                }
-                return Ok(());
+            if let Some(vks) = chord_vks(&flat_keys) {
+                return send_chord(&vks);
             }
         }
 
@@ -508,7 +534,9 @@ impl LocalComputer {
             .map(|k| parse_key(k).ok_or_else(|| anyhow!("unknown key: {k}")))
             .collect::<Result<_, _>>()?;
 
-        let (target, modifiers) = parsed_keys.split_last().unwrap();
+        let (target, modifiers) = parsed_keys
+            .split_last()
+            .ok_or_else(|| anyhow!("empty key combination"))?;
         sim.keyboard()
             .chord(target.clone(), modifiers)
             .map_err(|e| anyhow!("chord failed: {e}"))
@@ -530,12 +558,7 @@ impl LocalComputer {
                         self.keyboard_hotkey(&keys)?;
                     }
                     serde_json::Value::String(s) => {
-                        let parts: Vec<&str> = s
-                            .split(['+', '-'])
-                            .map(|p| p.trim())
-                            .filter(|p| !p.is_empty())
-                            .collect();
-                        self.keyboard_hotkey(&parts)?;
+                        self.keyboard_hotkey(&[s.as_str()])?;
                     }
                     _ => {}
                 }
@@ -888,6 +911,76 @@ fn format_tree_node(node: &TreeNode, depth: usize, out: &mut String) {
     }
 }
 
+/// VKs for a chord. The final key may be punctuation, looked up on the
+/// target's layout (adding Shift when that layout needs it); letters and
+/// digits stay plain VKs, which is what shortcut handlers match.
+#[cfg(target_os = "windows")]
+fn chord_vks(keys: &[String]) -> Option<Vec<(u16, bool)>> {
+    const VK_SHIFT: u16 = 0x10;
+    let (target, modifiers) = keys.split_last()?;
+    let mut vks: Vec<(u16, bool)> = modifiers
+        .iter()
+        .map(|k| parse_key_vk(k))
+        .collect::<Option<_>>()?;
+    let mut chars = target.chars();
+    let punct = match (chars.next(), chars.next()) {
+        (Some(c), None) if !c.is_ascii_alphanumeric() => super::keys::layout_key(c),
+        _ => None,
+    };
+    match punct {
+        Some(lk) => {
+            if lk.shift && !vks.iter().any(|&(vk, _)| vk == VK_SHIFT) {
+                vks.push((VK_SHIFT, false));
+            }
+            vks.push((lk.vk, false));
+        }
+        None => vks.push(parse_key_vk(target)?),
+    }
+    Some(vks)
+}
+
+#[cfg(target_os = "windows")]
+fn layout_key_vks(lk: super::keys::LayoutKey) -> Vec<(u16, bool)> {
+    let mut vks = Vec::with_capacity(4);
+    if lk.ctrl {
+        vks.push((0x11, false));
+    }
+    if lk.alt {
+        vks.push((0x12, false));
+    }
+    if lk.shift {
+        vks.push((0x10, false));
+    }
+    vks.push((lk.vk, false));
+    vks
+}
+
+/// Press `vks` in order and release them in reverse. If a press fails, the
+/// keys already down are still released, so nothing is left stuck.
+#[cfg(target_os = "windows")]
+fn send_chord(vks: &[(u16, bool)]) -> Result<()> {
+    let mut pressed = 0;
+    let mut result = Ok(());
+    for &(vk, ext) in vks {
+        if let Err(e) = win_send_vk(vk, ext, true) {
+            result = Err(e);
+            break;
+        }
+        pressed += 1;
+    }
+    if result.is_ok() {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    for &(vk, ext) in vks[..pressed].iter().rev() {
+        if let Err(e) = win_send_vk(vk, ext, false)
+            && result.is_ok()
+        {
+            result = Err(e);
+        }
+    }
+    result
+}
+
 #[cfg(target_os = "windows")]
 pub fn win_send_vk(vk: u16, extended: bool, down: bool) -> Result<()> {
     let mut flags = 0u32;
@@ -902,7 +995,7 @@ pub fn win_send_vk(vk: u16, extended: bool, down: bool) -> Result<()> {
         u: win_input::INPUT_UNION {
             ki: win_input::KEYBDINPUT {
                 w_vk: vk,
-                w_scan: 0,
+                w_scan: super::keys::scan_code(vk),
                 dw_flags: flags,
                 time: 0,
                 dw_extra_info: 0,

@@ -601,6 +601,9 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
             tracing::info!(
                 "Remote session terminated; resetting privacy screen and unlocking physical inputs"
             );
+            // A controller that drops mid-gesture must not leave Ctrl/Alt or
+            // a mouse button held down on this machine.
+            self.0.release_held_input();
             self.0.reset_privacy();
         }
     }
@@ -841,24 +844,11 @@ pub(crate) async fn dispatch_call(
                     .keyboard_up(key)
                     .map(|_| rmpv::Value::Nil)
                     .map_err(|e| e.to_string()),
-                _ => {
-                    if key.contains('+') || key.contains('-') {
-                        let parts: Vec<&str> = key
-                            .split(['+', '-'])
-                            .map(|s| s.trim())
-                            .filter(|s| !s.is_empty())
-                            .collect();
-                        computer
-                            .keyboard_hotkey(&parts)
-                            .map(|_| rmpv::Value::Nil)
-                            .map_err(|e| e.to_string())
-                    } else {
-                        computer
-                            .keyboard_press(key)
-                            .map(|_| rmpv::Value::Nil)
-                            .map_err(|e| e.to_string())
-                    }
-                }
+                // keyboard_press handles single keys and chords (`ctrl+-`).
+                _ => computer
+                    .keyboard_press(key)
+                    .map(|_| rmpv::Value::Nil)
+                    .map_err(|e| e.to_string()),
             }
         }
         "input.sequence" => {

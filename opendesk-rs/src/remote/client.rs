@@ -375,65 +375,33 @@ impl RemoteComputer {
         Ok(())
     }
 
+    /// Press a key or chord (`ctrl+s`, `ctrl+-`) on the peer in one RPC.
+    ///
+    /// The peer presses and releases it locally: sending separate down/up
+    /// RPCs would leave keys held if the connection dropped in between, and
+    /// would bypass the peer's layout-aware handling of characters.
     pub async fn keyboard_press(&self, key: &str) -> Result<()> {
-        if key.contains('+') || key.contains('-') {
-            let parts: Vec<&str> = key
-                .split(['+', '-'])
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .collect();
-            return self.keyboard_hotkey(&parts).await;
+        if crate::computer::keys::split_chord(key).is_empty() {
+            bail!("empty key");
         }
-        let down_evt = vec![
-            (rmpv::Value::from("action"), rmpv::Value::from("down")),
-            (rmpv::Value::from("keysym"), rmpv::Value::from(key)),
-        ];
-        let mut down_params = HashMap::new();
-        down_params.insert("event".to_string(), rmpv::Value::Map(down_evt));
-        self.call("input.key", down_params).await?;
-
-        let up_evt = vec![
-            (rmpv::Value::from("action"), rmpv::Value::from("up")),
-            (rmpv::Value::from("keysym"), rmpv::Value::from(key)),
-        ];
-        let mut up_params = HashMap::new();
-        up_params.insert("event".to_string(), rmpv::Value::Map(up_evt));
-        self.call("input.key", up_params).await?;
+        let mut params = HashMap::new();
+        params.insert("key".to_string(), rmpv::Value::from(key));
+        params.insert("action".to_string(), rmpv::Value::from("press"));
+        self.call("input.key", params).await?;
         Ok(())
     }
 
     pub async fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
-        let mut flat_keys = Vec::new();
-        for k in keys {
-            for part in k.split(['+', '-']) {
-                let trimmed = part.trim();
-                if !trimmed.is_empty() {
-                    flat_keys.push(trimmed);
-                }
-            }
+        let flat: Vec<String> = keys
+            .iter()
+            .flat_map(|k| crate::computer::keys::split_chord(k))
+            .collect();
+        if flat.is_empty() {
+            bail!("empty key combination");
         }
-        if flat_keys.is_empty() {
-            return Ok(());
-        }
-        for key in &flat_keys {
-            let down_evt = vec![
-                (rmpv::Value::from("action"), rmpv::Value::from("down")),
-                (rmpv::Value::from("keysym"), rmpv::Value::from(*key)),
-            ];
-            let mut params = HashMap::new();
-            params.insert("event".to_string(), rmpv::Value::Map(down_evt));
-            self.call("input.key", params).await?;
-        }
-        for key in flat_keys.iter().rev() {
-            let up_evt = vec![
-                (rmpv::Value::from("action"), rmpv::Value::from("up")),
-                (rmpv::Value::from("keysym"), rmpv::Value::from(*key)),
-            ];
-            let mut params = HashMap::new();
-            params.insert("event".to_string(), rmpv::Value::Map(up_evt));
-            self.call("input.key", params).await?;
-        }
-        Ok(())
+        // `split_chord` reads a `+` in key position as the key, so joining
+        // with `+` round-trips (["ctrl", "+"] -> "ctrl++").
+        self.keyboard_press(&flat.join("+")).await
     }
 
     pub async fn keyboard_sequence(

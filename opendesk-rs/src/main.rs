@@ -771,7 +771,7 @@ async fn main() -> anyhow::Result<()> {
             );
             for p in rendezvous_peers {
                 let desc = if p.description.len() > 80 {
-                    &p.description[..80]
+                    opendesk_rs::util::truncate_bytes(&p.description, 80)
                 } else {
                     &p.description
                 };
@@ -782,7 +782,7 @@ async fn main() -> anyhow::Result<()> {
             }
             for p in lan_peers {
                 let desc = if p.description.len() > 80 {
-                    &p.description[..80]
+                    opendesk_rs::util::truncate_bytes(&p.description, 80)
                 } else {
                     &p.description
                 };
@@ -978,7 +978,7 @@ async fn main() -> anyhow::Result<()> {
                         let desc = p.effective_description();
                         let desc_line = desc.lines().next().unwrap_or("");
                         let short_desc = if desc_line.len() > 60 {
-                            format!("{}…", &desc_line[..60])
+                            format!("{}…", opendesk_rs::util::truncate_bytes(desc_line, 60))
                         } else {
                             desc_line.to_string()
                         };
