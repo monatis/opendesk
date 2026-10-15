@@ -40,9 +40,18 @@ pub struct RemoteComputer {
     requests_sent: AtomicU64,
     broken: AtomicBool,
     last_used: std::sync::Mutex<Instant>,
+    input_guard: std::sync::Mutex<Option<crate::computer::foreground::WindowGuard>>,
 }
 
 impl RemoteComputer {
+    /// Attach `guard` to every subsequent `input.*` RPC: the peer refuses
+    /// the input unless its foreground window matches. `None` removes it.
+    pub fn set_input_guard(&self, guard: Option<crate::computer::foreground::WindowGuard>) {
+        if let Ok(mut g) = self.input_guard.lock() {
+            *g = guard.filter(|g| !g.is_empty());
+        }
+    }
+
     pub fn new(
         transport: WebSocketTransport,
         channel: EncryptedChannel,
@@ -56,6 +65,7 @@ impl RemoteComputer {
             requests_sent: AtomicU64::new(0),
             broken: AtomicBool::new(false),
             last_used: std::sync::Mutex::new(Instant::now()),
+            input_guard: std::sync::Mutex::new(None),
         }
     }
 
@@ -102,10 +112,23 @@ impl RemoteComputer {
     pub async fn call(
         &self,
         method: &str,
-        params: HashMap<String, rmpv::Value>,
+        mut params: HashMap<String, rmpv::Value>,
     ) -> Result<rmpv::Value> {
         if self.is_broken() {
             return Err(ConnectionError::Send(anyhow!("connection to peer is closed")).into());
+        }
+        if method.starts_with("input.") {
+            let guard = self.input_guard.lock().ok().and_then(|g| g.clone());
+            if let Some(guard) = guard {
+                // An older peer would silently ignore the guard.
+                if !self.capabilities.contains_key("input.guard") {
+                    bail!(
+                        "input refused: this peer's opendesk is too old to enforce a window guard ({}); update it, or call without a guard",
+                        guard.describe()
+                    );
+                }
+                params.insert("guard".to_string(), guard.to_rmpv());
+            }
         }
         let id = self.req_counter.fetch_add(1, Ordering::SeqCst);
         let req = Frame::Req(ReqFrame::new(id, method, params));

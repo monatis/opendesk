@@ -1,3 +1,4 @@
+pub mod foreground;
 pub mod keys;
 pub mod local;
 pub mod permissions;

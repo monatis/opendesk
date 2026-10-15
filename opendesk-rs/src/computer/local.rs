@@ -699,20 +699,54 @@ impl LocalComputer {
 
     pub fn app_focus(&self, name: &str) -> Result<()> {
         let app = Self::find_app(name)?;
+        let window_titles: Vec<String> = app
+            .windows()
+            .map(|ws| ws.iter().filter_map(|w| w.name.clone()).collect())
+            .unwrap_or_default();
+
+        // "Activated" is not "in front": Windows' foreground lock can refuse
+        // the request while reporting success. Only report success once the
+        // app really owns the foreground window, so callers never type into
+        // whatever else is in front.
+        let in_front = || -> bool {
+            #[cfg(target_os = "windows")]
+            {
+                let deadline = std::time::Instant::now() + Duration::from_millis(1500);
+                loop {
+                    if let Some(fg) = super::foreground::foreground() {
+                        // UWP apps' windows belong to ApplicationFrameHost,
+                        // so a matching window title also counts.
+                        if app.pid == Some(fg.pid)
+                            || window_titles
+                                .iter()
+                                .any(|t| !t.is_empty() && *t == fg.title)
+                        {
+                            return true;
+                        }
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        return false;
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            true
+        };
 
         // Top-level windows implement WindowPattern / activate on Windows/macOS/Linux.
         // Trying to activate the root Application node directly fails on Windows UIA
         // with "Action activate not supported on application".
         if let Ok(windows) = app.windows() {
             for win in windows {
-                if win.activate().is_ok() {
+                if win.activate().is_ok() && in_front() {
                     return Ok(());
                 }
             }
         }
 
         // Fallback: try activating the application element directly
-        if app.as_element().activate().is_ok() {
+        if app.as_element().activate().is_ok() && in_front() {
             return Ok(());
         }
 
@@ -726,11 +760,16 @@ impl LocalComputer {
                 let _ = std::process::Command::new("powershell")
                     .args(["-NoProfile", "-Command", &script])
                     .output();
-                return Ok(());
+                if in_front() {
+                    return Ok(());
+                }
             }
         }
 
-        bail!("could not activate application '{name}'")
+        let now = super::foreground::foreground()
+            .map(|fg| format!("; the foreground window is '{}' ({})", fg.title, fg.process))
+            .unwrap_or_default();
+        bail!("could not bring application '{name}' to the foreground{now}")
     }
 
     pub fn app_close(&self, name: &str) -> Result<()> {

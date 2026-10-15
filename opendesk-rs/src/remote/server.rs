@@ -627,6 +627,8 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     caps.insert("process.exec".to_string(), rmpv::Value::Boolean(true));
     caps.insert("process.shell".to_string(), rmpv::Value::Boolean(true));
     caps.insert("system.privacy".to_string(), rmpv::Value::Boolean(true));
+    // input.* honours a `guard` parameter (see computer::foreground).
+    caps.insert("input.guard".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
     if !desc.is_empty() {
@@ -714,6 +716,14 @@ pub(crate) async fn dispatch_call(
     method: &str,
     params: &HashMap<String, rmpv::Value>,
 ) -> Result<rmpv::Value, String> {
+    // Checked here, on the machine receiving the input, right before it is
+    // sent, so a focus change on this side is caught.
+    if method.starts_with("input.")
+        && let Some(guard) =
+            crate::computer::foreground::WindowGuard::from_rmpv(params.get("guard"))
+    {
+        guard.check().map_err(|e| e.to_string())?;
+    }
     match method {
         "display.capture" => {
             let fmt = params

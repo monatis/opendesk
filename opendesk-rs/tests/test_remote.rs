@@ -349,3 +349,53 @@ async fn test_rendezvous_relay_sessions_do_not_leak_connections() -> Result<()> 
     r_task.abort();
     Ok(())
 }
+
+#[cfg(target_os = "windows")]
+#[tokio::test]
+async fn test_live_input_guard_is_enforced_by_the_peer() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18433;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+    assert!(remote.capabilities().contains_key("input.guard"));
+
+    // The peer refuses before sending anything, so no key reaches the desktop.
+    remote.set_input_guard(Some(opendesk_rs::computer::foreground::WindowGuard {
+        title: Some("opendesk-no-such-window-7f3a".into()),
+        process: None,
+    }));
+    let err = remote
+        .keyboard_press("shift")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("input refused"), "{err}");
+    let err = remote.mouse_move(0, 0).await.unwrap_err().to_string();
+    assert!(err.contains("input refused"), "{err}");
+
+    // Non-input RPCs are unaffected, and the session stays usable.
+    let res = remote.exec("echo guard-ok", Some("cmd"), Some(20)).await?;
+    assert!(res.stdout.contains("guard-ok"), "{res:?}");
+
+    server_task.abort();
+    Ok(())
+}

@@ -1,4 +1,5 @@
 use crate::automation::scheduler::ScheduleStore;
+use crate::computer::foreground::WindowGuard;
 use crate::computer::local::LocalComputer;
 use crate::protocol::storage::{TrustedPeers, default_home, resolve_rendezvous_config};
 use crate::remote::audit::AuditLog;
@@ -19,6 +20,19 @@ use tracing::error;
 const INDEX_HTML: &str = include_str!("../../static/index.html");
 const STYLES_CSS: &str = include_str!("../../static/styles.css");
 const APP_JS: &str = include_str!("../../static/app.js");
+
+/// JSON schema of the per-call `guard` argument of the input tools.
+fn guard_schema() -> Value {
+    json!({
+        "type": "object",
+        "description": "Optional. Refuse this input unless the target machine's foreground window matches (case-insensitive): `title` is a substring of the window title, `process` the executable name. Overrides the session default from `opendesk_guard`. Use it whenever stray keystrokes could land in the wrong window.",
+        "properties": {
+            "title": { "type": "string" },
+            "process": { "type": "string" }
+        },
+        "additionalProperties": false
+    })
+}
 
 pub fn build_mcp_app_html() -> String {
     let mut html = INDEX_HTML.to_string();
@@ -80,6 +94,8 @@ pub struct McpSession {
     pub trusted: TrustedPeers,
     pub current_peer: Option<String>,
     pub connections: HashMap<String, Arc<RemoteComputer>>,
+    /// Default foreground-window guard for input tools (`opendesk_guard`).
+    pub input_guard: Option<crate::computer::foreground::WindowGuard>,
     pub home: PathBuf,
     pub rendezvous_url: Option<String>,
     pub rendezvous_token: Option<String>,
@@ -123,6 +139,7 @@ impl McpSession {
             trusted: TrustedPeers::new(Some(&home_path)),
             current_peer: None,
             connections: HashMap::new(),
+            input_guard: None,
             home: home_path,
             rendezvous_url: r_url,
             rendezvous_token: r_token,
@@ -603,6 +620,7 @@ impl McpServer {
                         "amount": { "type": "integer", "default": 3, "description": "Scroll amount in clicks." },
                         "duration": { "type": "number", "default": 0.25, "description": "Movement duration in seconds." },
                         "settle_ms": { "type": "integer", "default": 500, "description": "Milliseconds to wait after the action for the UI to settle." },
+                        "guard": guard_schema(),
                         "peer": {
                             "type": "string",
                             "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
@@ -641,6 +659,7 @@ impl McpServer {
                         "interval": { "type": "number", "default": 0.02, "description": "Seconds between keystrokes (action='type')." },
                         "settle_ms": { "type": "integer", "default": 300, "description": "Milliseconds to wait after the action." },
                         "hold_duration": { "type": "number", "default": 1.0, "description": "Seconds to hold key for action='hold'." },
+                        "guard": guard_schema(),
                         "peer": {
                             "type": "string",
                             "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
@@ -874,6 +893,19 @@ impl McpServer {
                 }
             }),
             json!({
+                "name": "opendesk_guard",
+                "description": "Set a default foreground-window guard for this session's `mouse` and `keyboard` calls (local and remote). While set, input is refused with an error unless the target machine's foreground window matches, so keystrokes never land in a chat, browser or terminal that took focus. A `guard` argument on an individual call overrides it.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["set", "clear", "show"], "default": "show" },
+                        "title": { "type": "string", "description": "Case-insensitive substring of the foreground window title." },
+                        "process": { "type": "string", "description": "Executable name of the foreground window's process, e.g. 'notepad' or 'chrome.exe'." }
+                    },
+                    "additionalProperties": false
+                }
+            }),
+            json!({
                 "name": "opendesk_privacy",
                 "description": "Control physical input locking and screen blackout (privacy curtain) on a REMOTE peer. Blocks physical mouse/keyboard usage on the remote machine while remote control is active, and optionally displays a privacy blackout curtain on the physical monitor while allowing remote screen capture.\n\nSAFETY: This tool is STRICTLY restricted to remote peers. It is prohibited on 'local' to prevent the operator from being locked out of their own machine.",
                 "inputSchema": {
@@ -920,6 +952,7 @@ impl McpServer {
             "opendesk_capabilities" => return self.admin_capabilities(args).await,
             "opendesk_disconnect" => return self.admin_disconnect(args).await,
             "opendesk_privacy" => return self.admin_privacy(args).await,
+            "opendesk_guard" => return self.admin_guard(args).await,
             "audit" => return self.execute_audit(args).await,
             "schedule" => return self.execute_schedule(args).await,
             "learn" => return self.execute_learn(args).await,
@@ -935,10 +968,25 @@ impl McpServer {
             format!("[on {target_name}] ")
         };
 
+        // Mouse and keyboard input only reaches the expected window: the
+        // call's own `guard`, else the session default from opendesk_guard.
+        let guard = if matches!(name, "mouse" | "keyboard") {
+            match WindowGuard::from_json(args.get("guard")) {
+                Some(g) => Some(g),
+                None => self.session.lock().await.input_guard.clone(),
+            }
+        } else {
+            None
+        };
+
         if let Some(remote) = remote_opt {
             return self
-                .call_remote_tool_with_retry(remote, &target_name, &prefix, name, args)
+                .call_remote_tool_with_retry(remote, &target_name, &prefix, name, args, guard)
                 .await;
+        }
+
+        if let Some(g) = &guard {
+            g.check()?;
         }
 
         // Local execution
@@ -1294,12 +1342,16 @@ impl McpServer {
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| anyhow!("'menu_item' required"))?;
                         if let Some(app_name) = app {
-                            let _ = self.computer.app_focus(app_name);
+                            self.computer.app_focus(app_name)?;
                         }
                         tokio::time::sleep(Duration::from_millis(150)).await;
-                        let _ = self.computer.ui_click(app, menu);
+                        self.computer
+                            .ui_click(app, menu)
+                            .map_err(|e| anyhow!("could not open menu {menu:?}: {e}"))?;
                         tokio::time::sleep(Duration::from_millis(200)).await;
-                        let _ = self.computer.ui_click(app, item);
+                        self.computer.ui_click(app, item).map_err(|e| {
+                            anyhow!("opened {menu:?} but could not click {item:?}: {e}")
+                        })?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Clicked {menu} → {item} in {}.", app.unwrap_or("app")) }),
                         ])
@@ -1313,7 +1365,7 @@ impl McpServer {
                             self.computer.ui_type(app, selector, text)?;
                         } else {
                             if let Some(app_name) = app {
-                                let _ = self.computer.app_focus(app_name);
+                                self.computer.app_focus(app_name)?;
                             }
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             self.computer.keyboard_type(text)?;
@@ -1338,7 +1390,7 @@ impl McpServer {
                             .map(|arr| arr.iter().filter_map(|x| x.as_str()).collect())
                             .unwrap_or_default();
                         if let Some(app_name) = app {
-                            let _ = self.computer.app_focus(app_name);
+                            self.computer.app_focus(app_name)?;
                         }
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         let mut chord = modifiers;
@@ -1431,7 +1483,11 @@ impl McpServer {
         prefix: &str,
         name: &str,
         args: &Value,
+        guard: Option<WindowGuard>,
     ) -> Result<Vec<Value>> {
+        // Set on every call (including to None) so a guard never leaks
+        // from one tool call into the next.
+        remote.set_input_guard(guard.clone());
         let sent_before = remote.requests_sent();
         let err = match self
             .call_remote_tool(&remote, target, prefix, name, args)
@@ -1454,6 +1510,7 @@ impl McpServer {
             .await
             .map_err(|e| anyhow!("{err:#} (reconnect to '{target}' failed: {e:#})"))?;
         let fresh = fresh.ok_or_else(|| anyhow!("Peer '{target}' is not remote"))?;
+        fresh.set_input_guard(guard);
         // A failure here marks `fresh` broken, so the next resolve evicts it.
         self.call_remote_tool(&fresh, target, prefix, name, args)
             .await
@@ -2380,6 +2437,36 @@ impl McpServer {
         Ok(vec![json!({ "type": "text", "text": msg })])
     }
 
+    async fn admin_guard(&self, args: &Value) -> Result<Vec<Value>> {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("show");
+        let mut session = self.session.lock().await;
+        let msg = match action {
+            "set" => {
+                let guard = WindowGuard::from_json(Some(args))
+                    .ok_or_else(|| anyhow!("'set' needs a 'title' and/or 'process'"))?;
+                let msg = format!(
+                    "Input guard set: mouse and keyboard input requires a foreground window with {}.",
+                    guard.describe()
+                );
+                session.input_guard = Some(guard);
+                msg
+            }
+            "clear" => {
+                session.input_guard = None;
+                "Input guard cleared.".to_string()
+            }
+            "show" => match &session.input_guard {
+                Some(g) => format!("Input guard: {}.", g.describe()),
+                None => "No input guard is set.".to_string(),
+            },
+            other => bail!("Unknown guard action: {other}"),
+        };
+        Ok(vec![json!({ "type": "text", "text": msg })])
+    }
+
     async fn admin_privacy(&self, args: &Value) -> Result<Vec<Value>> {
         let peer_arg = args
             .get("peer")
@@ -2803,8 +2890,57 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_view"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_app_api"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_privacy"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_guard"));
 
-        assert_eq!(tools.len(), 20);
+        assert_eq!(tools.len(), 21);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn test_mcp_guard_refuses_input_to_another_window() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = McpServer::with_config(Some(dir.path().to_path_buf()), None, None);
+        let call = |name: &'static str, arguments: Value| {
+            let server = server.clone();
+            async move {
+                server
+                    .handle_method(
+                        "tools/call",
+                        &json!({ "name": name, "arguments": arguments }),
+                    )
+                    .await
+                    .unwrap()
+            }
+        };
+
+        let res = call(
+            "opendesk_guard",
+            json!({ "action": "set", "title": "opendesk-no-such-window-7f3a" }),
+        )
+        .await;
+        assert!(!res["isError"].as_bool().unwrap(), "{res}");
+
+        // Refused before anything is sent, so this never types on the desktop.
+        let res = call(
+            "keyboard",
+            json!({ "action": "press", "key": "shift", "peer": "local" }),
+        )
+        .await;
+        assert!(res["isError"].as_bool().unwrap(), "{res}");
+        let text = res["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("input refused"), "{text}");
+
+        // A per-call guard overrides the session default the same way.
+        call("opendesk_guard", json!({ "action": "clear" })).await;
+        let res = call(
+            "mouse",
+            json!({
+                "action": "click", "x": 0, "y": 0, "peer": "local",
+                "guard": { "process": "opendesk-no-such-process.exe" }
+            }),
+        )
+        .await;
+        assert!(res["isError"].as_bool().unwrap(), "{res}");
     }
 
     #[tokio::test]
