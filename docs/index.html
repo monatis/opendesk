@@ -211,7 +211,7 @@
 <li class="toctree-l1"><a class="reference internal" href="mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -232,8 +232,8 @@
 <li class="toctree-l1"><a class="reference internal" href="tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -263,7 +263,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -477,7 +477,7 @@
                   
   <section id="opendesk">
 <h1>opendesk<a class="headerlink" href="#opendesk" title="Link to this heading">#</a></h1>
-<p><strong>Open Computer Use Agent</strong> — gives any AI agent eyes and hands on your desktop. Works with any MCP client (Claude Code, Cursor, Windsurf, Continue) and any AI framework (Anthropic SDK, OpenAI, LangChain). Runs on macOS, Linux, and Windows.</p>
+<p><strong>Open Computer Use Agent</strong> — gives any AI agent eyes and hands on your desktop. Written in Rust (<code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code>). Works with any MCP client (Claude Code, Claude Desktop, Cursor, Windsurf, Continue) and any agent framework that can talk to an MCP server. Runs on macOS, Linux, and Windows.</p>
 <div class="toctree-wrapper compound">
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
 <ul>
@@ -504,30 +504,18 @@
 <li class="toctree-l2"><a class="reference internal" href="mcp/index.html#setup-interfaces">Setup &amp; Interfaces</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="mcp/install.html">Install</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="mcp/install.html#python">Python</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="mcp/claude-code.html">Claude Code</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="mcp/claude-code.html#python">Python</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="mcp/claude-desktop.html">Claude Desktop</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="mcp/claude-desktop.html#python">Python</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="mcp/cursor.html">Cursor</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="mcp/cursor.html#python">Python</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/claude-code.html">Claude Code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/claude-desktop.html">Claude Desktop</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mcp/continue.html">Continue (VS Code)</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="mcp/continue.html#python">Python</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mcp/continue.html#any-other-mcp-client">Any other MCP client</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#running-the-mcp-server-in-python">Running the MCP server in Python</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#restricting-what-the-agent-can-do">Restricting what the agent can do</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#server-options">Server options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#embedding-and-permission-policies">Embedding and permission policies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#restricting-where-input-lands">Restricting where input lands</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mcp/advanced.html#audit-log">Audit log</a></li>
 </ul>
 </li>
@@ -538,25 +526,13 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="integrations/index.html">Integrations</a></li>
-<li class="toctree-l1"><a class="reference internal" href="integrations/anthropic.html">Anthropic SDK</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="integrations/anthropic.html#agentic-loop-recommended">Agentic loop (recommended)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="integrations/anthropic.html#manual-control">Manual control</a></li>
-<li class="toctree-l2"><a class="reference internal" href="integrations/anthropic.html#tool-definitions-format">Tool definitions format</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="integrations/openai.html">OpenAI Function Calling</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="integrations/openai.html#agentic-loop">Agentic loop</a></li>
-<li class="toctree-l2"><a class="reference internal" href="integrations/openai.html#with-groq">With Groq</a></li>
-<li class="toctree-l2"><a class="reference internal" href="integrations/openai.html#with-ollama">With Ollama</a></li>
-<li class="toctree-l2"><a class="reference internal" href="integrations/openai.html#manual-control">Manual control</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="integrations/langchain.html">LangChain / LangGraph</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="integrations/langchain.html#with-custom-context">With custom context</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/anthropic.html">Anthropic SDK</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/openai.html">OpenAI Function Calling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations/langchain.html">LangChain / LangGraph</a></li>
 <li class="toctree-l1"><a class="reference internal" href="integrations/custom.html">Custom / Generic Integration</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="integrations/custom.html#sandbox-configuration">Sandbox configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations/custom.html#mcp-over-stdio-any-language">1. MCP over stdio (any language)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations/custom.html#the-rust-crate">2. The Rust crate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations/custom.html#restricting-what-the-agent-can-do">Restricting what the agent can do</a></li>
 </ul>
 </li>
 </ul>
@@ -565,64 +541,64 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Tools</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tools/index.html">Tools Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="tools/index.html#toolresult">ToolResult</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/index.html#routing-the-peer-argument">Routing: the <code class="docutils literal notranslate"><span class="pre">peer</span></code> argument</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/index.html#input-guard">Input guard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/index.html#opendesk-exec"><code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/index.html#waiting-for-the-ui-opendesk-wait-and-opendesk-events">Waiting for the UI: <code class="docutils literal notranslate"><span class="pre">opendesk_wait</span></code> and <code class="docutils literal notranslate"><span class="pre">opendesk_events</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/index.html#peer-environment-opendesk-capabilities">Peer environment: <code class="docutils literal notranslate"><span class="pre">opendesk_capabilities</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/index.html#file-transfer-opendesk-file">File transfer: <code class="docutils literal notranslate"><span class="pre">opendesk_file</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/index.html#background-jobs-opendesk-exec-with-background-true-and-opendesk-job">Background jobs: <code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code> with <code class="docutils literal notranslate"><span class="pre">background:</span> <span class="pre">true</span></code>, and <code class="docutils literal notranslate"><span class="pre">opendesk_job</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="tools/ui.html"><code class="docutils literal notranslate"><span class="pre">ui</span></code> — Accessibility-based UI Interaction</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tools/ui.html#actions">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tools/ui.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/ui.html#sdk-examples">SDK examples</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/ui.html#platform-notes">Platform notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/ui.html#example-calls">Example calls</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="tools/screenshot.html"><code class="docutils literal notranslate"><span class="pre">screenshot</span></code> — Screen Capture</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#parameters">Parameters</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#sdk-examples">SDK examples</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/screenshot.html#example-calls">Example calls</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="tools/mouse.html"><code class="docutils literal notranslate"><span class="pre">mouse</span></code> — Mouse Control</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tools/mouse.html#actions">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tools/mouse.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/mouse.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/mouse.html#example-calls">Example calls</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="tools/keyboard.html"><code class="docutils literal notranslate"><span class="pre">keyboard</span></code> — Keyboard Input</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#actions">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#keys-and-chords">Keys and chords</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#sequences">Sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/keyboard.html#example-calls">Example calls</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tools/app.html#actions">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tools/app.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/app.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/app.html#example-calls">Example calls</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tools/clipboard.html#actions">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tools/clipboard.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/clipboard.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/clipboard.html#example-calls">Example calls</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="tools/ocr.html#parameters">Parameters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/ocr.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/ocr.html#sdk-examples">SDK examples</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tools/audit.html#ask-claude">Ask Claude</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tools/audit.html#parameters">Parameters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/audit.html#sdk-examples">SDK examples</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/audit.html#what-gets-replayed">What gets replayed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/audit.html#from-the-cli">From the CLI</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tools/learn.html#actions">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tools/learn.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tools/learn.html#sdk-examples">SDK examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tools/learn.html#example-calls">Example calls</a></li>
 </ul>
 </li>
 </ul>
@@ -631,25 +607,23 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="automation/index.html">Automation — Learn, Replay &amp; Schedule</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="automation/index.html#how-it-works">How it works</a></li>
 <li class="toctree-l2"><a class="reference internal" href="automation/index.html#ask-claude">Ask Claude</a></li>
 <li class="toctree-l2"><a class="reference internal" href="automation/index.html#guides">Guides</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="automation/claude-code.html">Automation in Claude Code</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#record">Record</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#save-a-procedure">Save a procedure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#replay">Replay</a></li>
 <li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#schedule">Schedule</a></li>
 <li class="toctree-l2"><a class="reference internal" href="automation/claude-code.html#manage">Manage</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="automation/scheduler.html">Scheduler</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#the-schedule-tool">The <code class="docutils literal notranslate"><span class="pre">schedule</span></code> tool</a></li>
 <li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#ask-claude">Ask Claude</a></li>
-<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#start-the-background-runner">Start the background runner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#timing-formats">Timing formats</a></li>
-<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#timing-strings">Timing strings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#cli">CLI</a></li>
 <li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#storage">Storage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="automation/scheduler.html#platform-support">Platform support</a></li>
 </ul>
 </li>
 </ul>
@@ -662,18 +636,20 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="architecture/layers.html">Computer &amp; Tools Layers</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="architecture/layers.html#layer-1-computer">Layer 1: <code class="docutils literal notranslate"><span class="pre">computer/</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/layers.html#computer-use-three-tier-grounding-architecture">Computer Use: Three-Tier Grounding Architecture</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/layers.html#layer-2-tools">Layer 2: <code class="docutils literal notranslate"><span class="pre">tools/</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/layers.html#computer"><code class="docutils literal notranslate"><span class="pre">computer/</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/layers.html#tools-mcp-server-rs">Tools (<code class="docutils literal notranslate"><span class="pre">mcp/server.rs</span></code>)</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="architecture/protocol-layer.html">Protocol Layer</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="architecture/protocol-layer.html#layer-3-protocol">Layer 3: <code class="docutils literal notranslate"><span class="pre">protocol/</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/protocol-layer.html#protocol"><code class="docutils literal notranslate"><span class="pre">protocol/</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="architecture/remote-layer.html">Remote &amp; Integrations Layers</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#layer-4-remote">Layer 4: <code class="docutils literal notranslate"><span class="pre">remote/</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#layer-5-integrations">Layer 5: <code class="docutils literal notranslate"><span class="pre">integrations/</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#remote"><code class="docutils literal notranslate"><span class="pre">remote/</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#service-rs"><code class="docutils literal notranslate"><span class="pre">service.rs</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#automation-scheduler-rs"><code class="docutils literal notranslate"><span class="pre">automation/scheduler.rs</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#app"><code class="docutils literal notranslate"><span class="pre">app/</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/remote-layer.html#mcp"><code class="docutils literal notranslate"><span class="pre">mcp/</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="architecture/data-flow.html">Data Flow</a><ul>
@@ -728,7 +704,7 @@
 <div class="toctree-wrapper compound">
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="remote/index.html">Remote Computer Use — Python / CLI</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="remote/index.html">Remote Computer Use — CLI</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="remote/index.html#mental-model">Mental model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="remote/index.html#guides">Guides</a></li>
 </ul>
@@ -770,6 +746,7 @@
 <li class="toctree-l1"><a class="reference internal" href="remote/cli.html">CLI Reference</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="remote/cli.html#controlled-machine">Controlled machine</a></li>
 <li class="toctree-l2"><a class="reference internal" href="remote/cli.html#controller">Controller</a></li>
+<li class="toctree-l2"><a class="reference internal" href="remote/cli.html#agent-integration-and-settings">Agent integration and settings</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="remote/service.html">Service Install</a></li>

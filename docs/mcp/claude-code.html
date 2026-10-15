@@ -143,10 +143,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -214,7 +210,7 @@
 <li class="toctree-l1"><a class="reference internal" href="claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +231,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +262,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -453,9 +449,7 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</button>
+
 </div></div>
       
     </div>
@@ -471,14 +465,6 @@
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python">Python</a></li>
-</ul>
-            </nav>
         </div>
     </div>
 </div>
@@ -490,18 +476,26 @@
                   
   <section id="claude-code">
 <h1>Claude Code<a class="headerlink" href="#claude-code" title="Link to this heading">#</a></h1>
-<section id="python">
-<h2>Python<a class="headerlink" href="#python" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>install
+</pre></div>
+</div>
+<p>This runs <code class="docutils literal notranslate"><span class="pre">claude</span> <span class="pre">mcp</span> <span class="pre">add</span> <span class="pre">opendesk</span> <span class="pre">--scope=user</span> <span class="pre">--</span> <span class="pre">&lt;path</span> <span class="pre">to</span> <span class="pre">opendesk-mcp&gt;</span></code>
+(replacing any existing <code class="docutils literal notranslate"><span class="pre">opendesk</span></code> entry). Options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--scope</span> <span class="pre">user|project|local</span></code> (default <code class="docutils literal notranslate"><span class="pre">user</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--rendezvous</span> <span class="pre">URL</span></code> / <code class="docutils literal notranslate"><span class="pre">--rendezvous-token</span> <span class="pre">TOKEN</span></code> — passed through to the MCP server</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">claude</span></code> CLI must be on your PATH.</p>
+<p>Manual equivalent:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>claude<span class="w"> </span>mcp<span class="w"> </span>add<span class="w"> </span>opendesk<span class="w"> </span>--<span class="w"> </span>opendesk-mcp
 </pre></div>
 </div>
 <p>Verify it was added:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>claude<span class="w"> </span>mcp<span class="w"> </span>list
-<span class="c1"># opendesk: opendesk-mcp</span>
 </pre></div>
 </div>
 <p>To remove it later:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>claude<span class="w"> </span>mcp<span class="w"> </span>remove<span class="w"> </span>opendesk
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>uninstall
 </pre></div>
 </div>
 <hr class="docutils" />
@@ -509,10 +503,9 @@
 <blockquote>
 <div><p>“Take a screenshot and tell me what’s on my screen.”</p>
 </div></blockquote>
-<p>Claude will call the <code class="docutils literal notranslate"><span class="pre">screenshot</span></code> tool, receive the PNG, and describe it.</p>
+<p>Claude will call the <code class="docutils literal notranslate"><span class="pre">screenshot</span></code> tool, receive the image, and describe it.</p>
 <hr class="docutils" />
 <p>Next up: <a class="reference internal" href="claude-desktop.html"><span class="std std-doc">Claude Desktop →</span></a></p>
-</section>
 </section>
 
 
@@ -550,23 +543,6 @@
             </div>
             
             
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item"><div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python">Python</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
           </div>

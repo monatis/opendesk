@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1 current active"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -478,7 +478,7 @@
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actions">Actions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
             </nav>
         </div>
@@ -492,10 +492,6 @@
                   
   <section id="app-application-control">
 <h1><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control<a class="headerlink" href="#app-application-control" title="Link to this heading">#</a></h1>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.app</span><span class="w"> </span><span class="kn">import</span> <span class="n">AppTool</span>
-<span class="n">tool</span> <span class="o">=</span> <span class="n">AppTool</span><span class="p">()</span>
-</pre></div>
-</div>
 <section id="actions">
 <h2>Actions<a class="headerlink" href="#actions" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -508,52 +504,46 @@
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">open</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
-<td><p>Launch application by name or path</p></td>
+<td><p>Launch an application by name or full executable path</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">close</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
-<td><p>Quit application</p></td>
+<td><p>Close the application</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">focus</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
-<td><p>Bring window to foreground</p></td>
+<td><p>Bring its window to the foreground</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
 <td><p>—</p></td>
-<td><p>List all running applications</p></td>
+<td><p>List running applications / windows</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>All actions accept an optional <code class="docutils literal notranslate"><span class="pre">peer</span></code>.</p>
 </section>
 <section id="ask-claude">
 <h2>Ask Claude<a class="headerlink" href="#ask-claude" title="Link to this heading">#</a></h2>
 <blockquote>
-<div><p>“Open TextEdit”</p>
+<div><p>“Open Notepad”</p>
 </div></blockquote>
 <blockquote>
-<div><p>“Open Spotify”</p>
+<div><p>“Close the browser”</p>
 </div></blockquote>
 <blockquote>
-<div><p>“Close Safari”</p>
-</div></blockquote>
-<blockquote>
-<div><p>“Switch to Finder”</p>
+<div><p>“Switch to File Explorer”</p>
 </div></blockquote>
 <blockquote>
 <div><p>“What apps are currently running?”</p>
 </div></blockquote>
 </section>
-<hr class="docutils" />
-<section id="sdk-examples">
-<h2>SDK examples<a class="headerlink" href="#sdk-examples" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">params</span> <span class="o">=</span> <span class="n">AppTool</span><span class="o">.</span><span class="n">Params</span>
-
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"open"</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"TextEdit"</span><span class="p">))</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"focus"</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"Safari"</span><span class="p">))</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"list"</span><span class="p">))</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"close"</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"TextEdit"</span><span class="p">))</span>
+<section id="example-calls">
+<h2>Example calls<a class="headerlink" href="#example-calls" title="Link to this heading">#</a></h2>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"open"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"notepad"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"focus"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Notepad"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"list"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"close"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Notepad"</span><span class="p">,</span><span class="w"> </span><span class="nt">"peer"</span><span class="p">:</span><span class="w"> </span><span class="s2">"work-pc"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
 <hr class="docutils" />
@@ -610,7 +600,7 @@
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actions">Actions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
   </nav></div>
 

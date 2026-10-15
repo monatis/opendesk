@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Advanced: In-process Server &amp; Restrictions &#8212; opendesk</title>
+    <title>Advanced: Server Options &amp; Restrictions &#8212; opendesk</title>
   
   
   
@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -466,7 +466,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Advanced: In-process Server & Restrictions</h1>
+    <h1>Advanced: Server Options & Restrictions</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -476,12 +476,10 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-mcp-server-in-python">Running the MCP server in Python</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#restricting-what-the-agent-can-do">Restricting what the agent can do</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#audit-log">Audit log</a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#custom-permission-handler-with-mcp">Custom permission handler with MCP</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#server-options">Server options</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#embedding-and-permission-policies">Embedding and permission policies</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#restricting-where-input-lands">Restricting where input lands</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#audit-log">Audit log</a></li>
 </ul>
             </nav>
         </div>
@@ -493,86 +491,68 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="advanced-in-process-server-restrictions">
-<h1>Advanced: In-process Server &amp; Restrictions<a class="headerlink" href="#advanced-in-process-server-restrictions" title="Link to this heading">#</a></h1>
-<section id="running-the-mcp-server-in-python">
-<h2>Running the MCP server in Python<a class="headerlink" href="#running-the-mcp-server-in-python" title="Link to this heading">#</a></h2>
-<p>If you need to embed the server in your own process or customize permissions:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mcp.server.stdio</span><span class="w"> </span><span class="kn">import</span> <span class="n">stdio_server</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.integrations.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_mcp_server</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_registry</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolContext</span><span class="p">,</span> <span class="n">PermissionDeniedError</span>
-
-<span class="c1"># Custom permission policy: block any app launch</span>
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">my_policy</span><span class="p">(</span><span class="n">tool</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">if</span> <span class="n">tool</span> <span class="o">==</span> <span class="s2">"app"</span> <span class="ow">and</span> <span class="s2">"open"</span> <span class="ow">in</span> <span class="n">argument</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">PermissionDeniedError</span><span class="p">(</span><span class="s2">"App launching is disabled in this session."</span><span class="p">)</span>
-
-<span class="n">ctx</span> <span class="o">=</span> <span class="n">ToolContext</span><span class="p">(</span><span class="n">session_id</span><span class="o">=</span><span class="s2">"my-session"</span><span class="p">,</span> <span class="n">permission_handler</span><span class="o">=</span><span class="n">my_policy</span><span class="p">)</span>
-<span class="n">server</span> <span class="o">=</span> <span class="n">create_mcp_server</span><span class="p">(</span><span class="n">registry</span><span class="o">=</span><span class="n">create_registry</span><span class="p">(),</span> <span class="n">ctx</span><span class="o">=</span><span class="n">ctx</span><span class="p">)</span>
-
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-    <span class="k">async</span> <span class="k">with</span> <span class="n">stdio_server</span><span class="p">()</span> <span class="k">as</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span>
-        <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">create_initialization_options</span><span class="p">())</span>
-
-<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
-</pre></div>
+  <section id="advanced-server-options-restrictions">
+<h1>Advanced: Server Options &amp; Restrictions<a class="headerlink" href="#advanced-server-options-restrictions" title="Link to this heading">#</a></h1>
+<section id="server-options">
+<h2>Server options<a class="headerlink" href="#server-options" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> (and <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">mcp</span></code>) accept:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Flag</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--home</span> <span class="pre">DIR</span></code></p></td>
+<td><p>Identity / trusted-peers directory (default <code class="docutils literal notranslate"><span class="pre">~/.opendesk</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--rendezvous</span> <span class="pre">URL</span></code></p></td>
+<td><p>Rendezvous relay for reaching peers across the Internet</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--rendezvous-token</span> <span class="pre">TOKEN</span></code></p></td>
+<td><p>Token for that relay</p></td>
+</tr>
+</tbody>
+</table>
 </div>
+<p>Logging goes to stderr and is off by default; set <code class="docutils literal notranslate"><span class="pre">RUST_LOG</span></code> (for example
+<code class="docutils literal notranslate"><span class="pre">RUST_LOG=debug</span></code>) to enable it.</p>
+<p>The working directory of the MCP server process is where the <code class="docutils literal notranslate"><span class="pre">schedule</span></code> tool
+stores <code class="docutils literal notranslate"><span class="pre">.opendesk/schedules.json</span></code>.</p>
 </section>
 <hr class="docutils" />
-<section id="restricting-what-the-agent-can-do">
-<h2>Restricting what the agent can do<a class="headerlink" href="#restricting-what-the-agent-can-do" title="Link to this heading">#</a></h2>
-<p>Lock down the sandbox before starting the server:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.computer.sandbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">configure_sandbox</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolContext</span>
-
-<span class="c1"># Only allow Safari and Terminal; only act within the left half of the screen</span>
-<span class="n">configure_sandbox</span><span class="p">(</span>
-    <span class="n">session_id</span><span class="o">=</span><span class="s2">"restricted"</span><span class="p">,</span>
-    <span class="n">allowed_apps</span><span class="o">=</span><span class="p">[</span><span class="s2">"Safari"</span><span class="p">,</span> <span class="s2">"Terminal"</span><span class="p">],</span>
-    <span class="n">screen_region</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1280</span><span class="p">,</span> <span class="mi">1600</span><span class="p">),</span>
-<span class="p">)</span>
-
-<span class="n">ctx</span> <span class="o">=</span> <span class="n">ToolContext</span><span class="p">(</span><span class="n">session_id</span><span class="o">=</span><span class="s2">"restricted"</span><span class="p">)</span>
-<span class="n">server</span> <span class="o">=</span> <span class="n">create_mcp_server</span><span class="p">(</span><span class="n">ctx</span><span class="o">=</span><span class="n">ctx</span><span class="p">)</span>
+<section id="embedding-and-permission-policies">
+<h2>Embedding and permission policies<a class="headerlink" href="#embedding-and-permission-policies" title="Link to this heading">#</a></h2>
+<p>The Python version’s in-process server (<code class="docutils literal notranslate"><span class="pre">create_mcp_server</span></code>), custom
+permission handlers, and <code class="docutils literal notranslate"><span class="pre">configure_sandbox</span></code> (allowed apps / screen region)
+are <strong>not available</strong> in the Rust version. To embed opendesk in a Rust
+program, use the crate directly — see
+<a class="reference internal" href="../remote/programmatic.html"><span class="std std-doc">Programmatic Use</span></a>.</p>
+</section>
+<hr class="docutils" />
+<section id="restricting-where-input-lands">
+<h2>Restricting where input lands<a class="headerlink" href="#restricting-where-input-lands" title="Link to this heading">#</a></h2>
+<p>Use the input guard so mouse and keyboard calls are refused unless the
+expected window is in the foreground:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// opendesk_guard</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"set"</span><span class="p">,</span><span class="w"> </span><span class="nt">"process"</span><span class="p">:</span><span class="w"> </span><span class="s2">"notepad"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
-<p>All screenshots and mouse clicks outside <code class="docutils literal notranslate"><span class="pre">(0,0,1280,1600)</span></code> will be rejected with an error
-the LLM sees, so it knows to stay in bounds.</p>
+<p>Every later <code class="docutils literal notranslate"><span class="pre">mouse</span></code> / <code class="docutils literal notranslate"><span class="pre">keyboard</span></code> call in the session (local or remote) is then
+checked on the target machine right before the input is sent. A per-call
+<code class="docutils literal notranslate"><span class="pre">guard</span></code> argument overrides the default; <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">&quot;action&quot;:</span> <span class="pre">&quot;clear&quot;</span> <span class="pre">}</span></code> removes it.
+Foreground detection is Windows-only; see
+<a class="reference internal" href="../tools/index.html#input-guard"><span class="std std-ref">Input guard</span></a>.</p>
 </section>
 <hr class="docutils" />
 <section id="audit-log">
 <h2>Audit log<a class="headerlink" href="#audit-log" title="Link to this heading">#</a></h2>
-<p>Every action is recorded in the session sandbox:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.computer.sandbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_sandbox</span>
-
-<span class="n">sandbox</span> <span class="o">=</span> <span class="n">get_sandbox</span><span class="p">(</span><span class="s2">"my-session"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">sandbox</span><span class="o">.</span><span class="n">summary</span><span class="p">())</span>
-<span class="c1"># session=my-session… | 12 actions: 3x screenshot, 4x ui_action, 2x keyboard_type, 3x mouse_click</span>
-
-<span class="n">log</span> <span class="o">=</span> <span class="n">sandbox</span><span class="o">.</span><span class="n">export_audit_log</span><span class="p">()</span>
-<span class="c1"># [{"id": "...", "timestamp": 1234567890.0, "action": "screenshot", "params": {...}, ...}, ...]</span>
-</pre></div>
-</div>
-<section id="custom-permission-handler-with-mcp">
-<h3>Custom permission handler with MCP<a class="headerlink" href="#custom-permission-handler-with-mcp" title="Link to this heading">#</a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolContext</span><span class="p">,</span> <span class="n">PermissionDeniedError</span>
-
-<span class="n">BLOCKED_APPS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"System Preferences"</span><span class="p">,</span> <span class="s2">"Keychain Access"</span><span class="p">}</span>
-
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">policy</span><span class="p">(</span><span class="n">tool</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">for</span> <span class="n">blocked</span> <span class="ow">in</span> <span class="n">BLOCKED_APPS</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">blocked</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">argument</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="n">PermissionDeniedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Blocked: </span><span class="si">{</span><span class="n">blocked</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-
-<span class="n">ctx</span> <span class="o">=</span> <span class="n">ToolContext</span><span class="p">(</span><span class="n">session_id</span><span class="o">=</span><span class="s2">"mcp"</span><span class="p">,</span> <span class="n">permission_handler</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
-<span class="n">server</span> <span class="o">=</span> <span class="n">create_mcp_server</span><span class="p">(</span><span class="n">ctx</span><span class="o">=</span><span class="n">ctx</span><span class="p">)</span>
-</pre></div>
-</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">audit</span></code> tool and <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">audit</span></code> show the audit log that <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">serve</span></code>
+writes on a controlled machine (<code class="docutils literal notranslate"><span class="pre">~/.opendesk/audit/YYYY-MM-DD.jsonl</span></code>). Calls
+the MCP server performs on the local machine are not logged. See
+<a class="reference internal" href="../tools/audit.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">audit</span></code></span></a>.</p>
 <hr class="docutils" />
 <p>Something not working? Check the <a class="reference internal" href="troubleshooting.html"><span class="std std-doc">Troubleshooting guide →</span></a></p>
-</section>
 </section>
 </section>
 
@@ -623,12 +603,10 @@ the LLM sees, so it knows to stay in bounds.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-mcp-server-in-python">Running the MCP server in Python</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#restricting-what-the-agent-can-do">Restricting what the agent can do</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#audit-log">Audit log</a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#custom-permission-handler-with-mcp">Custom permission handler with MCP</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#server-options">Server options</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#embedding-and-permission-policies">Embedding and permission policies</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#restricting-where-input-lands">Restricting where input lands</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#audit-log">Audit log</a></li>
 </ul>
   </nav></div>
 

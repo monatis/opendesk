@@ -143,10 +143,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -214,7 +210,7 @@
 <li class="toctree-l1"><a class="reference internal" href="claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +231,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +262,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -453,9 +449,7 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</button>
+
 </div></div>
       
     </div>
@@ -471,14 +465,6 @@
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python">Python</a></li>
-</ul>
-            </nav>
         </div>
     </div>
 </div>
@@ -491,8 +477,6 @@
   <section id="cursor">
 <h1>Cursor<a class="headerlink" href="#cursor" title="Link to this heading">#</a></h1>
 <p>Create or edit <code class="docutils literal notranslate"><span class="pre">.cursor/mcp.json</span></code> in your project root (or <code class="docutils literal notranslate"><span class="pre">~/.cursor/mcp.json</span></code> globally):</p>
-<section id="python">
-<h2>Python<a class="headerlink" href="#python" title="Link to this heading">#</a></h2>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"mcpServers"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"opendesk"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -503,9 +487,9 @@
 <span class="p">}</span>
 </pre></div>
 </div>
+<p>Use the full path to <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> if it is not on your PATH.</p>
 <hr class="docutils" />
 <p>Next up: <a class="reference internal" href="continue.html"><span class="std std-doc">Continue (VS Code) →</span></a></p>
-</section>
 </section>
 
 
@@ -543,23 +527,6 @@
             </div>
             
             
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item"><div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python">Python</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
           </div>

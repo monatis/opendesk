@@ -7,7 +7,7 @@ Follow the quickstart to get up and running:
 | Crate | `opendesk-rs` |
 | Install | `cargo install --path opendesk-rs --force` |
 | MCP register | `opendesk install` |
-| Requires | Rust 1.80+ (2024 edition) |
+| Requires | Rust 1.85+ (2024 edition) |
 
 - [Rust Quickstart](rust.md)
 

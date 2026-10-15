@@ -1,65 +1,40 @@
 # Custom / Generic Integration
 
-If your framework isn't listed, use the raw tool API directly:
+The Python tool registry, `ToolContext`, and `configure_sandbox` of the
+earlier Python version are **not available** in the Rust version. There are
+two supported routes:
 
-```python
-import json
-from opendesk.registry import create_registry
-from opendesk.tools.base import allow_all_context
+## 1. MCP over stdio (any language)
 
-registry = create_registry()
-ctx = allow_all_context()
+Start `opendesk-mcp` as a child process and speak MCP JSON-RPC on its
+stdin/stdout:
 
-# Get JSON schemas for all tools (to pass to your LLM)
-tool_schemas = [
-    {
-        "name": tool.name,
-        "description": tool.description,
-        "parameters": tool.get_schema(),
-    }
-    for tool in registry.tools()
-]
+- `tools/list` returns every tool with its JSON `inputSchema`
+  (see the [Tools reference](../tools/index.md)).
+- `tools/call` with `{"name": ..., "arguments": {...}}` runs one; screenshots
+  come back as MCP image content.
 
-# Execute a tool from LLM output
-tool_name = "screenshot"       # from LLM response
-arguments = {"marks": True}    # from LLM response
+`opendesk-mcp` accepts `--home DIR`, `--rendezvous URL` and
+`--rendezvous-token TOKEN`.
 
-tool = registry.get(tool_name)
-params = tool.parse_params(arguments)
-result = await tool.execute(ctx, params)
+## 2. The Rust crate
 
-print(result.output)
-for att in result.attachments:
-    print(f"Attachment: {att.filename} ({att.media_type}, {len(att.content)} bytes)")
-```
+Link `opendesk-rs` and call `LocalComputer` or `RemoteComputer` directly. See
+[Programmatic Use](../remote/programmatic.md).
 
----
+## Restricting what the agent can do
 
-## Sandbox configuration
+There is no allowed-apps / screen-region sandbox in the Rust version. The
+controls that exist are:
 
-Restrict what the agent can do in a session:
-
-```python
-from opendesk.computer.sandbox import configure_sandbox, get_sandbox
-from opendesk.tools.base import ToolContext
-
-# Only allow specific apps and a screen region
-configure_sandbox(
-    session_id="restricted",
-    allowed_apps=["Safari", "Terminal"],
-    screen_region=(0, 0, 1280, 800),  # (x, y, width, height)
-)
-
-ctx = ToolContext(session_id="restricted")
-# Now the agent can only screenshot/click within x:0–1280, y:0–800
-# and can only open/focus Safari or Terminal.
-
-# Audit everything that happened
-sandbox = get_sandbox("restricted")
-print(sandbox.summary())
-log = sandbox.export_audit_log()  # list of dicts
-```
+- the [input guard](../tools/index.md#input-guard) (`guard` argument and
+  `opendesk_guard`), which refuses mouse / keyboard input unless the expected
+  window is in the foreground;
+- on a controlled machine, pairing (only trusted peers can connect), the
+  single-controller rule, `opendesk unpair`, and the
+  [audit log](../tools/audit.md).
 
 ---
 
-That covers all integrations. From here you might want the [Tools reference →](../tools/index.md) for full parameter docs, or [Architecture →](../architecture/index.md) to understand how the layers fit together.
+From here you might want the [Tools reference →](../tools/index.md), or
+[Architecture →](../architecture/index.md) to understand how the pieces fit together.

@@ -2,8 +2,6 @@
 
 Edit `.continue/config.json`:
 
-## Python
-
 ```json
 {
   "mcpServers": [
@@ -21,8 +19,7 @@ Edit `.continue/config.json`:
 ## Any other MCP client
 
 The pattern is always the same — point the client at the `opendesk-mcp` command with stdio transport.
-opendesk follows the MCP spec exactly, so it works with any compliant client.
 
 ---
 
-Need a custom permission policy or want to embed the server in your own process? See [Advanced →](advanced.md)
+Need options beyond the defaults? See [Advanced →](advanced.md)

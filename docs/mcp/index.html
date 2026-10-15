@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -496,34 +496,33 @@
 <p>MCP (Model Context Protocol) is how AI coding tools like Claude Code, Cursor, and Continue
 connect to external capabilities. opendesk ships as an MCP server — you install it once, register
 it with your client, and from then on any conversation can use screenshot, mouse, keyboard, ui,
-app, clipboard, and ocr without any extra setup.</p>
+app, clipboard, and exec without any extra setup.</p>
 <hr class="docutils" />
 <section id="how-it-works">
 <h2>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading">#</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Your</span> <span class="n">AI</span> <span class="n">client</span> <span class="p">(</span><span class="n">Claude</span> <span class="n">Code</span> <span class="o">/</span> <span class="n">Cursor</span> <span class="o">/</span> <span class="n">Continue</span><span class="p">)</span>
-       <span class="o">|</span>
-       <span class="o">|</span> <span class="n">MCP</span> <span class="n">over</span> <span class="n">stdio</span>
-       <span class="n">v</span>
-  <span class="n">opendesk</span><span class="o">-</span><span class="n">mcp</span>  <span class="o">&lt;--</span> <span class="n">the</span> <span class="n">server</span> <span class="n">this</span> <span class="n">package</span> <span class="n">installs</span>
-       <span class="o">|</span>
-       <span class="o">+--</span> <span class="n">screenshot</span> <span class="n">tool</span>    <span class="p">(</span><span class="n">captures</span> <span class="n">screen</span> <span class="k">as</span> <span class="n">PNG</span><span class="o">/</span><span class="n">JPEG</span> <span class="k">for</span> <span class="n">LLM</span> <span class="n">observation</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">opendesk_view</span> <span class="n">tool</span> <span class="p">(</span><span class="n">opens</span> <span class="n">interactive</span> <span class="n">MCP</span> <span class="n">App</span> <span class="n">viewport</span> <span class="n">inline</span> <span class="ow">in</span> <span class="n">chat</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">ui</span> <span class="n">tool</span>            <span class="p">(</span><span class="n">clicks</span> <span class="n">elements</span> <span class="n">by</span> <span class="n">name</span> <span class="n">via</span> <span class="n">AX</span> <span class="n">tree</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">mouse</span> <span class="n">tool</span>         <span class="p">(</span><span class="n">pixel</span><span class="o">-</span><span class="n">level</span> <span class="n">mouse</span> <span class="n">control</span> <span class="k">with</span> <span class="n">Retina</span> <span class="n">scaling</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">keyboard</span> <span class="n">tool</span>      <span class="p">(</span><span class="n">types</span> <span class="n">text</span><span class="p">,</span> <span class="n">presses</span> <span class="n">keys</span><span class="p">,</span> <span class="n">hotkeys</span><span class="p">,</span> <span class="n">atomic</span> <span class="n">sequences</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">app</span> <span class="n">tool</span>           <span class="p">(</span><span class="n">opens</span><span class="p">,</span> <span class="n">closes</span><span class="p">,</span> <span class="n">focuses</span> <span class="n">apps</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">clipboard</span> <span class="n">tool</span>     <span class="p">(</span><span class="n">read</span><span class="o">/</span><span class="n">write</span> <span class="n">clipboard</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">opendesk_exec</span> <span class="n">tool</span> <span class="p">(</span><span class="n">runs</span> <span class="n">shell</span> <span class="n">commands</span> <span class="n">directly</span> <span class="n">on</span> <span class="n">host</span> <span class="ow">or</span> <span class="n">remote</span> <span class="n">peer</span><span class="p">)</span>
-       <span class="o">+--</span> <span class="n">ocr</span> <span class="n">tool</span>           <span class="p">(</span><span class="n">extracts</span> <span class="n">text</span> <span class="kn">from</span><span class="w"> </span><span class="nn">any</span> <span class="n">screen</span> <span class="n">region</span><span class="p">)</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Your AI client (Claude Code / Cursor / Continue)
+       |
+       | MCP over stdio
+       v
+  opendesk-mcp  (or `opendesk mcp`)
+       |
+       +-- screenshot tool    (captures screen as PNG/JPEG for LLM observation)
+       +-- opendesk_view tool (opens interactive MCP App viewport inline in chat)
+       +-- ui tool            (finds and clicks elements by name via the accessibility tree)
+       +-- mouse tool         (pixel-level mouse control in screenshot coordinates)
+       +-- keyboard tool      (types text, presses keys and chords, atomic sequences)
+       +-- app tool           (opens, closes, focuses, lists apps)
+       +-- clipboard tool     (read/write clipboard)
+       +-- opendesk_exec tool (runs shell commands on this machine or a remote peer)
+       +-- audit, learn, schedule, and opendesk_* admin tools
 </pre></div>
 </div>
-<p>The LLM decides when to call a tool, calls it, gets the result (including PNG screenshots),
+<p>The LLM decides when to call a tool, calls it, gets the result (including screenshots),
 and continues. You never write tool-calling code yourself.</p>
 </section>
 <hr class="docutils" />
 <section id="what-the-llm-sees">
 <h2>What the LLM sees<a class="headerlink" href="#what-the-llm-sees" title="Link to this heading">#</a></h2>
-<p>Once registered, the LLM sees these tools in every conversation:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Tool</p></th>
@@ -532,37 +531,45 @@ and continues. You never write tool-calling code yourself.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">screenshot</span></code></p></td>
-<td><p>“Let me see what’s on the screen” (PNG or fast JPEG with quality control)</p></td>
+<td><p>“Let me see what’s on the screen” (PNG or JPEG with quality control)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opendesk_view</span></code></p></td>
 <td><p>“Open the interactive remote desktop viewport so the user can watch live or take over”</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ui</span></code></p></td>
-<td><p>“Click the Save button” (finds it via AX tree, no coordinates)</p></td>
+<td><p>“Click the Save button” (finds it via the accessibility tree, no coordinates)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mouse</span></code></p></td>
-<td><p>Last resort for canvas areas with no accessible elements</p></td>
+<td><p>Canvas areas with no accessible elements</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">keyboard</span></code></p></td>
-<td><p>“Type this text into the field” / atomic chords &amp; sequences</p></td>
+<td><p>“Type this text into the field” / chords such as <code class="docutils literal notranslate"><span class="pre">ctrl+shift+s</span></code> / sequences</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">app</span></code></p></td>
-<td><p>“Open Terminal” / “List running apps”</p></td>
+<td><p>“Open Notepad” / “List running apps”</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">clipboard</span></code></p></td>
 <td><p>“Copy this to clipboard” / “What did I copy?”</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code></p></td>
-<td><p>“Run a command or script directly on the local or remote machine”</p></td>
+<td><p>“Run a command or script on the local or remote machine”</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ocr</span></code></p></td>
-<td><p>“Read the text in that region”</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">audit</span></code></p></td>
+<td><p>“Show the audit log”</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">learn</span></code>, <code class="docutils literal notranslate"><span class="pre">schedule</span></code></p></td>
+<td><p>Save / replay procedures; store schedules (not executed)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">opendesk_guard</span></code></p></td>
+<td><p>“Only send input while Notepad is in front”</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opendesk_peers</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_use</span></code>, …</p></td>
+<td><p>Choosing which machine to act on — see <a class="reference internal" href="../remote/mcp.html"><span class="std std-doc">Remote: MCP Integration</span></a></p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>The LLM follows the priority rule automatically because it’s in each tool’s description:
-<code class="docutils literal notranslate"><span class="pre">ui</span></code> first, then <code class="docutils literal notranslate"><span class="pre">screenshot(marks=True)</span></code> to see numbered elements, then <code class="docutils literal notranslate"><span class="pre">mouse</span></code> as last resort.</p>
+<p>There is no <code class="docutils literal notranslate"><span class="pre">ocr</span></code> tool in the Rust version. Full parameters: <a class="reference internal" href="../tools/index.html"><span class="std std-doc">Tools reference</span></a>.</p>
 </section>
 <hr class="docutils" />
 <section id="ask-claude">
@@ -572,33 +579,23 @@ and continues. You never write tool-calling code yourself.</p>
 <div><p>“Take a screenshot and tell me what’s on my screen”</p>
 </div></blockquote>
 <blockquote>
-<div><p>“Click the Save button in TextEdit”</p>
+<div><p>“Click the Save button in Notepad”</p>
 </div></blockquote>
 <blockquote>
-<div><p>“Open Spotify”</p>
+<div><p>“Open Notepad and type hello world, but only if Notepad is the foreground window”</p>
 </div></blockquote>
 <blockquote>
-<div><p>“Type hello world into the active window”</p>
-</div></blockquote>
-<blockquote>
-<div><p>“What text is in that dialog box?”</p>
-</div></blockquote>
-<blockquote>
-<div><p>“Read the text on screen”</p>
+<div><p>“Run <code class="docutils literal notranslate"><span class="pre">Get-Process</span></code> and tell me what’s using the most memory”</p>
 </div></blockquote>
 <blockquote>
 <div><p>“Show me the audit log”</p>
 </div></blockquote>
-<blockquote>
-<div><p>“Replay everything from this session”</p>
-</div></blockquote>
-<p>Claude decides which tool to call, calls it, and responds with the result — you never write any code.</p>
 </section>
 <hr class="docutils" />
 <section id="setup-interfaces">
 <h2>Setup &amp; Interfaces<a class="headerlink" href="#setup-interfaces" title="Link to this heading">#</a></h2>
 <ol class="arabic simple">
-<li><p><a class="reference internal" href="install.html"><span class="std std-doc">Install</span></a> the package</p></li>
+<li><p><a class="reference internal" href="install.html"><span class="std std-doc">Install</span></a> the binaries</p></li>
 <li><p>Register with your client: <a class="reference internal" href="claude-code.html"><span class="std std-doc">Claude Code</span></a> · <a class="reference internal" href="claude-desktop.html"><span class="std std-doc">Claude Desktop</span></a> · <a class="reference internal" href="cursor.html"><span class="std std-doc">Cursor</span></a> · <a class="reference internal" href="continue.html"><span class="std std-doc">Continue</span></a></p></li>
 <li><p><a class="reference internal" href="apps.html"><span class="std std-doc">MCP Apps (Interactive UI Viewport)</span></a> — Embed interactive remote desktop viewports inside Claude Desktop, Goose, or custom harnesses like <code class="docutils literal notranslate"><span class="pre">isanagent</span></code>.</p></li>
 </ol>

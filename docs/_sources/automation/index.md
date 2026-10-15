@@ -1,26 +1,32 @@
 # Automation — Learn, Replay & Schedule
 
-opendesk lets you record any desktop workflow, replay it on demand, and schedule it to run automatically. All three features work together as one system.
-
-## How it works
+opendesk has two small storage tools for repeatable work. In the Rust version
+both only **store** information; neither records your input nor runs tasks on
+its own.
 
 ```
-Record a task once  →  opendesk captures clicks, keys, and screenshots
-                    →  Agent summarizes into a reusable procedure JSON
-                    →  Saved to .opendesk/learned/<name>.json
-                    →  Replay anytime — agent re-executes using live tools
-                    →  Schedule it — runs automatically on a timer
+Agent performs a task with the normal tools
+   →  learn(action=save) writes the steps as a procedure
+      (~/.opendesk/procedures/<name>.json)
+   →  learn(action=replay) returns those steps; the agent carries them out
+   →  schedule(action=add) stores a name + task + timing
+      (<project>/.opendesk/schedules.json) — nothing executes it
 ```
+
+What is not available in the Rust version:
+
+- **Recording.** `learn` cannot capture mouse / keyboard / screenshots;
+  `start` and `stop` return an error.
+- **Scheduled execution.** `opendesk scheduler start` only logs enabled
+  schedules; it never runs their tasks. `schedule` has no `run` action.
 
 ## Ask Claude
 
-> "Watch me fill out this form and remember it as expense-report"
+> "Save what you just did as a procedure called expense-report"
 
-> "Replay the expense-report task"
+> "Replay the expense-report procedure"
 
-> "Schedule expense-report to run every Friday at 5pm"
-
-> "What tasks have you learned?"
+> "Store a schedule called weekly-report: every friday at 17:00"
 
 > "List my schedules"
 
@@ -28,6 +34,6 @@ Record a task once  →  opendesk captures clicks, keys, and screenshots
 
 ## Guides
 
-- [In Claude Code](claude-code.md) — record, replay, and schedule via natural language
-- [Python API](python-api.md) — `learn` and `schedule` tool usage
-- [Scheduler](scheduler.md) — background daemon, timing formats, storage, platform support
+- [In Claude Code](claude-code.md) — the natural-language requests that work
+- [Scheduler](scheduler.md) — schedule storage, timing strings, the `scheduler` CLI
+- [`learn` tool reference](../tools/learn.md)

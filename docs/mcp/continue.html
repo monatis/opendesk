@@ -51,7 +51,7 @@
     <link rel="icon" href="../_static/logo.png"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Advanced: In-process Server &amp; Restrictions" href="advanced.html" />
+    <link rel="next" title="Advanced: Server Options &amp; Restrictions" href="advanced.html" />
     <link rel="prev" title="Cursor" href="cursor.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cursor.html">Cursor</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -476,7 +476,6 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python">Python</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#any-other-mcp-client">Any other MCP client</a></li>
 </ul>
             </nav>
@@ -492,8 +491,6 @@
   <section id="continue-vs-code">
 <h1>Continue (VS Code)<a class="headerlink" href="#continue-vs-code" title="Link to this heading">#</a></h1>
 <p>Edit <code class="docutils literal notranslate"><span class="pre">.continue/config.json</span></code>:</p>
-<section id="python">
-<h2>Python<a class="headerlink" href="#python" title="Link to this heading">#</a></h2>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"mcpServers"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">    </span><span class="p">{</span>
@@ -505,14 +502,12 @@
 <span class="p">}</span>
 </pre></div>
 </div>
-</section>
 <hr class="docutils" />
 <section id="any-other-mcp-client">
 <h2>Any other MCP client<a class="headerlink" href="#any-other-mcp-client" title="Link to this heading">#</a></h2>
-<p>The pattern is always the same — point the client at the <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> command with stdio transport.
-opendesk follows the MCP spec exactly, so it works with any compliant client.</p>
+<p>The pattern is always the same — point the client at the <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> command with stdio transport.</p>
 <hr class="docutils" />
-<p>Need a custom permission policy or want to embed the server in your own process? See <a class="reference internal" href="advanced.html"><span class="std std-doc">Advanced →</span></a></p>
+<p>Need options beyond the defaults? See <a class="reference internal" href="advanced.html"><span class="std std-doc">Advanced →</span></a></p>
 </section>
 </section>
 
@@ -541,7 +536,7 @@ opendesk follows the MCP spec exactly, so it works with any compliant client.</p
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Advanced: In-process Server &amp; Restrictions</p>
+        <p class="prev-next-title">Advanced: Server Options &amp; Restrictions</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -563,7 +558,6 @@ opendesk follows the MCP spec exactly, so it works with any compliant client.</p
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#python">Python</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#any-other-mcp-client">Any other MCP client</a></li>
 </ul>
   </nav></div>

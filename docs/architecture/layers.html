@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -476,30 +476,14 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-1-computer">Layer 1: <code class="docutils literal notranslate"><span class="pre">computer/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#computer-abc-base-py"><code class="docutils literal notranslate"><span class="pre">Computer</span></code> ABC (<code class="docutils literal notranslate"><span class="pre">base.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#localcomputer-local-py"><code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">local.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#remotecomputer-remote-py"><code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">remote.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#computerdispatcher-dispatcher-py"><code class="docutils literal notranslate"><span class="pre">ComputerDispatcher</span></code> (<code class="docutils literal notranslate"><span class="pre">dispatcher.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#types-py"><code class="docutils literal notranslate"><span class="pre">types.py</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#auxiliary-modules">Auxiliary modules</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#computer"><code class="docutils literal notranslate"><span class="pre">computer/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#localcomputer-local-rs"><code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">local.rs</span></code>)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#helpers">Helpers</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#remotecomputer-remote-client-rs"><code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">remote/client.rs</span></code>)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#server-side-dispatch-remote-server-rs">Server-side dispatch (<code class="docutils literal notranslate"><span class="pre">remote/server.rs</span></code>)</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#computer-use-three-tier-grounding-architecture">Computer Use: Three-Tier Grounding Architecture</a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tier-1-semantic-accessibility-grounding">Tier 1 — Semantic Accessibility Grounding</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tier-2-grounded-set-of-marks-som">Tier 2 — Grounded Set-of-Marks (SoM)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tier-3-raw-pixel-mouse-control">Tier 3 — Raw Pixel Mouse Control</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#unified-element-schema">Unified Element Schema</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#retina-hidpi-coordinate-normalization">Retina / HiDPI Coordinate Normalization</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-action-pixel-diff-feedback">Per-Action Pixel-Diff Feedback</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tier-agnostic-action-replay">Tier-Agnostic Action Replay</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-2-tools">Layer 2: <code class="docutils literal notranslate"><span class="pre">tools/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#base-py"><code class="docutils literal notranslate"><span class="pre">base.py</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tool-files">Tool files</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tools-mcp-server-rs">Tools (<code class="docutils literal notranslate"><span class="pre">mcp/server.rs</span></code>)</a></li>
 </ul>
             </nav>
         </div>
@@ -513,291 +497,72 @@
                   
   <section id="computer-tools-layers">
 <h1>Computer &amp; Tools Layers<a class="headerlink" href="#computer-tools-layers" title="Link to this heading">#</a></h1>
-<section id="layer-1-computer">
-<h2>Layer 1: <code class="docutils literal notranslate"><span class="pre">computer/</span></code><a class="headerlink" href="#layer-1-computer" title="Link to this heading">#</a></h2>
-<section id="computer-abc-base-py">
-<h3><code class="docutils literal notranslate"><span class="pre">Computer</span></code> ABC (<code class="docutils literal notranslate"><span class="pre">base.py</span></code>)<a class="headerlink" href="#computer-abc-base-py" title="Link to this heading">#</a></h3>
-<p>The capability surface of a computer. Three kinds of operations:</p>
+<section id="computer">
+<h2><code class="docutils literal notranslate"><span class="pre">computer/</span></code><a class="headerlink" href="#computer" title="Link to this heading">#</a></h2>
+<section id="localcomputer-local-rs">
+<h3><code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">local.rs</span></code>)<a class="headerlink" href="#localcomputer-local-rs" title="Link to this heading">#</a></h3>
+<p>The capability surface of the current machine, built mostly on the <code class="docutils literal notranslate"><span class="pre">xa11y</span></code>
+crate (screen capture, accessibility trees, input simulation) and <code class="docutils literal notranslate"><span class="pre">arboard</span></code>
+(clipboard). Main operations:</p>
 <ul class="simple">
-<li><p><strong>Observe</strong> (one-shot queries): <code class="docutils literal notranslate"><span class="pre">capture</span></code>, <code class="docutils literal notranslate"><span class="pre">cursor_position</span></code>, <code class="docutils literal notranslate"><span class="pre">displays</span></code>,
-<code class="docutils literal notranslate"><span class="pre">windows</span></code>, <code class="docutils literal notranslate"><span class="pre">focused_window</span></code>, <code class="docutils literal notranslate"><span class="pre">ui_tree</span></code>, <code class="docutils literal notranslate"><span class="pre">clipboard_read</span></code>, <code class="docutils literal notranslate"><span class="pre">processes</span></code>,
-<code class="docutils literal notranslate"><span class="pre">environment</span></code>, <code class="docutils literal notranslate"><span class="pre">read_file</span></code>, <code class="docutils literal notranslate"><span class="pre">list_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">stat</span></code>, <code class="docutils literal notranslate"><span class="pre">notifications</span></code>.</p></li>
-<li><p><strong>Act</strong> (one-shot state changes): <code class="docutils literal notranslate"><span class="pre">pointer</span></code>, <code class="docutils literal notranslate"><span class="pre">key</span></code>, <code class="docutils literal notranslate"><span class="pre">text</span></code>, <code class="docutils literal notranslate"><span class="pre">open_app</span></code>,
-<code class="docutils literal notranslate"><span class="pre">close_app</span></code>, <code class="docutils literal notranslate"><span class="pre">focus_app</span></code>, <code class="docutils literal notranslate"><span class="pre">focus_window</span></code>, <code class="docutils literal notranslate"><span class="pre">move_window</span></code>, <code class="docutils literal notranslate"><span class="pre">close_window</span></code>,
-<code class="docutils literal notranslate"><span class="pre">perform_ui_action</span></code>, <code class="docutils literal notranslate"><span class="pre">clipboard_write</span></code>, <code class="docutils literal notranslate"><span class="pre">write_file</span></code>, <code class="docutils literal notranslate"><span class="pre">delete</span></code>, <code class="docutils literal notranslate"><span class="pre">move</span></code>,
-<code class="docutils literal notranslate"><span class="pre">mkdir</span></code>, <code class="docutils literal notranslate"><span class="pre">shell</span></code>, <code class="docutils literal notranslate"><span class="pre">exec</span></code>, <code class="docutils literal notranslate"><span class="pre">lock_screen</span></code>.</p></li>
-<li><p><strong>Subscribe</strong> (server-pushed streams): <code class="docutils literal notranslate"><span class="pre">subscribe_display</span></code>,
-<code class="docutils literal notranslate"><span class="pre">subscribe_input</span></code> — return async iterators.</p></li>
+<li><p><strong>Observe:</strong> <code class="docutils literal notranslate"><span class="pre">screenshot_format</span></code> (PNG/JPEG, optional region),
+<code class="docutils literal notranslate"><span class="pre">cursor_position</span></code>, <code class="docutils literal notranslate"><span class="pre">ui_tree</span></code>, <code class="docutils literal notranslate"><span class="pre">ui_get_value</span></code>, <code class="docutils literal notranslate"><span class="pre">app_list</span></code>, <code class="docutils literal notranslate"><span class="pre">clipboard_read</span></code>.</p></li>
+<li><p><strong>Act:</strong> <code class="docutils literal notranslate"><span class="pre">mouse_move</span></code> / <code class="docutils literal notranslate"><span class="pre">mouse_click</span></code> / <code class="docutils literal notranslate"><span class="pre">mouse_down</span></code> / <code class="docutils literal notranslate"><span class="pre">mouse_up</span></code> /
+<code class="docutils literal notranslate"><span class="pre">mouse_scroll</span></code>, <code class="docutils literal notranslate"><span class="pre">keyboard_type</span></code> / <code class="docutils literal notranslate"><span class="pre">keyboard_press</span></code> / <code class="docutils literal notranslate"><span class="pre">keyboard_hotkey</span></code> /
+<code class="docutils literal notranslate"><span class="pre">keyboard_hold</span></code> / <code class="docutils literal notranslate"><span class="pre">keyboard_sequence</span></code>, <code class="docutils literal notranslate"><span class="pre">ui_click</span></code> / <code class="docutils literal notranslate"><span class="pre">ui_type</span></code>,
+<code class="docutils literal notranslate"><span class="pre">app_open</span></code> / <code class="docutils literal notranslate"><span class="pre">app_close</span></code> / <code class="docutils literal notranslate"><span class="pre">app_focus</span></code>, <code class="docutils literal notranslate"><span class="pre">clipboard_write</span></code>,
+<code class="docutils literal notranslate"><span class="pre">execute_command</span></code> / <code class="docutils literal notranslate"><span class="pre">execute_argv</span></code>.</p></li>
+<li><p><strong>Coordinates:</strong> <code class="docutils literal notranslate"><span class="pre">image_to_screen</span></code> maps a point in the last screenshot onto
+the desktop (including monitors at negative coordinates), which is why the
+<code class="docutils literal notranslate"><span class="pre">mouse</span></code> tool takes screenshot pixels directly.</p></li>
 </ul>
-<p>Plus a sync <code class="docutils literal notranslate"><span class="pre">capabilities()</span></code> returning a <code class="docutils literal notranslate"><span class="pre">CapabilityManifest</span></code> so callers can
-check support before attempting an operation.</p>
-<p>Convenience helpers on top of the abstract primitives: <code class="docutils literal notranslate"><span class="pre">click</span></code>, <code class="docutils literal notranslate"><span class="pre">drag</span></code>,
-<code class="docutils literal notranslate"><span class="pre">scroll</span></code>, <code class="docutils literal notranslate"><span class="pre">press</span></code>, <code class="docutils literal notranslate"><span class="pre">hotkey</span></code>, <code class="docutils literal notranslate"><span class="pre">type_text</span></code>, <code class="docutils literal notranslate"><span class="pre">clipboard_text</span></code> / <code class="docutils literal notranslate"><span class="pre">clipboard_set_text</span></code>.</p>
+<p>On Windows, keyboard input is sent with <code class="docutils literal notranslate"><span class="pre">SendInput</span></code>: text as Unicode packets
+(no clipboard), single characters and chords as real key events resolved on
+the foreground window’s keyboard layout.</p>
 </section>
-<section id="localcomputer-local-py">
-<h3><code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">local.py</span></code>)<a class="headerlink" href="#localcomputer-local-py" title="Link to this heading">#</a></h3>
-<p>Concrete implementation for the current machine. Wraps the existing screen
-capture (mss), accessibility backends (AppleScript / AT-SPI2 / UI Automation),
-input (pyautogui), and filesystem / process primitives. All blocking I/O
-runs in <code class="docutils literal notranslate"><span class="pre">asyncio.to_thread</span></code>.</p>
-</section>
-<section id="remotecomputer-remote-py">
-<h3><code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">remote.py</span></code>)<a class="headerlink" href="#remotecomputer-remote-py" title="Link to this heading">#</a></h3>
-<p>Implements the same <code class="docutils literal notranslate"><span class="pre">Computer</span></code> ABC by forwarding every call to a
-<code class="docutils literal notranslate"><span class="pre">Peer</span></code>. Each abstract method serialises params, awaits
-<code class="docutils literal notranslate"><span class="pre">peer.call(method,</span> <span class="pre">params)</span></code>, and validates the result back into a Pydantic
-model. Subscriptions return async iterators backed by <code class="docutils literal notranslate"><span class="pre">peer.stream(...)</span></code>.</p>
-<p><code class="docutils literal notranslate"><span class="pre">capabilities()</span></code> is synchronous (per the ABC) and served from the manifest
-cached during the HELLO handshake — no round-trip.</p>
-</section>
-<section id="computerdispatcher-dispatcher-py">
-<h3><code class="docutils literal notranslate"><span class="pre">ComputerDispatcher</span></code> (<code class="docutils literal notranslate"><span class="pre">dispatcher.py</span></code>)<a class="headerlink" href="#computerdispatcher-dispatcher-py" title="Link to this heading">#</a></h3>
-<p>Server-side router. Implements the protocol’s <code class="docutils literal notranslate"><span class="pre">Dispatcher</span></code> Protocol by
-mapping each method name (<code class="docutils literal notranslate"><span class="pre">display.capture</span></code>, <code class="docutils literal notranslate"><span class="pre">input.pointer</span></code>, …) to the
-matching <code class="docutils literal notranslate"><span class="pre">Computer</span></code> method, with Pydantic de/serialisation at the boundary.</p>
-</section>
-<section id="types-py">
-<h3><code class="docutils literal notranslate"><span class="pre">types.py</span></code><a class="headerlink" href="#types-py" title="Link to this heading">#</a></h3>
-<p>Pydantic value types exchanged across the boundary: <code class="docutils literal notranslate"><span class="pre">Point</span></code>, <code class="docutils literal notranslate"><span class="pre">Rect</span></code>,
-<code class="docutils literal notranslate"><span class="pre">Pixmap</span></code> (with built-in pixel ↔ logical coordinate translation), <code class="docutils literal notranslate"><span class="pre">Display</span></code>,
-<code class="docutils literal notranslate"><span class="pre">Window</span></code>, <code class="docutils literal notranslate"><span class="pre">Process</span></code>, <code class="docutils literal notranslate"><span class="pre">UIElement</span></code>, <code class="docutils literal notranslate"><span class="pre">PointerEvent</span></code>, <code class="docutils literal notranslate"><span class="pre">KeyEvent</span></code>,
-<code class="docutils literal notranslate"><span class="pre">ClipboardContents</span></code>, <code class="docutils literal notranslate"><span class="pre">FileEntry</span></code>, <code class="docutils literal notranslate"><span class="pre">CompletedCommand</span></code>, <code class="docutils literal notranslate"><span class="pre">Environment</span></code>,
-<code class="docutils literal notranslate"><span class="pre">Notification</span></code>, the <code class="docutils literal notranslate"><span class="pre">Capability</span></code> enum, and the <code class="docutils literal notranslate"><span class="pre">CapabilityManifest</span></code>.</p>
-</section>
-<section id="auxiliary-modules">
-<h3>Auxiliary modules<a class="headerlink" href="#auxiliary-modules" title="Link to this heading">#</a></h3>
+<section id="helpers">
+<h3>Helpers<a class="headerlink" href="#helpers" title="Link to this heading">#</a></h3>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">capture.py</span></code> — mss-based screen capture. Wider-than-1920 displays are
-downscaled; the resulting <code class="docutils literal notranslate"><span class="pre">Pixmap</span></code> always carries the true logical screen
-dimensions so coordinates translate cleanly.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">marks.py</span></code> — Set-of-Marks rendering helpers (<code class="docutils literal notranslate"><span class="pre">draw_som_marks</span></code>,
-<code class="docutils literal notranslate"><span class="pre">overlay_cursor</span></code>). The element list is now produced by <code class="docutils literal notranslate"><span class="pre">Computer.ui_tree()</span></code>
-rather than by a separate accessibility query.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">ocr.py</span></code> — <code class="docutils literal notranslate"><span class="pre">ocr_image(png_bytes)</span></code> runs the best available OCR backend
-(pytesseract → macOS Vision → WinRT OCR). Decoupled from capture so it
-works on a <code class="docutils literal notranslate"><span class="pre">Pixmap</span></code> from any Computer, including a remote one.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">sandbox.py</span></code> — per-session audit log used by tools that record actions.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">keys.rs</span></code> — chord parsing (<code class="docutils literal notranslate"><span class="pre">split_chord</span></code>: <code class="docutils literal notranslate"><span class="pre">+</span></code> separator, so <code class="docutils literal notranslate"><span class="pre">ctrl+-</span></code> and
+<code class="docutils literal notranslate"><span class="pre">ctrl++</span></code> work) and layout lookup (<code class="docutils literal notranslate"><span class="pre">layout_key</span></code>, Windows).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">foreground.rs</span></code> — the foreground window (Windows) and <code class="docutils literal notranslate"><span class="pre">WindowGuard</span></code>, the
+check behind the <code class="docutils literal notranslate"><span class="pre">guard</span></code> argument and <code class="docutils literal notranslate"><span class="pre">opendesk_guard</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">process.rs</span></code> — command execution with a timeout that kills the whole
+process tree (Job Object on Windows, process group on Unix) and keeps the
+output printed so far.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">privacy.rs</span></code> — physical input lock and blackout curtain for
+<code class="docutils literal notranslate"><span class="pre">opendesk_privacy</span></code> (remote peers only).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">permissions.rs</span></code> — macOS Accessibility / Screen Recording checks
+(<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">check</span></code>).</p></li>
 </ul>
+</section>
+<section id="remotecomputer-remote-client-rs">
+<h3><code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">remote/client.rs</span></code>)<a class="headerlink" href="#remotecomputer-remote-client-rs" title="Link to this heading">#</a></h3>
+<p>Mirrors the <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> operations as async methods that send a protocol
+request (<code class="docutils literal notranslate"><span class="pre">display.capture</span></code>, <code class="docutils literal notranslate"><span class="pre">input.pointer</span></code>, <code class="docutils literal notranslate"><span class="pre">input.key</span></code>, …) to the peer and
+decode the result. It carries the session’s input guard and attaches it to
+<code class="docutils literal notranslate"><span class="pre">input.*</span></code> calls so the peer checks its own foreground window.</p>
+</section>
+<section id="server-side-dispatch-remote-server-rs">
+<h3>Server-side dispatch (<code class="docutils literal notranslate"><span class="pre">remote/server.rs</span></code>)<a class="headerlink" href="#server-side-dispatch-remote-server-rs" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">dispatch_call(computer,</span> <span class="pre">method,</span> <span class="pre">params)</span></code> maps each method name to the
+matching <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> call. See
+<a class="reference internal" href="../protocol/session.html"><span class="std std-doc">Session &amp; Methods</span></a> for the method list.</p>
 </section>
 </section>
 <hr class="docutils" />
-<section id="computer-use-three-tier-grounding-architecture">
-<h2>Computer Use: Three-Tier Grounding Architecture<a class="headerlink" href="#computer-use-three-tier-grounding-architecture" title="Link to this heading">#</a></h2>
-<p>All computer-use interaction follows a strict three-tier hierarchy. The tier
-priority is encoded directly in tool descriptions, so any model that reads
-the tool list follows it without a separate orchestration layer.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Tier 1: Semantic AX  ──(element not found)──►  Tier 2: Grounded SoM  ──(AX tree empty)──►  Tier 3: Raw Pixel
-</pre></div>
-</div>
-<p>Every action at any tier is followed by an automatic per-action pixel-diff
-against the prior screenshot — a free feedback signal that tells the model
-whether its action had any visual effect.</p>
-<section id="tier-1-semantic-accessibility-grounding">
-<h3>Tier 1 — Semantic Accessibility Grounding<a class="headerlink" href="#tier-1-semantic-accessibility-grounding" title="Link to this heading">#</a></h3>
-<p>The <code class="docutils literal notranslate"><span class="pre">ui</span></code> tool finds elements by <code class="docutils literal notranslate"><span class="pre">title</span></code> and <code class="docutils literal notranslate"><span class="pre">role</span></code> via the platform
-accessibility API and acts on them directly. No pixel coordinates are
-involved at any point.</p>
-<p>The tool performs a depth-first search over <code class="docutils literal notranslate"><span class="pre">Computer.ui_tree()</span></code>, matching
-case-insensitively and by substring. When a match is found:</p>
-<ul class="simple">
-<li><p><strong>macOS</strong>: <code class="docutils literal notranslate"><span class="pre">click</span> <span class="pre">elem</span></code> via System Events AppleScript, with a bounds clause
-to disambiguate multiple controls sharing a label.</p></li>
-<li><p><strong>Linux</strong>: <code class="docutils literal notranslate"><span class="pre">doAction(&quot;click&quot;)</span></code> via AT-SPI2.</p></li>
-<li><p><strong>Windows</strong>: <code class="docutils literal notranslate"><span class="pre">click_input()</span></code> via UI Automation / pywinauto.</p></li>
-</ul>
-<p>If the backend does not support native actions, the tool falls back to a
-pointer click at <code class="docutils literal notranslate"><span class="pre">element.bounds.center</span></code> — still Tier 1, because the
-coordinate comes from the accessibility tree, not from the model.</p>
-<p><strong>Key property</strong>: resolution-independent. Element positions are in logical
-pixels from the OS and are invariant to DPI, window position, and app version.</p>
-</section>
-<section id="tier-2-grounded-set-of-marks-som">
-<h3>Tier 2 — Grounded Set-of-Marks (SoM)<a class="headerlink" href="#tier-2-grounded-set-of-marks-som" title="Link to this heading">#</a></h3>
-<p>When Tier 1 cannot find a named element but the AX tree is non-empty, the
-model calls <code class="docutils literal notranslate"><span class="pre">screenshot(marks=True)</span></code>. The pipeline:</p>
-<ol class="arabic simple">
-<li><p>Capture screen via <code class="docutils literal notranslate"><span class="pre">mss</span></code>, downscale to ≤ 1920 px (LANCZOS), record
-scale factors <code class="docutils literal notranslate"><span class="pre">sx</span> <span class="pre">=</span> <span class="pre">W_img</span> <span class="pre">/</span> <span class="pre">W_logical</span></code>, <code class="docutils literal notranslate"><span class="pre">sy</span> <span class="pre">=</span> <span class="pre">H_img</span> <span class="pre">/</span> <span class="pre">H_logical</span></code>.</p></li>
-<li><p>Query the same AX backend as Tier 1 for all interactive elements with
-their logical bounding boxes.</p></li>
-<li><p>Project each bounding box into image pixels:
-<code class="docutils literal notranslate"><span class="pre">x_img</span> <span class="pre">=</span> <span class="pre">floor(x_logical</span> <span class="pre">×</span> <span class="pre">sx)</span></code>, <code class="docutils literal notranslate"><span class="pre">y_img</span> <span class="pre">=</span> <span class="pre">floor(y_logical</span> <span class="pre">×</span> <span class="pre">sy)</span></code>.</p></li>
-<li><p>Render numbered, colored bounding-box chips onto the image via Pillow.</p></li>
-<li><p>Return the annotated PNG <strong>and</strong> a text index:
-<code class="docutils literal notranslate"><span class="pre">[3]</span> <span class="pre">AXButton</span> <span class="pre">&quot;Save&quot;</span> <span class="pre">at</span> <span class="pre">(120,340)</span> <span class="pre">80×30</span> <span class="pre">—</span> <span class="pre">click</span> <span class="pre">mark</span> <span class="pre">3</span> <span class="pre">to</span> <span class="pre">interact</span></code>.</p></li>
-</ol>
-<p>The model picks a mark by index. The system maps the index back to the
-element’s logical center and issues the click — no model coordinate
-estimation occurs.</p>
-<p><strong>Why “grounded” matters</strong>: marks come from the AX tree, so each mark is a
-platform-confirmed interactive control. False-positive rate is zero by
-construction, unlike vision-detector-based SoM (e.g. OmniParser).</p>
-</section>
-<section id="tier-3-raw-pixel-mouse-control">
-<h3>Tier 3 — Raw Pixel Mouse Control<a class="headerlink" href="#tier-3-raw-pixel-mouse-control" title="Link to this heading">#</a></h3>
-<p>Used only when the AX tree is empty (games, canvas apps, custom-rendered
-surfaces). The model reads coordinates from an unannotated screenshot and
-passes <code class="docutils literal notranslate"><span class="pre">image_width</span></code> / <code class="docutils literal notranslate"><span class="pre">image_height</span></code> with every click. The mouse tool
-normalizes those back to logical pixels before issuing the pointer event
-(see Retina normalization below).</p>
-</section>
-<section id="unified-element-schema">
-<h3>Unified Element Schema<a class="headerlink" href="#unified-element-schema" title="Link to this heading">#</a></h3>
-<p>All three platform backends produce a flat list of dicts with a single schema:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>{ mark, role, label, x, y, w, h }   ← all in logical screen pixels
-</pre></div>
-</div>
-<p>The SoM renderer, element search, click dispatch, replay engine, and
-pixel-diff feedback are all platform-agnostic above this contract.</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Platform</p></th>
-<th class="head"><p>API</p></th>
-<th class="head"><p>Element limit</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>macOS</p></td>
-<td><p>AppleScript / System Events</p></td>
-<td><p>120 per window</p></td>
-</tr>
-<tr class="row-odd"><td><p>Linux</p></td>
-<td><p>AT-SPI2 (<code class="docutils literal notranslate"><span class="pre">pyatspi</span></code>)</p></td>
-<td><p>150, depth ≤ 8</p></td>
-</tr>
-<tr class="row-even"><td><p>Windows</p></td>
-<td><p>UI Automation (<code class="docutils literal notranslate"><span class="pre">pywinauto</span></code>)</p></td>
-<td><p>150</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="retina-hidpi-coordinate-normalization">
-<h3>Retina / HiDPI Coordinate Normalization<a class="headerlink" href="#retina-hidpi-coordinate-normalization" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">mss</span></code> captures at physical resolution (e.g. 2880×1800 on a 2× Retina Mac).
-The OS pointer API operates in logical pixels (e.g. 1440×900). Passing
-physical-pixel image coordinates directly to the pointer API produces clicks
-at 2× the intended position.</p>
-<p><code class="docutils literal notranslate"><span class="pre">Pixmap</span></code> carries four dimension fields: <code class="docutils literal notranslate"><span class="pre">width</span></code>, <code class="docutils literal notranslate"><span class="pre">height</span></code> (image after
-downscaling), <code class="docutils literal notranslate"><span class="pre">logical_width</span></code>, <code class="docutils literal notranslate"><span class="pre">logical_height</span></code> (from OS display API).
-Scale factors <code class="docutils literal notranslate"><span class="pre">sx</span></code> and <code class="docutils literal notranslate"><span class="pre">sy</span></code> are pre-computed and used in two places:</p>
-<ul class="simple">
-<li><p><strong>SoM rendering</strong>: logical AX coordinates scaled up to image pixels for chip placement.</p></li>
-<li><p><strong>Mouse tool</strong>: image coordinates from the model scaled back down:
-<code class="docutils literal notranslate"><span class="pre">x_logical</span> <span class="pre">=</span> <span class="pre">floor(x_img</span> <span class="pre">/</span> <span class="pre">sx)</span></code>, <code class="docutils literal notranslate"><span class="pre">y_logical</span> <span class="pre">=</span> <span class="pre">floor(y_img</span> <span class="pre">/</span> <span class="pre">sy)</span></code>.</p></li>
-</ul>
-<p>A 2% no-op band skips scaling when image and logical dimensions effectively
-match, avoiding rounding artefacts at unity scale.</p>
-</section>
-<section id="per-action-pixel-diff-feedback">
-<h3>Per-Action Pixel-Diff Feedback<a class="headerlink" href="#per-action-pixel-diff-feedback" title="Link to this heading">#</a></h3>
-<p>After every screenshot, <code class="docutils literal notranslate"><span class="pre">capture.py</span></code> pixel-diffs the new capture against the
-previous one using a per-channel absolute-difference threshold of 10 intensity
-units (to filter compression noise). The result is a structured report
-appended to every screenshot tool output:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">changed</span><span class="p">:</span> <span class="nb">bool</span>
-<span class="n">change_fraction</span><span class="p">:</span> <span class="nb">float</span>       <span class="c1"># 0.0–1.0</span>
-<span class="n">changed_region</span><span class="p">:</span> <span class="p">[</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">h</span><span class="p">]</span> <span class="c1"># bounding box of changed pixels</span>
-<span class="n">summary</span><span class="p">:</span> <span class="nb">str</span>                  <span class="c1"># natural-language signal for the model</span>
-</pre></div>
-</div>
-<p>Example outputs:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>12.3% of pixels changed in region [x=400, y=200, 600×300px].
-No visible change detected — the action may not have had any effect.
-</pre></div>
-</div>
-<p>This closes the perception loop per-action, in tens of milliseconds, with no
-VLM call. The model can immediately detect ineffective actions and re-plan
-(retry via a different tier, adjust parameters, or check focus).</p>
-</section>
-<section id="tier-agnostic-action-replay">
-<h3>Tier-Agnostic Action Replay<a class="headerlink" href="#tier-agnostic-action-replay" title="Link to this heading">#</a></h3>
-<p>Every action — regardless of which tier executed it — is recorded with two
-parameter dicts:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">params</span></code> — human-readable summary for the audit display.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">replay_params</span></code> — complete, platform-neutral parameter set for re-execution.</p></li>
-</ul>
-<p>A Tier 1 (semantic AX) action records <code class="docutils literal notranslate"><span class="pre">{action,</span> <span class="pre">app,</span> <span class="pre">title,</span> <span class="pre">role,</span> <span class="pre">...}</span></code>.
-A Tier 2/3 (pixel) action records <code class="docutils literal notranslate"><span class="pre">{action,</span> <span class="pre">x,</span> <span class="pre">y,</span> <span class="pre">image_width,</span> <span class="pre">image_height,</span> <span class="pre">...}</span></code>.</p>
-<p>The replay engine re-issues the action through the same tool interface without
-needing the original screenshot, the original AX tree, or the original
-tier-selection decision.</p>
-</section>
-</section>
-<hr class="docutils" />
-<section id="layer-2-tools">
-<h2>Layer 2: <code class="docutils literal notranslate"><span class="pre">tools/</span></code><a class="headerlink" href="#layer-2-tools" title="Link to this heading">#</a></h2>
-<section id="base-py">
-<h3><code class="docutils literal notranslate"><span class="pre">base.py</span></code><a class="headerlink" href="#base-py" title="Link to this heading">#</a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>ToolResult      — title, output, error, attachments, metadata
-Attachment      — filename, content (bytes), media_type
-ToolContext     — session_id, permission_handler, computer
-Tool            — ABC: name, description, Params (Pydantic), execute()
-</pre></div>
-</div>
-<p>The crucial field on <code class="docutils literal notranslate"><span class="pre">ToolContext</span></code> is <strong><code class="docutils literal notranslate"><span class="pre">computer:</span> <span class="pre">Computer</span></code></strong> — every tool
-calls <code class="docutils literal notranslate"><span class="pre">ctx.computer.X(...)</span></code> instead of poking pyautogui / AppleScript
-directly. Swap in a <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> and the same tool runs against another
-machine with zero code changes.</p>
-<p><code class="docutils literal notranslate"><span class="pre">ToolContext.check_permission(tool,</span> <span class="pre">argument,</span> <span class="pre">description)</span></code> calls the
-injected handler before every action. Raise <code class="docutils literal notranslate"><span class="pre">PermissionDeniedError</span></code> to block.</p>
-</section>
-<section id="tool-files">
-<h3>Tool files<a class="headerlink" href="#tool-files" title="Link to this heading">#</a></h3>
-<p>Each file contains one <code class="docutils literal notranslate"><span class="pre">Tool</span></code> subclass. None of them open subprocesses or
-poke OS APIs directly — they always go through <code class="docutils literal notranslate"><span class="pre">ctx.computer</span></code>.</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>File</p></th>
-<th class="head"><p>Class</p></th>
-<th class="head"><p>What it does</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">screenshot.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ScreenshotTool</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ctx.computer.capture()</span></code> + optional SoM marks via <code class="docutils literal notranslate"><span class="pre">ui_tree()</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mouse.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">MouseTool</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ctx.computer.click/drag/scroll</span></code> with image→logical coord translation</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">keyboard.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">KeyboardTool</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ctx.computer.text/press/hotkey</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ui.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">UITool</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ctx.computer.ui_tree()</span></code> + <code class="docutils literal notranslate"><span class="pre">perform_ui_action</span></code> (or bounds-center fallback)</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">app.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">AppTool</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ctx.computer.open_app/close_app/focus_app/list_apps</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">clipboard.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ClipboardTool</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ctx.computer.clipboard_read/clipboard_write</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ocr.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">OCRTool</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ctx.computer.capture()</span></code> → <code class="docutils literal notranslate"><span class="pre">ocr_image(pixmap.data)</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">automation.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">LearnTool</span></code>, <code class="docutils literal notranslate"><span class="pre">ScheduleTool</span></code></p></td>
-<td><p>Local session state; never remoted</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">audit.py</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">AuditTool</span></code></p></td>
-<td><p>Local audit log; never remoted</p></td>
-</tr>
-</tbody>
-</table>
-</div>
+<section id="tools-mcp-server-rs">
+<h2>Tools (<code class="docutils literal notranslate"><span class="pre">mcp/server.rs</span></code>)<a class="headerlink" href="#tools-mcp-server-rs" title="Link to this heading">#</a></h2>
+<p>There is no separate tool layer or tool trait: each MCP tool is a <code class="docutils literal notranslate"><span class="pre">match</span></code>
+arm in <code class="docutils literal notranslate"><span class="pre">McpServer::call_tool</span></code>, with a local branch (calls <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code>)
+and a remote branch (calls <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code>). <code class="docutils literal notranslate"><span class="pre">list_tools</span></code> returns the JSON
+schemas. Tools that are always local: <code class="docutils literal notranslate"><span class="pre">audit</span></code> (reads the server-side audit
+log), <code class="docutils literal notranslate"><span class="pre">learn</span></code> (<code class="docutils literal notranslate"><span class="pre">~/.opendesk/procedures/</span></code>), <code class="docutils literal notranslate"><span class="pre">schedule</span></code>
+(<code class="docutils literal notranslate"><span class="pre">automation/scheduler.rs</span></code>, <code class="docutils literal notranslate"><span class="pre">&lt;cwd&gt;/.opendesk/schedules.json</span></code>).</p>
+<p>Not present in the Rust version: Set-of-Marks screenshots, pixel-diff
+feedback, OCR, input recording, and action replay.</p>
 <hr class="docutils" />
 <p>Next: <a class="reference internal" href="protocol-layer.html"><span class="std std-doc">Protocol Layer →</span></a></p>
-</section>
 </section>
 </section>
 
@@ -848,30 +613,14 @@ poke OS APIs directly — they always go through <code class="docutils literal n
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-1-computer">Layer 1: <code class="docutils literal notranslate"><span class="pre">computer/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#computer-abc-base-py"><code class="docutils literal notranslate"><span class="pre">Computer</span></code> ABC (<code class="docutils literal notranslate"><span class="pre">base.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#localcomputer-local-py"><code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">local.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#remotecomputer-remote-py"><code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">remote.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#computerdispatcher-dispatcher-py"><code class="docutils literal notranslate"><span class="pre">ComputerDispatcher</span></code> (<code class="docutils literal notranslate"><span class="pre">dispatcher.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#types-py"><code class="docutils literal notranslate"><span class="pre">types.py</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#auxiliary-modules">Auxiliary modules</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#computer"><code class="docutils literal notranslate"><span class="pre">computer/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#localcomputer-local-rs"><code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">local.rs</span></code>)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#helpers">Helpers</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#remotecomputer-remote-client-rs"><code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">remote/client.rs</span></code>)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#server-side-dispatch-remote-server-rs">Server-side dispatch (<code class="docutils literal notranslate"><span class="pre">remote/server.rs</span></code>)</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#computer-use-three-tier-grounding-architecture">Computer Use: Three-Tier Grounding Architecture</a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tier-1-semantic-accessibility-grounding">Tier 1 — Semantic Accessibility Grounding</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tier-2-grounded-set-of-marks-som">Tier 2 — Grounded Set-of-Marks (SoM)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tier-3-raw-pixel-mouse-control">Tier 3 — Raw Pixel Mouse Control</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#unified-element-schema">Unified Element Schema</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#retina-hidpi-coordinate-normalization">Retina / HiDPI Coordinate Normalization</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-action-pixel-diff-feedback">Per-Action Pixel-Diff Feedback</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tier-agnostic-action-replay">Tier-Agnostic Action Replay</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-2-tools">Layer 2: <code class="docutils literal notranslate"><span class="pre">tools/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#base-py"><code class="docutils literal notranslate"><span class="pre">base.py</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tool-files">Tool files</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tools-mcp-server-rs">Tools (<code class="docutils literal notranslate"><span class="pre">mcp/server.rs</span></code>)</a></li>
 </ul>
   </nav></div>
 

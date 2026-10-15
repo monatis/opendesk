@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -476,7 +476,13 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#toolresult">ToolResult</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#routing-the-peer-argument">Routing: the <code class="docutils literal notranslate"><span class="pre">peer</span></code> argument</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#input-guard">Input guard</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opendesk-exec"><code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#waiting-for-the-ui-opendesk-wait-and-opendesk-events">Waiting for the UI: <code class="docutils literal notranslate"><span class="pre">opendesk_wait</span></code> and <code class="docutils literal notranslate"><span class="pre">opendesk_events</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#peer-environment-opendesk-capabilities">Peer environment: <code class="docutils literal notranslate"><span class="pre">opendesk_capabilities</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#file-transfer-opendesk-file">File transfer: <code class="docutils literal notranslate"><span class="pre">opendesk_file</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-jobs-opendesk-exec-with-background-true-and-opendesk-job">Background jobs: <code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code> with <code class="docutils literal notranslate"><span class="pre">background:</span> <span class="pre">true</span></code>, and <code class="docutils literal notranslate"><span class="pre">opendesk_job</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -490,8 +496,13 @@
                   
   <section id="tools-reference">
 <h1>Tools Reference<a class="headerlink" href="#tools-reference" title="Link to this heading">#</a></h1>
-<p>All tools share the same interface: <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">tool.execute(ctx,</span> <span class="pre">params)</span> <span class="pre">-&gt;</span> <span class="pre">ToolResult</span></code>.</p>
-<p><strong>Tool priority rule:</strong> <code class="docutils literal notranslate"><span class="pre">ui</span></code> → <code class="docutils literal notranslate"><span class="pre">screenshot(marks=True)</span></code> → <code class="docutils literal notranslate"><span class="pre">mouse</span></code> with image dimensions.</p>
+<p>These are the tools the <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> server (and <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">mcp</span></code>) exposes over
+MCP. They are defined in <code class="docutils literal notranslate"><span class="pre">opendesk-rs/src/mcp/server.rs</span></code> (<code class="docutils literal notranslate"><span class="pre">list_tools</span></code>). There
+is no in-process tool API to import: agents call the tools over MCP, and Rust
+programs can use the <code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code> crate directly (see
+<a class="reference internal" href="../remote/programmatic.html"><span class="std std-doc">Programmatic Use</span></a>).</p>
+<p><strong>Tool priority rule:</strong> <code class="docutils literal notranslate"><span class="pre">ui</span></code> first; <code class="docutils literal notranslate"><span class="pre">screenshot</span></code> + <code class="docutils literal notranslate"><span class="pre">mouse</span></code> for surfaces with no
+accessible elements.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Tool</p></th>
@@ -500,16 +511,16 @@
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="ui.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">ui</span></code></span></a></p></td>
-<td><p>Accessibility-based UI interaction — click by name, type, read values</p></td>
+<td><p>Accessibility-based UI interaction: list elements, click by name, type, read values</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="screenshot.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">screenshot</span></code></span></a></p></td>
-<td><p>Screen capture with optional Set-of-Marks overlay</p></td>
+<td><p>Screen capture (PNG or JPEG), optional region / zoom</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="mouse.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">mouse</span></code></span></a></p></td>
-<td><p>Pixel-level mouse control with HiDPI coordinate translation</p></td>
+<td><p>Pixel-level mouse control using screenshot coordinates</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="keyboard.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">keyboard</span></code></span></a></p></td>
-<td><p>Type text, press keys, send hotkeys</p></td>
+<td><p>Type text, press keys and chords, hold keys, timed sequences</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="app.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">app</span></code></span></a></p></td>
 <td><p>Open, close, focus, and list applications</p></td>
@@ -517,43 +528,168 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="clipboard.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code></span></a></p></td>
 <td><p>Read and write clipboard text</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="ocr.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">ocr</span></code></span></a></p></td>
-<td><p>Extract text from any screen region</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code></p></td>
+<td><p>Run a shell command on the target machine (see below)</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="audit.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">audit</span></code></span></a></p></td>
-<td><p>Read the session audit log</p></td>
+<td><p>Show this machine’s server-side audit log</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="learn.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">learn</span></code></span></a></p></td>
-<td><p>Record and replay desktop workflows</p></td>
+<td><p>Save and replay written procedures</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">schedule</span></code></p></td>
+<td><p>Store named schedules (see <a class="reference internal" href="../automation/scheduler.html"><span class="std std-doc">Scheduler</span></a>)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="ocr.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">ocr</span></code></span></a></p></td>
+<td><p>Not available in the Rust version</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>Admin tools (<code class="docutils literal notranslate"><span class="pre">opendesk_peers</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_use</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_status</span></code>,
+<code class="docutils literal notranslate"><span class="pre">opendesk_discover</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_describe</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_capabilities</span></code>,
+<code class="docutils literal notranslate"><span class="pre">opendesk_disconnect</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_guard</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_privacy</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_view</span></code>)
+are described in <a class="reference internal" href="../remote/mcp.html"><span class="std std-doc">Remote: MCP Integration</span></a>.</p>
 <hr class="docutils" />
-<section id="toolresult">
-<h2>ToolResult<a class="headerlink" href="#toolresult" title="Link to this heading">#</a></h2>
-<p>All tools return:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">ToolResult</span><span class="p">:</span>
-    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>           <span class="c1"># short human-readable label</span>
-    <span class="n">output</span><span class="p">:</span> <span class="nb">str</span>          <span class="c1"># text returned to the LLM</span>
-    <span class="n">error</span><span class="p">:</span> <span class="nb">bool</span>          <span class="c1"># True if the action failed</span>
-    <span class="n">attachments</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Attachment</span><span class="p">]</span>  <span class="c1"># binary files (screenshots, etc.)</span>
-    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span>       <span class="c1"># extra data for programmatic consumers</span>
+<section id="routing-the-peer-argument">
+<h2>Routing: the <code class="docutils literal notranslate"><span class="pre">peer</span></code> argument<a class="headerlink" href="#routing-the-peer-argument" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">screenshot</span></code>, <code class="docutils literal notranslate"><span class="pre">mouse</span></code>, <code class="docutils literal notranslate"><span class="pre">keyboard</span></code>, <code class="docutils literal notranslate"><span class="pre">app</span></code>, <code class="docutils literal notranslate"><span class="pre">ui</span></code>, <code class="docutils literal notranslate"><span class="pre">clipboard</span></code> and <code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code>
+accept an optional <code class="docutils literal notranslate"><span class="pre">peer</span></code> string. Without it, the call goes to the session’s
+default peer (<code class="docutils literal notranslate"><span class="pre">opendesk_use</span></code>, then the persistent default from
+<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">peers</span> <span class="pre">default</span></code>, then <code class="docutils literal notranslate"><span class="pre">local</span></code>). <code class="docutils literal notranslate"><span class="pre">audit</span></code>, <code class="docutils literal notranslate"><span class="pre">learn</span></code> and <code class="docutils literal notranslate"><span class="pre">schedule</span></code> always
+run on the machine hosting the MCP server.</p>
+</section>
+<section id="input-guard">
+<h2>Input guard<a class="headerlink" href="#input-guard" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">mouse</span></code> and <code class="docutils literal notranslate"><span class="pre">keyboard</span></code> accept an optional <code class="docutils literal notranslate"><span class="pre">guard</span></code> object:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"type"</span><span class="p">,</span><span class="w"> </span><span class="nt">"text"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hello"</span><span class="p">,</span><span class="w"> </span><span class="nt">"guard"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"process"</span><span class="p">:</span><span class="w"> </span><span class="s2">"notepad"</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">Attachment</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Attachment</span><span class="p">:</span>
-    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">content</span><span class="p">:</span> <span class="nb">bytes</span>
-    <span class="n">media_type</span><span class="p">:</span> <span class="nb">str</span>      <span class="c1"># e.g. "image/png"</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">to_base64</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>
-</pre></div>
+<p><code class="docutils literal notranslate"><span class="pre">title</span></code> is a case-insensitive substring of the foreground window title;
+<code class="docutils literal notranslate"><span class="pre">process</span></code> is the executable name (with or without <code class="docutils literal notranslate"><span class="pre">.exe</span></code>). The check runs on
+the machine receiving the input, right before it is sent. If the foreground
+window does not match, the call fails with <code class="docutils literal notranslate"><span class="pre">input</span> <span class="pre">refused:</span> <span class="pre">...</span></code> and nothing is
+typed or clicked. <code class="docutils literal notranslate"><span class="pre">opendesk_guard</span></code> (<code class="docutils literal notranslate"><span class="pre">action</span></code>: <code class="docutils literal notranslate"><span class="pre">set</span></code> / <code class="docutils literal notranslate"><span class="pre">clear</span></code> / <code class="docutils literal notranslate"><span class="pre">show</span></code>, plus
+<code class="docutils literal notranslate"><span class="pre">title</span></code> / <code class="docutils literal notranslate"><span class="pre">process</span></code>) sets a session default that applies to every <code class="docutils literal notranslate"><span class="pre">mouse</span></code> and
+<code class="docutils literal notranslate"><span class="pre">keyboard</span></code> call, local or remote; a per-call <code class="docutils literal notranslate"><span class="pre">guard</span></code> overrides it.</p>
+<p>Foreground-window detection is implemented for Windows only. On other
+platforms the foreground window cannot be determined, so any non-empty guard
+refuses input.</p>
+</section>
+<section id="opendesk-exec">
+<h2><code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code><a class="headerlink" href="#opendesk-exec" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">command</span></code></p></td>
+<td><p>string</p></td>
+<td><p>required</p></td>
+<td><p>Command string to execute</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">shell</span></code></p></td>
+<td><p>string</p></td>
+<td><p>PowerShell on Windows, <code class="docutils literal notranslate"><span class="pre">sh</span></code> elsewhere</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">powershell</span></code>, <code class="docutils literal notranslate"><span class="pre">cmd</span></code>, <code class="docutils literal notranslate"><span class="pre">bash</span></code>, or <code class="docutils literal notranslate"><span class="pre">sh</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">timeout_secs</span></code></p></td>
+<td><p>number</p></td>
+<td><p>30</p></td>
+<td><p>Rounded up to whole seconds</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">peer</span></code></p></td>
+<td><p>string</p></td>
+<td><p>default peer</p></td>
+<td><p>Where to run it</p></td>
+</tr>
+</tbody>
+</table>
 </div>
+<p>The result reports the exit code, stdout and stderr. On timeout the whole
+process tree is killed (a Job Object on Windows, a process group on Unix), and
+the output collected so far is returned with the status
+<code class="docutils literal notranslate"><span class="pre">TIMED</span> <span class="pre">OUT</span> <span class="pre">(process</span> <span class="pre">tree</span> <span class="pre">killed;</span> <span class="pre">output</span> <span class="pre">below</span> <span class="pre">is</span> <span class="pre">partial)</span></code>.</p>
+<p>The CLI equivalent is <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">exec</span> <span class="pre">COMMAND</span> <span class="pre">[--peer</span> <span class="pre">NAME]</span> <span class="pre">[--shell</span> <span class="pre">SH]</span> <span class="pre">[--timeout</span> <span class="pre">S]</span></code>, or <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">exec</span> <span class="pre">--file</span> <span class="pre">script.ps1</span> <span class="pre">...</span></code> to send the contents
+of a local script file instead (this sidesteps quoting in the local shell).
+The CLI exits with the command’s exit code, or <code class="docutils literal notranslate"><span class="pre">124</span></code> on timeout.</p>
 <hr class="docutils" />
 <p>Start with the primary interaction tool: <a class="reference internal" href="ui.html"><span class="std std-doc">ui →</span></a></p>
+</section>
+<section id="waiting-for-the-ui-opendesk-wait-and-opendesk-events">
+<h2>Waiting for the UI: <code class="docutils literal notranslate"><span class="pre">opendesk_wait</span></code> and <code class="docutils literal notranslate"><span class="pre">opendesk_events</span></code><a class="headerlink" href="#waiting-for-the-ui-opendesk-wait-and-opendesk-events" title="Link to this heading">#</a></h2>
+<p>Instead of sleeping a fixed time after an action, wait for its effect.</p>
+<p><code class="docutils literal notranslate"><span class="pre">opendesk_wait</span></code> blocks until an element reaches a state, then returns the
+element and how long it took; it fails after <code class="docutils literal notranslate"><span class="pre">timeout_secs</span></code> (default 10,
+max 120). States: <code class="docutils literal notranslate"><span class="pre">attached</span></code>, <code class="docutils literal notranslate"><span class="pre">detached</span></code>, <code class="docutils literal notranslate"><span class="pre">visible</span></code>, <code class="docutils literal notranslate"><span class="pre">hidden</span></code>, <code class="docutils literal notranslate"><span class="pre">enabled</span></code>,
+<code class="docutils literal notranslate"><span class="pre">disabled</span></code>, <code class="docutils literal notranslate"><span class="pre">focused</span></code>, <code class="docutils literal notranslate"><span class="pre">unfocused</span></code>.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"selector"</span><span class="p">:</span><span class="w"> </span><span class="s2">"button[name=\"OK\"]"</span><span class="p">,</span><span class="w"> </span><span class="nt">"state"</span><span class="p">:</span><span class="w"> </span><span class="s2">"detached"</span><span class="p">,</span><span class="w"> </span><span class="nt">"app"</span><span class="p">:</span><span class="w"> </span><span class="s2">"notepad"</span><span class="p">,</span><span class="w"> </span><span class="nt">"timeout_secs"</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">opendesk_events</span></code> keeps an event log for one app (default: the foreground
+app): focus moves, value/name/state changes, structure changes, windows and
+menus opening or closing, and live-region announcements.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;start&quot;,</span> <span class="pre">&quot;app&quot;:</span> <span class="pre">&quot;chrome&quot;}</span></code> begins watching (restarting any watch).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;read&quot;,</span> <span class="pre">&quot;wait_ms&quot;:</span> <span class="pre">2000}</span></code> returns the events since the last read,
+waiting up to <code class="docutils literal notranslate"><span class="pre">wait_ms</span></code> for the first one, so “act, then read” sees the
+reaction. The log keeps the latest 2000 events and reports how many were
+dropped.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;stop&quot;}</span></code> ends the watch. A peer also stops it when the
+controller’s session ends.</p></li>
+</ul>
+<p>Both route to a remote peer like the other tools (<code class="docutils literal notranslate"><span class="pre">peer</span></code>), as long as that
+peer’s opendesk advertises the <code class="docutils literal notranslate"><span class="pre">ui.wait</span></code> / <code class="docutils literal notranslate"><span class="pre">events</span></code> capabilities.</p>
+</section>
+<section id="peer-environment-opendesk-capabilities">
+<h2>Peer environment: <code class="docutils literal notranslate"><span class="pre">opendesk_capabilities</span></code><a class="headerlink" href="#peer-environment-opendesk-capabilities" title="Link to this heading">#</a></h2>
+<p>Shows the capabilities a peer advertises and its environment: OS version,
+locale, keyboard layout of the foreground window, time zone, the clock offset
+from this machine, and each display’s position, size and scaling. Check it
+before typing or clicking on an unfamiliar peer.</p>
+</section>
+<section id="file-transfer-opendesk-file">
+<h2>File transfer: <code class="docutils literal notranslate"><span class="pre">opendesk_file</span></code><a class="headerlink" href="#file-transfer-opendesk-file" title="Link to this heading">#</a></h2>
+<p>Copies files between this machine and a remote peer, verified by SHA-256.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;push&quot;,</span> <span class="pre">&quot;local_path&quot;:</span> <span class="pre">&quot;C:/build/app.exe&quot;,</span> <span class="pre">&quot;remote_path&quot;:</span> <span class="pre">&quot;~/bin/app.exe&quot;}</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;pull&quot;,</span> <span class="pre">&quot;remote_path&quot;:</span> <span class="pre">&quot;~/logs/run.log&quot;,</span> <span class="pre">&quot;local_path&quot;:</span> <span class="pre">&quot;./run.log&quot;}</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;stat&quot;,</span> <span class="pre">&quot;remote_path&quot;:</span> <span class="pre">&quot;~/bin/app.exe&quot;}</span></code> reports size and SHA-256.</p></li>
+</ul>
+<p>Data moves in 1 MiB chunks into <code class="docutils literal notranslate"><span class="pre">&lt;destination&gt;.opendesk-part</span></code>; the destination
+is replaced only after the whole file’s checksum matches, so an interrupted or
+corrupted copy never leaves a half-written file. <code class="docutils literal notranslate"><span class="pre">~</span></code> in <code class="docutils literal notranslate"><span class="pre">remote_path</span></code> is the
+peer’s home directory. Replacing a file another program has open (for example a
+running <code class="docutils literal notranslate"><span class="pre">.exe</span></code> on Windows) fails with a clear error.</p>
+<p>From the command line:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>push<span class="w"> </span>./app.exe<span class="w"> </span><span class="s2">"~/bin/app.exe"</span><span class="w"> </span>--peer<span class="w"> </span>old-pc
+opendesk<span class="w"> </span>pull<span class="w"> </span><span class="s2">"~/logs/run.log"</span><span class="w"> </span>./run.log<span class="w"> </span>--peer<span class="w"> </span>old-pc
+</pre></div>
+</div>
+</section>
+<section id="background-jobs-opendesk-exec-with-background-true-and-opendesk-job">
+<h2>Background jobs: <code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code> with <code class="docutils literal notranslate"><span class="pre">background:</span> <span class="pre">true</span></code>, and <code class="docutils literal notranslate"><span class="pre">opendesk_job</span></code><a class="headerlink" href="#background-jobs-opendesk-exec-with-background-true-and-opendesk-job" title="Link to this heading">#</a></h2>
+<p>For anything that may run longer than a few minutes, start it in the
+background and poll it, instead of holding one long <code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code> open:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"C:/lab/run-batch.ps1"</span><span class="p">,</span><span class="w"> </span><span class="nt">"background"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"peer"</span><span class="p">:</span><span class="w"> </span><span class="s2">"old-pc"</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>returns a job id at once. Then <code class="docutils literal notranslate"><span class="pre">opendesk_job</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;poll&quot;,</span> <span class="pre">&quot;job_id&quot;:</span> <span class="pre">3,</span> <span class="pre">&quot;wait_ms&quot;:</span> <span class="pre">5000}</span></code> returns the output produced
+since the previous poll and the status (running, exit code, timed out,
+killed). With <code class="docutils literal notranslate"><span class="pre">wait_ms</span></code> it waits until there is new output or the job ends.
+A finished job is forgotten once its final output has been returned.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;kill&quot;,</span> <span class="pre">&quot;job_id&quot;:</span> <span class="pre">3}</span></code> kills the job’s whole process tree.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;list&quot;}</span></code> shows known jobs.</p></li>
+</ul>
+<p>Background jobs have no time limit unless <code class="docutils literal notranslate"><span class="pre">timeout_secs</span></code> is given, and they
+keep running if the controller disconnects. Up to 16 can run at once per
+machine.</p>
 </section>
 </section>
 
@@ -604,7 +740,13 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#toolresult">ToolResult</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#routing-the-peer-argument">Routing: the <code class="docutils literal notranslate"><span class="pre">peer</span></code> argument</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#input-guard">Input guard</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opendesk-exec"><code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#waiting-for-the-ui-opendesk-wait-and-opendesk-events">Waiting for the UI: <code class="docutils literal notranslate"><span class="pre">opendesk_wait</span></code> and <code class="docutils literal notranslate"><span class="pre">opendesk_events</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#peer-environment-opendesk-capabilities">Peer environment: <code class="docutils literal notranslate"><span class="pre">opendesk_capabilities</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#file-transfer-opendesk-file">File transfer: <code class="docutils literal notranslate"><span class="pre">opendesk_file</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-jobs-opendesk-exec-with-background-true-and-opendesk-job">Background jobs: <code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code> with <code class="docutils literal notranslate"><span class="pre">background:</span> <span class="pre">true</span></code>, and <code class="docutils literal notranslate"><span class="pre">opendesk_job</span></code></a></li>
 </ul>
   </nav></div>
 

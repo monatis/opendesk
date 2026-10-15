@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -478,7 +478,7 @@
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actions">Actions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
             </nav>
         </div>
@@ -492,10 +492,6 @@
                   
   <section id="clipboard-clipboard-read-write">
 <h1><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write<a class="headerlink" href="#clipboard-clipboard-read-write" title="Link to this heading">#</a></h1>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.clipboard</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClipboardTool</span>
-<span class="n">tool</span> <span class="o">=</span> <span class="n">ClipboardTool</span><span class="p">()</span>
-</pre></div>
-</div>
 <section id="actions">
 <h2>Actions<a class="headerlink" href="#actions" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -508,15 +504,16 @@
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">read</span></code></p></td>
 <td><p>—</p></td>
-<td><p>Return current clipboard text</p></td>
+<td><p>Return the current clipboard text</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">write</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
-<td><p>Set clipboard text</p></td>
+<td><p>Set the clipboard text</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>Both accept an optional <code class="docutils literal notranslate"><span class="pre">peer</span></code>.</p>
 </section>
 <section id="ask-claude">
 <h2>Ask Claude<a class="headerlink" href="#ask-claude" title="Link to this heading">#</a></h2>
@@ -526,26 +523,17 @@
 <blockquote>
 <div><p>“Copy this text to my clipboard: ‘hello world’”</p>
 </div></blockquote>
-<blockquote>
-<div><p>“Paste the clipboard contents into the active window”</p>
-</div></blockquote>
 </section>
-<hr class="docutils" />
-<section id="sdk-examples">
-<h2>SDK examples<a class="headerlink" href="#sdk-examples" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">params</span> <span class="o">=</span> <span class="n">ClipboardTool</span><span class="o">.</span><span class="n">Params</span>
-
-<span class="c1"># Read</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"read"</span><span class="p">))</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
-
-<span class="c1"># Write, then paste</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"write"</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s2">"Hello from opendesk"</span><span class="p">))</span>
-<span class="c1"># Then use keyboard tool to paste with Ctrl/Cmd+V</span>
+<section id="example-calls">
+<h2>Example calls<a class="headerlink" href="#example-calls" title="Link to this heading">#</a></h2>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"read"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"write"</span><span class="p">,</span><span class="w"> </span><span class="nt">"text"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Hello from opendesk"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
+<p>To paste, follow a <code class="docutils literal notranslate"><span class="pre">write</span></code> with the <a class="reference internal" href="keyboard.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">keyboard</span></code></span></a> tool
+(<code class="docutils literal notranslate"><span class="pre">{&quot;action&quot;:</span> <span class="pre">&quot;press&quot;,</span> <span class="pre">&quot;key&quot;:</span> <span class="pre">&quot;ctrl+v&quot;}</span></code>).</p>
 <hr class="docutils" />
-<p>Next: <a class="reference internal" href="ocr.html"><span class="std std-doc">ocr →</span></a> — extract text from any region without the clipboard.</p>
+<p>Next: <a class="reference internal" href="audit.html"><span class="std std-doc">audit →</span></a></p>
 </section>
 </section>
 
@@ -598,7 +586,7 @@
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actions">Actions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
   </nav></div>
 

@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -478,8 +478,7 @@
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#parameters">Parameters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output">Output</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
             </nav>
         </div>
@@ -493,10 +492,6 @@
                   
   <section id="screenshot-screen-capture">
 <h1><code class="docutils literal notranslate"><span class="pre">screenshot</span></code> — Screen Capture<a class="headerlink" href="#screenshot-screen-capture" title="Link to this heading">#</a></h1>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.screenshot</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScreenshotTool</span>
-<span class="n">tool</span> <span class="o">=</span> <span class="n">ScreenshotTool</span><span class="p">()</span>
-</pre></div>
-</div>
 <section id="parameters">
 <h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -508,97 +503,74 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">marks</span></code></p></td>
-<td><p>bool</p></td>
-<td><p>false</p></td>
-<td><p>Overlay numbered bounding boxes (Set-of-Marks) on interactive elements</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">show_cursor</span></code></p></td>
-<td><p>bool</p></td>
-<td><p>false</p></td>
-<td><p>Draw a red dot at the current cursor position</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">zoom</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">[x0,y0,x1,y1]</span></code></p></td>
-<td><p>null</p></td>
-<td><p>Crop a region for close-up inspection</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">region</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">[x,y,w,h]</span></code></p></td>
-<td><p>null</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">region</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[x,</span> <span class="pre">y,</span> <span class="pre">w,</span> <span class="pre">h]</span></code></p></td>
+<td><p>full screen</p></td>
 <td><p>Capture only this screen region</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">format</span></code></p></td>
-<td><p>str</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;png&quot;</span></code> (local) / <code class="docutils literal notranslate"><span class="pre">&quot;jpeg&quot;</span></code> (remote)</p></td>
-<td><p>Compression format (<code class="docutils literal notranslate"><span class="pre">&quot;jpeg&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;png&quot;</span></code>). <code class="docutils literal notranslate"><span class="pre">&quot;jpeg&quot;</span></code> reduces payload size by ~5x–14x for low-latency streaming.</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">zoom</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[x0,</span> <span class="pre">y0,</span> <span class="pre">x1,</span> <span class="pre">y1]</span></code></p></td>
+<td><p>null</p></td>
+<td><p>Crop a region for close-up inspection (takes precedence over <code class="docutils literal notranslate"><span class="pre">region</span></code>)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">quality</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">show_cursor</span></code></p></td>
+<td><p>bool</p></td>
+<td><p>false</p></td>
+<td><p>Also report the current cursor position in the text output</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">format</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;png&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;jpeg&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">png</span></code> locally, <code class="docutils literal notranslate"><span class="pre">jpeg</span></code> for remote peers</p></td>
+<td><p>Image format</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">quality</span></code></p></td>
 <td><p>int</p></td>
 <td><p>75</p></td>
-<td><p>JPEG compression quality from 1 to 100.</p></td>
+<td><p>JPEG quality, 1–100</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">save_path</span></code></p></td>
-<td><p>str</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">save_path</span></code></p></td>
+<td><p>string</p></td>
 <td><p>null</p></td>
-<td><p>Save image to disk at this absolute path</p></td>
+<td><p>Also write the image to this path</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">peer</span></code></p></td>
-<td><p>str</p></td>
-<td><p>null</p></td>
-<td><p>Target peer name to capture screen remotely (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;work-pc&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code>)</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">peer</span></code></p></td>
+<td><p>string</p></td>
+<td><p>default peer</p></td>
+<td><p>Machine to capture</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>The result is the image plus a line such as <code class="docutils literal notranslate"><span class="pre">Captured</span> <span class="pre">1920x1080</span> <span class="pre">screenshot.</span></code></p>
+<p>Coordinates you read off the most recent screenshot (including a <code class="docutils literal notranslate"><span class="pre">zoom</span></code> or
+<code class="docutils literal notranslate"><span class="pre">region</span></code> capture) can be passed straight to the <a class="reference internal" href="mouse.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">mouse</span></code></span></a> tool; they
+are mapped onto the desktop automatically, including monitors left of or above
+the primary one.</p>
+<p>The Rust version has no Set-of-Marks overlay (<code class="docutils literal notranslate"><span class="pre">marks</span></code>) and no pixel-diff
+change report.</p>
 </section>
 <section id="ask-claude">
 <h2>Ask Claude<a class="headerlink" href="#ask-claude" title="Link to this heading">#</a></h2>
-<p>When opendesk is connected via MCP, just describe what you want:</p>
 <blockquote>
 <div><p>“Take a screenshot and tell me what’s on my screen”</p>
-</div></blockquote>
-<blockquote>
-<div><p>“Take a screenshot with numbered marks on every button”</p>
 </div></blockquote>
 <blockquote>
 <div><p>“Show me what’s in the top-right corner of the screen”</p>
 </div></blockquote>
 <blockquote>
-<div><p>“Save a screenshot to /tmp/before.png”</p>
+<div><p>“Save a screenshot to C:\temp\before.png”</p>
 </div></blockquote>
 </section>
-<hr class="docutils" />
-<section id="sdk-examples">
-<h2>SDK examples<a class="headerlink" href="#sdk-examples" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">params</span> <span class="o">=</span> <span class="n">ScreenshotTool</span><span class="o">.</span><span class="n">Params</span>
-
-<span class="c1"># Full screenshot</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">())</span>
-<span class="n">png</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">attachments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">content</span>  <span class="c1"># bytes</span>
-
-<span class="c1"># With SoM overlay — model can say "click mark 3"</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">marks</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>  <span class="c1"># lists: [1] Button "OK" at (120,340) 80×30 — click mark 1 to interact</span>
-
-<span class="c1"># Zoom into a region</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">zoom</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">400</span><span class="p">,</span> <span class="mi">350</span><span class="p">]))</span>
-
-<span class="c1"># Save to disk</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">save_path</span><span class="o">=</span><span class="s2">"/tmp/before.png"</span><span class="p">))</span>
+<section id="example-calls">
+<h2>Example calls<a class="headerlink" href="#example-calls" title="Link to this heading">#</a></h2>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"zoom"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="mi">200</span><span class="p">,</span><span class="w"> </span><span class="mi">400</span><span class="p">,</span><span class="w"> </span><span class="mi">350</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"format"</span><span class="p">:</span><span class="w"> </span><span class="s2">"jpeg"</span><span class="p">,</span><span class="w"> </span><span class="nt">"quality"</span><span class="p">:</span><span class="w"> </span><span class="mi">60</span><span class="p">,</span><span class="w"> </span><span class="nt">"peer"</span><span class="p">:</span><span class="w"> </span><span class="s2">"work-pc"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"save_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/tmp/before.png"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
-</section>
-<section id="output">
-<h2>Output<a class="headerlink" href="#output" title="Link to this heading">#</a></h2>
-<p>The tool output always includes:</p>
-<ul class="simple">
-<li><p>Capture dimensions and Retina note: <code class="docutils literal notranslate"><span class="pre">image_width=1440,</span> <span class="pre">image_height=900</span></code> to pass to the mouse tool.</p></li>
-<li><p>Change detection vs previous screenshot: <code class="docutils literal notranslate"><span class="pre">&quot;12.3%</span> <span class="pre">of</span> <span class="pre">pixels</span> <span class="pre">changed</span> <span class="pre">in</span> <span class="pre">region</span> <span class="pre">[x=400,</span> <span class="pre">y=200,</span> <span class="pre">600×300px]&quot;</span></code>.</p></li>
-<li><p>SoM summary if <code class="docutils literal notranslate"><span class="pre">marks=True</span></code>.</p></li>
-</ul>
 <hr class="docutils" />
-<p>Next: <a class="reference internal" href="mouse.html"><span class="std std-doc">mouse →</span></a> — once you have screenshot dimensions, pass them here for pixel-accurate clicks.</p>
+<p>Next: <a class="reference internal" href="mouse.html"><span class="std std-doc">mouse →</span></a></p>
 </section>
 </section>
 
@@ -651,8 +623,7 @@
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#parameters">Parameters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output">Output</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
   </nav></div>
 

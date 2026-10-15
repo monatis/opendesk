@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -477,8 +477,10 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actions">Actions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-chords">Keys and chords</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequences">Sequences</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
             </nav>
         </div>
@@ -492,10 +494,6 @@
                   
   <section id="keyboard-keyboard-input">
 <h1><code class="docutils literal notranslate"><span class="pre">keyboard</span></code> — Keyboard Input<a class="headerlink" href="#keyboard-keyboard-input" title="Link to this heading">#</a></h1>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.keyboard</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeyboardTool</span>
-<span class="n">tool</span> <span class="o">=</span> <span class="n">KeyboardTool</span><span class="p">()</span>
-</pre></div>
-</div>
 <section id="actions">
 <h2>Actions<a class="headerlink" href="#actions" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -508,22 +506,61 @@
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
-<td><p>Type text (clipboard-paste, full Unicode including CJK and emoji)</p></td>
+<td><p>Type a string (full Unicode; does not use the clipboard)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">press</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">key</span></code></p></td>
-<td><p>Press a named key: <code class="docutils literal notranslate"><span class="pre">enter</span></code>, <code class="docutils literal notranslate"><span class="pre">escape</span></code>, <code class="docutils literal notranslate"><span class="pre">tab</span></code>, <code class="docutils literal notranslate"><span class="pre">f5</span></code>, etc.</p></td>
+<td><p>Press a key or a chord: <code class="docutils literal notranslate"><span class="pre">enter</span></code>, <code class="docutils literal notranslate"><span class="pre">f5</span></code>, <code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">ctrl+shift+s</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">hotkey</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">keys</span></code></p></td>
-<td><p>Send a key combination: <code class="docutils literal notranslate"><span class="pre">[&quot;ctrl&quot;,&quot;c&quot;]</span></code>, <code class="docutils literal notranslate"><span class="pre">[&quot;command&quot;,&quot;s&quot;]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">keys</span></code> (or <code class="docutils literal notranslate"><span class="pre">key</span></code>)</p></td>
+<td><p>Send a chord: <code class="docutils literal notranslate"><span class="pre">[&quot;ctrl&quot;,&quot;c&quot;]</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;ctrl+c&quot;</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">hold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">key</span></code>, <code class="docutils literal notranslate"><span class="pre">hold_duration</span></code></p></td>
-<td><p>Hold a key for N seconds then release</p></td>
+<td><p>Hold a key for N seconds (default 1.0), then release</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sequence</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">steps</span></code></p></td>
+<td><p>Run several steps atomically on the target</p></td>
 </tr>
 </tbody>
 </table>
+</div>
+<p>Optional on every action: <code class="docutils literal notranslate"><span class="pre">settle_ms</span></code>, <code class="docutils literal notranslate"><span class="pre">guard</span></code> (refuse unless the foreground
+window matches; see <a class="reference internal" href="index.html#input-guard"><span class="std std-ref">Input guard</span></a>), and <code class="docutils literal notranslate"><span class="pre">peer</span></code>.</p>
+</section>
+<section id="keys-and-chords">
+<h2>Keys and chords<a class="headerlink" href="#keys-and-chords" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Chords use <code class="docutils literal notranslate"><span class="pre">+</span></code> as the separator: <code class="docutils literal notranslate"><span class="pre">ctrl+shift+s</span></code>, <code class="docutils literal notranslate"><span class="pre">alt+f4</span></code>. A <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code> in
+key position is the key itself, so <code class="docutils literal notranslate"><span class="pre">ctrl+-</span></code>, <code class="docutils literal notranslate"><span class="pre">ctrl++</span></code>, <code class="docutils literal notranslate"><span class="pre">-</span></code> and <code class="docutils literal notranslate"><span class="pre">+</span></code> all work.
+<code class="docutils literal notranslate"><span class="pre">-</span></code> is accepted as a separator only when the chord has no <code class="docutils literal notranslate"><span class="pre">+</span></code> (<code class="docutils literal notranslate"><span class="pre">ctrl-s</span></code>).</p></li>
+<li><p>A single character (<code class="docutils literal notranslate"><span class="pre">press</span></code> with <code class="docutils literal notranslate"><span class="pre">key:</span> <span class="pre">&quot;a&quot;</span></code>) is pressed as the real key that
+produces it on the target’s keyboard layout, not injected as a Unicode
+packet. For example, on a Turkish-Q layout <code class="docutils literal notranslate"><span class="pre">i</span></code> is not the <code class="docutils literal notranslate"><span class="pre">I</span></code> key. If the
+layout cannot type the character, it falls back to typing it. Layout lookup
+is implemented on Windows.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hotkey</span></code> accepts an array of key names, and each entry may itself be a chord
+(<code class="docutils literal notranslate"><span class="pre">[&quot;ctrl&quot;,</span> <span class="pre">&quot;shift+s&quot;]</span></code>).</p></li>
+<li><p>Named keys include <code class="docutils literal notranslate"><span class="pre">enter</span></code>, <code class="docutils literal notranslate"><span class="pre">escape</span></code>, <code class="docutils literal notranslate"><span class="pre">tab</span></code>, <code class="docutils literal notranslate"><span class="pre">backspace</span></code>, <code class="docutils literal notranslate"><span class="pre">delete</span></code>, <code class="docutils literal notranslate"><span class="pre">up</span></code>,
+<code class="docutils literal notranslate"><span class="pre">down</span></code>, <code class="docutils literal notranslate"><span class="pre">left</span></code>, <code class="docutils literal notranslate"><span class="pre">right</span></code>, <code class="docutils literal notranslate"><span class="pre">home</span></code>, <code class="docutils literal notranslate"><span class="pre">end</span></code>, <code class="docutils literal notranslate"><span class="pre">pageup</span></code>, <code class="docutils literal notranslate"><span class="pre">pagedown</span></code>, <code class="docutils literal notranslate"><span class="pre">f1</span></code>–<code class="docutils literal notranslate"><span class="pre">f12</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ctrl</span></code>, <code class="docutils literal notranslate"><span class="pre">alt</span></code>, <code class="docutils literal notranslate"><span class="pre">shift</span></code>, <code class="docutils literal notranslate"><span class="pre">win</span></code> / <code class="docutils literal notranslate"><span class="pre">cmd</span></code>, <code class="docutils literal notranslate"><span class="pre">capslock</span></code>, <code class="docutils literal notranslate"><span class="pre">space</span></code>.</p></li>
+</ul>
+</section>
+<section id="sequences">
+<h2>Sequences<a class="headerlink" href="#sequences" title="Link to this heading">#</a></h2>
+<p>Each step is an object with one of <code class="docutils literal notranslate"><span class="pre">hotkey</span></code> (array or chord string), <code class="docutils literal notranslate"><span class="pre">key</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">text</span></code>, plus an optional <code class="docutils literal notranslate"><span class="pre">delay_ms</span></code> to wait after the step:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sequence"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"steps"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"hotkey"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"ctrl"</span><span class="p">,</span><span class="w"> </span><span class="s2">"l"</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"text"</span><span class="p">:</span><span class="w"> </span><span class="s2">"example.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"delay_ms"</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"enter"</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
 </div>
 </section>
 <section id="ask-claude">
@@ -532,40 +569,21 @@
 <div><p>“Type ‘Hello World’ into the active window”</p>
 </div></blockquote>
 <blockquote>
-<div><p>“Press Enter”</p>
+<div><p>“Press Ctrl+S to save”</p>
 </div></blockquote>
 <blockquote>
-<div><p>“Press Cmd+S to save”</p>
-</div></blockquote>
-<blockquote>
-<div><p>“Press Ctrl+Z to undo”</p>
-</div></blockquote>
-<blockquote>
-<div><p>“Press Escape”</p>
+<div><p>“Zoom out with Ctrl±”</p>
 </div></blockquote>
 </section>
-<hr class="docutils" />
-<section id="sdk-examples">
-<h2>SDK examples<a class="headerlink" href="#sdk-examples" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">params</span> <span class="o">=</span> <span class="n">KeyboardTool</span><span class="o">.</span><span class="n">Params</span>
-
-<span class="c1"># Type text</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"type"</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s2">"Hello, 世界! 🌍"</span><span class="p">))</span>
-
-<span class="c1"># Press Enter</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"press"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"enter"</span><span class="p">))</span>
-
-<span class="c1"># Copy (Ctrl+C)</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"hotkey"</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"ctrl"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]))</span>
-
-<span class="c1"># Cmd+Shift+P (VS Code command palette on macOS)</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"hotkey"</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"command"</span><span class="p">,</span> <span class="s2">"shift"</span><span class="p">,</span> <span class="s2">"p"</span><span class="p">]))</span>
-
-<span class="c1"># Hold Shift for 0.5s (e.g. while clicking for range select)</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"hold"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"shift"</span><span class="p">,</span> <span class="n">hold_duration</span><span class="o">=</span><span class="mf">0.5</span><span class="p">))</span>
+<section id="example-calls">
+<h2>Example calls<a class="headerlink" href="#example-calls" title="Link to this heading">#</a></h2>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"type"</span><span class="p">,</span><span class="w"> </span><span class="nt">"text"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Hello, 世界!"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"press"</span><span class="p">,</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"enter"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"press"</span><span class="p">,</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ctrl+shift+s"</span><span class="p">,</span><span class="w"> </span><span class="nt">"guard"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"process"</span><span class="p">:</span><span class="w"> </span><span class="s2">"code"</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hotkey"</span><span class="p">,</span><span class="w"> </span><span class="nt">"keys"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"ctrl"</span><span class="p">,</span><span class="w"> </span><span class="s2">"c"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hold"</span><span class="p">,</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"shift"</span><span class="p">,</span><span class="w"> </span><span class="nt">"hold_duration"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
-<p>Key names follow pyautogui conventions: <code class="docutils literal notranslate"><span class="pre">enter</span></code>, <code class="docutils literal notranslate"><span class="pre">escape</span></code>, <code class="docutils literal notranslate"><span class="pre">tab</span></code>, <code class="docutils literal notranslate"><span class="pre">backspace</span></code>, <code class="docutils literal notranslate"><span class="pre">delete</span></code>, <code class="docutils literal notranslate"><span class="pre">up</span></code>, <code class="docutils literal notranslate"><span class="pre">down</span></code>, <code class="docutils literal notranslate"><span class="pre">left</span></code>, <code class="docutils literal notranslate"><span class="pre">right</span></code>, <code class="docutils literal notranslate"><span class="pre">home</span></code>, <code class="docutils literal notranslate"><span class="pre">end</span></code>, <code class="docutils literal notranslate"><span class="pre">pageup</span></code>, <code class="docutils literal notranslate"><span class="pre">pagedown</span></code>, <code class="docutils literal notranslate"><span class="pre">f1</span></code>–<code class="docutils literal notranslate"><span class="pre">f12</span></code>, <code class="docutils literal notranslate"><span class="pre">ctrl</span></code>, <code class="docutils literal notranslate"><span class="pre">alt</span></code>, <code class="docutils literal notranslate"><span class="pre">shift</span></code>, <code class="docutils literal notranslate"><span class="pre">cmd</span></code>/<code class="docutils literal notranslate"><span class="pre">win</span></code>, etc.</p>
 <hr class="docutils" />
 <p>Next: <a class="reference internal" href="app.html"><span class="std std-doc">app →</span></a></p>
 </section>
@@ -619,8 +637,10 @@
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actions">Actions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-chords">Keys and chords</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequences">Sequences</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
   </nav></div>
 

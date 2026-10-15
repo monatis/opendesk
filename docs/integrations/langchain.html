@@ -143,10 +143,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -214,7 +210,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +231,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +262,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -453,9 +449,7 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</button>
+
 </div></div>
       
     </div>
@@ -471,14 +465,6 @@
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-custom-context">With custom context</a></li>
-</ul>
-            </nav>
         </div>
     </div>
 </div>
@@ -490,33 +476,12 @@
                   
   <section id="langchain-langgraph">
 <h1>LangChain / LangGraph<a class="headerlink" href="#langchain-langgraph" title="Link to this heading">#</a></h1>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">langchain_anthropic</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatAnthropic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">langgraph.prebuilt</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_react_agent</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.integrations.langchain_compat</span><span class="w"> </span><span class="kn">import</span> <span class="n">as_langchain_tools</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_registry</span>
-
-<span class="n">tools</span> <span class="o">=</span> <span class="n">as_langchain_tools</span><span class="p">(</span><span class="n">create_registry</span><span class="p">())</span>
-<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatAnthropic</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">"claude-opus-4-6"</span><span class="p">)</span>
-<span class="n">agent</span> <span class="o">=</span> <span class="n">create_react_agent</span><span class="p">(</span><span class="n">llm</span><span class="p">,</span> <span class="n">tools</span><span class="p">)</span>
-
-<span class="n">result</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">invoke</span><span class="p">({</span><span class="s2">"messages"</span><span class="p">:</span> <span class="p">[(</span><span class="s2">"user"</span><span class="p">,</span> <span class="s2">"Open Safari and take a screenshot"</span><span class="p">)]})</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"messages"</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-</pre></div>
-</div>
-<section id="with-custom-context">
-<h2>With custom context<a class="headerlink" href="#with-custom-context" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolContext</span><span class="p">,</span> <span class="n">PermissionDeniedError</span>
-
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">strict_policy</span><span class="p">(</span><span class="n">tool</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">if</span> <span class="n">tool</span> <span class="o">==</span> <span class="s2">"app"</span> <span class="ow">and</span> <span class="s2">"open"</span> <span class="ow">in</span> <span class="n">argument</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">PermissionDeniedError</span><span class="p">(</span><span class="s2">"App launching not allowed in this session."</span><span class="p">)</span>
-
-<span class="n">ctx</span> <span class="o">=</span> <span class="n">ToolContext</span><span class="p">(</span><span class="n">session_id</span><span class="o">=</span><span class="s2">"langchain"</span><span class="p">,</span> <span class="n">permission_handler</span><span class="o">=</span><span class="n">strict_policy</span><span class="p">)</span>
-<span class="n">tools</span> <span class="o">=</span> <span class="n">as_langchain_tools</span><span class="p">(</span><span class="n">create_registry</span><span class="p">(),</span> <span class="n">ctx</span><span class="o">=</span><span class="n">ctx</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
+<p><strong>Not available in the Rust version.</strong> There is no <code class="docutils literal notranslate"><span class="pre">as_langchain_tools</span></code>
+helper and no Python permission-handler API.</p>
+<p>Use an MCP adapter for your framework and point it at the <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code>
+command (stdio transport). See <a class="reference internal" href="../mcp/index.html"><span class="std std-doc">MCP Integration</span></a>.</p>
+<hr class="docutils" />
+<p>Next: <a class="reference internal" href="custom.html"><span class="std std-doc">Custom →</span></a></p>
 </section>
 
 
@@ -554,23 +519,6 @@
             </div>
             
             
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item"><div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-custom-context">With custom context</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
           </div>

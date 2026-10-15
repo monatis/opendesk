@@ -2,30 +2,37 @@
 
 Just talk to Claude — no code needed.
 
-## Record
+## Save a procedure
 
-> "Start recording task expense-report"
+Ask Claude to do the task, then:
 
-Perform the task yourself. Then:
+> "Save the steps you just took as a procedure called expense-report"
 
-> "Stop recording"
+opendesk cannot record you doing the task yourself; Claude writes the
+procedure from its own steps (or from your description).
 
 ## Replay
 
 > "Replay expense-report"
 
+Claude loads the saved steps and performs them again with the normal tools.
+
 ## Schedule
 
-> "Schedule expense-report to run every friday at 5pm"
-> "Schedule a task called hourly-check to take a screenshot every hour"
+> "Store a schedule called expense-report: every friday at 17:00"
+
+This only stores the schedule. Nothing runs it automatically in the Rust
+version, and there is no "run the schedule now" action; ask Claude to perform
+the task directly when you need it.
 
 ## Manage
 
-> "List my learned tasks"
+> "List my saved procedures"
+
 > "List my schedules"
+
 > "Remove the hourly-check schedule"
-> "Run the expense-report schedule now"
 
 ---
 
-Want to drive this from code instead? See the [Python API →](python-api.md)
+Details: [Scheduler →](scheduler.md) · [`learn` reference →](../tools/learn.md)

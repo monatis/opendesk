@@ -1,43 +1,11 @@
 # `ocr` — Text Extraction
 
-```python
-from opendesk.tools.ocr import OCRTool
-tool = OCRTool()
-```
+**Not available in the Rust version.** The MCP server has no `ocr` tool.
 
-## Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `region` | `[x,y,w,h]` | null | Screen region to OCR; null = full screen |
-
-## Ask Claude
-
-> "Read the text on my screen"
-
-> "What does that error message say?"
-
-> "Extract the text from the dialog box"
-
-> "Read the text in the top half of the screen"
+To read text on screen, use [`ui`](ui.md) (`get_value` or `get_tree`) where the
+app exposes accessible text, or take a [`screenshot`](screenshot.md) (with
+`zoom` for small text) and let the model read the image.
 
 ---
 
-## SDK examples
-
-```python
-params = OCRTool.Params
-
-# Full screen
-result = await tool.execute(ctx, params())
-print(result.output)
-
-# Specific region (e.g. a dialog box)
-result = await tool.execute(ctx, params(region=[400, 200, 600, 300]))
-```
-
-Backends tried in order: `pytesseract` → macOS Vision (macOS only) → Windows WinRT (Windows only) → install hint if none available.
-
----
-
-Next: [audit →](audit.md) — inspect everything the agent has done this session.
+Next: [audit →](audit.md)

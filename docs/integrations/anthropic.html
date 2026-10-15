@@ -143,10 +143,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -214,7 +210,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +231,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +262,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -453,9 +449,7 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</button>
+
 </div></div>
       
     </div>
@@ -471,16 +465,6 @@
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agentic-loop-recommended">Agentic loop (recommended)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-control">Manual control</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tool-definitions-format">Tool definitions format</a></li>
-</ul>
-            </nav>
         </div>
     </div>
 </div>
@@ -492,72 +476,15 @@
                   
   <section id="anthropic-sdk">
 <h1>Anthropic SDK<a class="headerlink" href="#anthropic-sdk" title="Link to this heading">#</a></h1>
-<section id="agentic-loop-recommended">
-<h2>Agentic loop (recommended)<a class="headerlink" href="#agentic-loop-recommended" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.integrations.claude_code</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClaudeCodeAdapter</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_registry</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">allow_all_context</span>
-
-<span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
-<span class="n">adapter</span> <span class="o">=</span> <span class="n">ClaudeCodeAdapter</span><span class="p">(</span>
-    <span class="n">registry</span><span class="o">=</span><span class="n">create_registry</span><span class="p">(),</span>
-    <span class="n">ctx</span><span class="o">=</span><span class="n">allow_all_context</span><span class="p">(),</span>
-<span class="p">)</span>
-
-<span class="n">messages</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Open TextEdit and type 'Hello World'"</span><span class="p">}]</span>
-
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">adapter</span><span class="o">.</span><span class="n">run_loop</span><span class="p">(</span>
-    <span class="n">client</span><span class="o">=</span><span class="n">client</span><span class="p">,</span>
-    <span class="n">model</span><span class="o">=</span><span class="s2">"claude-opus-4-6"</span><span class="p">,</span>
-    <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
-    <span class="n">system</span><span class="o">=</span><span class="p">(</span>
-        <span class="s2">"You are a computer use agent. "</span>
-        <span class="s2">"Always use the ui tool first. "</span>
-        <span class="s2">"Use the mouse tool only for unlabelled canvas areas."</span>
-    <span class="p">),</span>
-    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">8192</span><span class="p">,</span>
-    <span class="n">max_iterations</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="manual-control">
-<h2>Manual control<a class="headerlink" href="#manual-control" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-    <span class="n">model</span><span class="o">=</span><span class="s2">"claude-opus-4-6"</span><span class="p">,</span>
-    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
-    <span class="n">tools</span><span class="o">=</span><span class="n">adapter</span><span class="o">.</span><span class="n">tool_definitions</span><span class="p">(),</span>
-    <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
-
-<span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">stop_reason</span> <span class="o">==</span> <span class="s2">"tool_use"</span><span class="p">:</span>
-    <span class="c1"># Executes all tool_use blocks in parallel</span>
-    <span class="n">tool_results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">adapter</span><span class="o">.</span><span class="n">handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">tool_results</span><span class="p">})</span>
-</pre></div>
-</div>
-</section>
-<section id="tool-definitions-format">
-<h2>Tool definitions format<a class="headerlink" href="#tool-definitions-format" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">adapter</span><span class="o">.</span><span class="n">tool_definitions</span><span class="p">()</span>
-<span class="c1"># Returns:</span>
-<span class="c1"># [</span>
-<span class="c1">#   {</span>
-<span class="c1">#     "name": "screenshot",</span>
-<span class="c1">#     "description": "...",</span>
-<span class="c1">#     "input_schema": { "type": "object", "properties": {...} }</span>
-<span class="c1">#   },</span>
-<span class="c1">#   ...</span>
-<span class="c1"># ]</span>
-</pre></div>
-</div>
+<p><strong>Not available in the Rust version.</strong> There is no Python package and no
+<code class="docutils literal notranslate"><span class="pre">ClaudeCodeAdapter</span></code> / <code class="docutils literal notranslate"><span class="pre">create_registry</span></code> API.</p>
+<p>To drive opendesk from your own Claude-based agent, connect to the
+<code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> server over MCP (stdio) and pass the tools it lists to the
+model. Any MCP client library works; see <a class="reference internal" href="../mcp/index.html"><span class="std std-doc">MCP Integration</span></a>.</p>
+<p>For Claude Code itself, run <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">install</span></code> (see
+<a class="reference internal" href="../mcp/claude-code.html"><span class="std std-doc">Claude Code</span></a>).</p>
 <hr class="docutils" />
-<p>Also using OpenAI-compatible APIs? Continue to <a class="reference internal" href="openai.html"><span class="std std-doc">OpenAI →</span></a></p>
-</section>
+<p>Next: <a class="reference internal" href="openai.html"><span class="std std-doc">OpenAI →</span></a></p>
 </section>
 
 
@@ -595,25 +522,6 @@
             </div>
             
             
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item"><div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agentic-loop-recommended">Agentic loop (recommended)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-control">Manual control</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tool-definitions-format">Tool definitions format</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
           </div>

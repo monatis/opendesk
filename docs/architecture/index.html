@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -490,35 +490,38 @@
                   
   <section id="architecture">
 <h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">#</a></h1>
-<p>opendesk separates <em>what a computer can do</em> (the capability surface) from
-<em>where that computer lives</em> (local vs. remote) and <em>how agents talk to it</em>
-(via tools, MCP, etc.). Each layer is independently importable.</p>
+<p>opendesk is a single Rust crate, <code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code>, with two binaries: <code class="docutils literal notranslate"><span class="pre">opendesk</span></code>
+(CLI, <code class="docutils literal notranslate"><span class="pre">serve</span></code>, pairing, relay, web UI) and <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> (stdio MCP server).
+It separates <em>what a computer can do</em> (the <code class="docutils literal notranslate"><span class="pre">computer</span></code> module) from <em>where that
+computer lives</em> (local vs. remote) and <em>how agents talk to it</em> (MCP).</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌──────────────────────────────────────────────────────────────┐
-│  Integrations   MCP  ·  Claude Code  ·  OpenAI  ·  LangChain │
+│  MCP server     mcp/server.rs — stdio JSON-RPC, tool list,   │
+│                 peer routing, input guard, MCP App viewport  │
 ├──────────────────────────────────────────────────────────────┤
-│  Tools          screenshot · mouse · keyboard · ui ·         │
-│                 clipboard · ocr · app · learn · schedule     │
+│  Tools          screenshot · mouse · keyboard · ui · app ·   │
+│                 clipboard · opendesk_exec · audit · learn ·  │
+│                 schedule · opendesk_* admin tools            │
 ├──────────────────────────────────────────────────────────────┤
-│  Computer       Computer ABC                                 │
-│                   ├─ LocalComputer  (the machine we're on)   │
-│                   └─ RemoteComputer (via the wire protocol)  │
-│                 ComputerDispatcher (server-side router)      │
+│  Computer       LocalComputer   (the machine we're on)       │
+│                 RemoteComputer  (via the wire protocol)      │
+│                 dispatch_call   (server-side method router)  │
 ├──────────────────────────────────────────────────────────────┤
 │  Remote         opendesk serve · pair · discover · connect   │
-│                 mDNS advertisement &amp; browsing                │
+│                 mDNS · rendezvous relay · admin IPC · audit  │
 ├──────────────────────────────────────────────────────────────┤
-│  Protocol       frames · msgpack codec · peer (call-id mux)  │
-│                 transports: WebSocket (TCP) — future: QUIC   │
-│                 auth: X25519 + ChaCha20-Poly1305, pairing PSK│
+│  Protocol       frames · msgpack · WebSocket transport       │
+│                 X25519 + ChaCha20-Poly1305, PBKDF2 pairing   │
 └──────────────────────────────────────────────────────────────┘
 </pre></div>
 </div>
 <p>Three load-bearing properties:</p>
 <ol class="arabic simple">
-<li><p><strong>Tools never know whether a Computer is local or remote.</strong> The same tool
-code runs against <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> or <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code>.</p></li>
-<li><p><strong>Bytes are bytes.</strong> msgpack <code class="docutils literal notranslate"><span class="pre">bin</span></code> carries pixmaps, file contents, and
-process output natively — no base64 anywhere on the wire.</p></li>
+<li><p><strong>Tools have a local and a remote path with the same behaviour.</strong> The MCP
+server calls <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> for <code class="docutils literal notranslate"><span class="pre">local</span></code> and <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> for a paired
+peer; on the peer, <code class="docutils literal notranslate"><span class="pre">dispatch_call</span></code> maps each protocol method back onto its
+own <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code>.</p></li>
+<li><p><strong>Bytes are bytes.</strong> msgpack <code class="docutils literal notranslate"><span class="pre">bin</span></code> carries screenshots natively — no base64
+on the wire (MCP image results are base64, as MCP requires).</p></li>
 <li><p><strong>Trust is keys, not certs.</strong> No CA-signed certificates required. Both
 peers hold long-lived X25519 keypairs that authenticate each connection.</p></li>
 </ol>
@@ -538,7 +541,7 @@ peers hold long-lived X25519 keypairs that authenticate each connection.</p></li
 <tr class="row-odd"><td><p>Protocol</p></td>
 <td><p><a class="reference internal" href="protocol-layer.html"><span class="std std-doc">Protocol Layer</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p>Remote &amp; Integrations</p></td>
+<tr class="row-even"><td><p>Remote &amp; MCP</p></td>
 <td><p><a class="reference internal" href="remote-layer.html"><span class="std std-doc">Remote &amp; Integrations</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Data Flow</p></td>

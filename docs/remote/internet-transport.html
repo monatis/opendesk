@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Running</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -489,7 +489,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#one-time-pairing-across-the-internet">3. One-Time Pairing Across the Internet</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-to-the-remote-machine">4. Connecting to the Remote Machine</a><ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-cli">Via CLI</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-python-api">Via Python API</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-the-rust-crate">Via the Rust crate</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-mcp-for-ai-agents">Via MCP for AI Agents</a></li>
 </ul>
 </li>
@@ -677,38 +677,35 @@ The controlled agent continuously monitors the rendezvous link and automatically
 </pre></div>
 </div>
 </section>
-<section id="via-python-api">
-<h3>Via Python API<a class="headerlink" href="#via-python-api" title="Link to this heading">#</a></h3>
-<p>The <code class="docutils literal notranslate"><span class="pre">connect()</span></code> function transparently resolves stored rendezvous URLs:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.computer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span><span class="p">,</span> <span class="n">PointerAction</span><span class="p">,</span> <span class="n">PointerEvent</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.remote.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">connect</span>
+<section id="via-the-rust-crate">
+<h3>Via the Rust crate<a class="headerlink" href="#via-the-rust-crate" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">opendesk_rs::remote::client::connect</span></code> uses the peer’s stored rendezvous URL
+when you don’t pass one (there is no Python API in the Rust version):</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">opendesk_rs</span><span class="p">::</span><span class="n">remote</span><span class="p">::</span><span class="n">client</span><span class="p">::</span><span class="n">connect</span><span class="p">;</span>
 
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-    <span class="c1"># Resolves 'cloud-vm' from TrustedPeers, negotiates P2P or relay</span>
-    <span class="n">remote</span> <span class="o">=</span> <span class="k">await</span> <span class="n">connect</span><span class="p">(</span><span class="s2">"cloud-vm"</span><span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="c1"># Screen capture (E2E encrypted)</span>
-        <span class="n">pix</span> <span class="o">=</span> <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Captured screen: </span><span class="si">{</span><span class="n">pix</span><span class="o">.</span><span class="n">width</span><span class="si">}</span><span class="s2">x</span><span class="si">{</span><span class="n">pix</span><span class="o">.</span><span class="n">height</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-
-        <span class="c1"># Cursor inspection &amp; mouse move</span>
-        <span class="n">pos</span> <span class="o">=</span> <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">cursor_position</span><span class="p">()</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Cursor currently at: (</span><span class="si">{</span><span class="n">pos</span><span class="o">.</span><span class="n">x</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">pos</span><span class="o">.</span><span class="n">y</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
-        <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">pointer</span><span class="p">(</span><span class="n">PointerEvent</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">PointerAction</span><span class="o">.</span><span class="n">MOVE</span><span class="p">,</span> <span class="n">point</span><span class="o">=</span><span class="n">Point</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">200</span><span class="p">)))</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="k">await</span> <span class="n">remote</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
-
-<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// peer, rendezvous URL, rendezvous token, home dir</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">remote</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">connect</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="s">"cloud-vm"</span><span class="p">),</span><span class="w"> </span><span class="nb">None</span><span class="p">,</span><span class="w"> </span><span class="nb">None</span><span class="p">,</span><span class="w"> </span><span class="nb">None</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">png</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">remote</span><span class="p">.</span><span class="n">screenshot_bytes</span><span class="p">(</span><span class="nb">None</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">"Captured {} bytes"</span><span class="p">,</span><span class="w"> </span><span class="n">png</span><span class="p">.</span><span class="n">len</span><span class="p">());</span>
+<span class="w">    </span><span class="n">remote</span><span class="p">.</span><span class="n">mouse_move</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="mi">200</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
 </pre></div>
 </div>
 </section>
 <section id="via-mcp-for-ai-agents">
 <h3>Via MCP for AI Agents<a class="headerlink" href="#via-mcp-for-ai-agents" title="Link to this heading">#</a></h3>
-<p>Point Claude Code, Cursor, or any MCP client to the remote machine over the Internet:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>mcp<span class="w"> </span>--target<span class="w"> </span>cloud-vm
+<p>Register the MCP server with the relay, then pick the peer from the agent.
+There is no <code class="docutils literal notranslate"><span class="pre">--target</span></code> flag:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>opendesk<span class="w"> </span>install<span class="w"> </span>--rendezvous<span class="w"> </span>ws://rendezvous.example.com:8424<span class="w"> </span>--rendezvous-token<span class="w"> </span>YOUR_TOKEN
+<span class="c1"># or: opendesk set-rendezvous ws://rendezvous.example.com:8424 --token YOUR_TOKEN</span>
 </pre></div>
 </div>
+<p>Then in the conversation, <code class="docutils literal notranslate"><span class="pre">opendesk_use</span></code> with <code class="docutils literal notranslate"><span class="pre">peer:</span> <span class="pre">&quot;cloud-vm&quot;</span></code> (or pass
+<code class="docutils literal notranslate"><span class="pre">peer:</span> <span class="pre">&quot;cloud-vm&quot;</span></code> on individual calls). To make it the default for every
+session, run <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">peers</span> <span class="pre">default</span> <span class="pre">cloud-vm</span></code>.</p>
 <p>Claude can now inspect, click, type, and automate the remote machine across the Internet without any port forwarding or VPNs.</p>
 </section>
 </section>
@@ -783,7 +780,7 @@ The controlled agent continuously monitors the rendezvous link and automatically
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#one-time-pairing-across-the-internet">3. One-Time Pairing Across the Internet</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-to-the-remote-machine">4. Connecting to the Remote Machine</a><ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-cli">Via CLI</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-python-api">Via Python API</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-the-rust-crate">Via the Rust crate</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#via-mcp-for-ai-agents">Via MCP for AI Agents</a></li>
 </ul>
 </li>

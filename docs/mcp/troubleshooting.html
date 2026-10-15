@@ -52,7 +52,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Integrations" href="../integrations/index.html" />
-    <link rel="prev" title="Advanced: In-process Server &amp; Restrictions" href="advanced.html" />
+    <link rel="prev" title="Advanced: Server Options &amp; Restrictions" href="advanced.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -210,7 +210,7 @@
 <li class="toctree-l1"><a class="reference internal" href="claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -231,8 +231,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -262,7 +262,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -477,22 +477,31 @@
   <section id="troubleshooting">
 <h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading">#</a></h1>
 <p><strong><code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> not found</strong></p>
-<p>The command is registered as a script entry point. Make sure you installed with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'opendesk[core,mcp]'</span></code>
-and that the install’s <code class="docutils literal notranslate"><span class="pre">bin/</span></code> directory is on your PATH.</p>
+<p><code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">install</span> <span class="pre">--path</span> <span class="pre">opendesk-rs</span></code> puts the binaries in <code class="docutils literal notranslate"><span class="pre">~/.cargo/bin</span></code>. Make
+sure that directory is on your PATH, or configure your client with the full
+path to <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code>.</p>
+<hr class="docutils" />
+<p><strong><code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">install</span></code> says <code class="docutils literal notranslate"><span class="pre">'claude'</span> <span class="pre">command</span> <span class="pre">not</span> <span class="pre">found</span></code></strong></p>
+<p>Install Claude Code first, or register the server manually with your client.</p>
 <hr class="docutils" />
 <p><strong>Screenshot returns a permission error on macOS</strong></p>
-<p>Go to System Settings → Privacy &amp; Security → Screen Recording and add your terminal app (Terminal, iTerm2, etc.).</p>
+<p>Go to System Settings → Privacy &amp; Security → Screen Recording and add your terminal app (Terminal, iTerm2, etc.).
+<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">check</span></code> reports the current state; <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">check</span> <span class="pre">--open</span></code> opens the settings pane.</p>
 <hr class="docutils" />
 <p><strong>Mouse/keyboard actions do nothing on macOS</strong></p>
 <p>Go to System Settings → Privacy &amp; Security → Accessibility and add your terminal app.</p>
 <hr class="docutils" />
-<p><strong>Tools appear in Claude Code but calls fail with <code class="docutils literal notranslate"><span class="pre">ImportError</span></code></strong></p>
-<p>You installed opendesk but not the core extras. Run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'opendesk[core]'</span>
-</pre></div>
-</div>
+<p><strong>Input fails with <code class="docutils literal notranslate"><span class="pre">input</span> <span class="pre">refused:</span> <span class="pre">...</span></code></strong></p>
+<p>An input guard is set (per call or via <code class="docutils literal notranslate"><span class="pre">opendesk_guard</span></code>) and the foreground
+window does not match. Focus the right window, or clear the guard with
+<code class="docutils literal notranslate"><span class="pre">opendesk_guard</span></code> <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">&quot;action&quot;:</span> <span class="pre">&quot;clear&quot;</span> <span class="pre">}</span></code>. On non-Windows machines the
+foreground window cannot be detected, so any guard refuses input.</p>
 <hr class="docutils" />
-<p>Everything working? Explore <a class="reference internal" href="../integrations/index.html"><span class="std std-doc">Integrations →</span></a> to wire opendesk into your preferred agent framework, or browse the <a class="reference internal" href="../tools/index.html"><span class="std std-doc">Tools reference →</span></a> for full parameter docs.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code> reports <code class="docutils literal notranslate"><span class="pre">TIMED</span> <span class="pre">OUT</span></code></strong></p>
+<p>The command ran past <code class="docutils literal notranslate"><span class="pre">timeout_secs</span></code> (default 30). Its process tree was killed
+and the output shown is partial. Raise <code class="docutils literal notranslate"><span class="pre">timeout_secs</span></code> for long commands.</p>
+<hr class="docutils" />
+<p>Everything working? Browse the <a class="reference internal" href="../tools/index.html"><span class="std std-doc">Tools reference →</span></a> for full parameter docs.</p>
 </section>
 
 
@@ -512,7 +521,7 @@ and that the install’s <code class="docutils literal notranslate"><span class=
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Advanced: In-process Server &amp; Restrictions</p>
+        <p class="prev-next-title">Advanced: Server Options &amp; Restrictions</p>
       </div>
     </a>
     <a class="right-next"

@@ -1,64 +1,44 @@
 # `screenshot` — Screen Capture
 
-```python
-from opendesk.tools.screenshot import ScreenshotTool
-tool = ScreenshotTool()
-```
-
 ## Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `marks` | bool | false | Overlay numbered bounding boxes (Set-of-Marks) on interactive elements |
-| `show_cursor` | bool | false | Draw a red dot at the current cursor position |
-| `zoom` | `[x0,y0,x1,y1]` | null | Crop a region for close-up inspection |
-| `region` | `[x,y,w,h]` | null | Capture only this screen region |
-| `format` | str | `"png"` (local) / `"jpeg"` (remote) | Compression format (`"jpeg"` or `"png"`). `"jpeg"` reduces payload size by ~5x–14x for low-latency streaming. |
-| `quality` | int | 75 | JPEG compression quality from 1 to 100. |
-| `save_path` | str | null | Save image to disk at this absolute path |
-| `peer` | str | null | Target peer name to capture screen remotely (e.g. `"work-pc"` or `"local"`) |
+| `region` | `[x, y, w, h]` | full screen | Capture only this screen region |
+| `zoom` | `[x0, y0, x1, y1]` | null | Crop a region for close-up inspection (takes precedence over `region`) |
+| `show_cursor` | bool | false | Also report the current cursor position in the text output |
+| `format` | `"png"` \| `"jpeg"` | `png` locally, `jpeg` for remote peers | Image format |
+| `quality` | int | 75 | JPEG quality, 1–100 |
+| `save_path` | string | null | Also write the image to this path |
+| `peer` | string | default peer | Machine to capture |
+
+The result is the image plus a line such as `Captured 1920x1080 screenshot.`
+
+Coordinates you read off the most recent screenshot (including a `zoom` or
+`region` capture) can be passed straight to the [`mouse`](mouse.md) tool; they
+are mapped onto the desktop automatically, including monitors left of or above
+the primary one.
+
+The Rust version has no Set-of-Marks overlay (`marks`) and no pixel-diff
+change report.
 
 ## Ask Claude
 
-When opendesk is connected via MCP, just describe what you want:
-
 > "Take a screenshot and tell me what's on my screen"
-
-> "Take a screenshot with numbered marks on every button"
 
 > "Show me what's in the top-right corner of the screen"
 
-> "Save a screenshot to /tmp/before.png"
+> "Save a screenshot to C:\temp\before.png"
 
----
+## Example calls
 
-## SDK examples
-
-```python
-params = ScreenshotTool.Params
-
-# Full screenshot
-result = await tool.execute(ctx, params())
-png = result.attachments[0].content  # bytes
-
-# With SoM overlay — model can say "click mark 3"
-result = await tool.execute(ctx, params(marks=True))
-print(result.output)  # lists: [1] Button "OK" at (120,340) 80×30 — click mark 1 to interact
-
-# Zoom into a region
-result = await tool.execute(ctx, params(zoom=[100, 200, 400, 350]))
-
-# Save to disk
-result = await tool.execute(ctx, params(save_path="/tmp/before.png"))
+```json
+{}
+{ "zoom": [100, 200, 400, 350] }
+{ "format": "jpeg", "quality": 60, "peer": "work-pc" }
+{ "save_path": "/tmp/before.png" }
 ```
 
-## Output
-
-The tool output always includes:
-- Capture dimensions and Retina note: `image_width=1440, image_height=900` to pass to the mouse tool.
-- Change detection vs previous screenshot: `"12.3% of pixels changed in region [x=400, y=200, 600×300px]"`.
-- SoM summary if `marks=True`.
-
 ---
 
-Next: [mouse →](mouse.md) — once you have screenshot dimensions, pass them here for pixel-accurate clicks.
+Next: [mouse →](mouse.md)

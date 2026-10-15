@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -496,9 +496,9 @@ fighting over a single mouse / keyboard / focused window is the failure
 mode this policy prevents.</p>
 <ul class="simple">
 <li><p><strong>Different peer trying to connect while one is active</strong> → rejected
-with a clean <code class="docutils literal notranslate"><span class="pre">BUSY</span></code> error. The client sees a <code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code>
-(“server is busy: laptop is the active controller…”) so the agent
-knows to back off or ask the operator.</p></li>
+with a <code class="docutils literal notranslate"><span class="pre">busy</span></code> error (“server is busy: laptop is the active
+controller”) and the connection is closed, so the agent knows to back
+off or ask the operator.</p></li>
 <li><p><strong>Same peer reconnecting</strong> (Wi-Fi blip, controller crash, network
 roam) → bumps the previous session cleanly. No need to wait out the
 stale TCP connection.</p></li>
@@ -512,17 +512,16 @@ turns. To free the slot:</p>
 </div>
 <section id="disconnect-vs-unpair-the-trust-model">
 <h2>Disconnect vs unpair — the trust model<a class="headerlink" href="#disconnect-vs-unpair-the-trust-model" title="Link to this heading">#</a></h2>
-<p>Both commands talk to the running daemon over a local Unix socket /
-named pipe (<code class="docutils literal notranslate"><span class="pre">~/.opendesk/admin.sock</span></code>), not the network — only the user
-running <code class="docutils literal notranslate"><span class="pre">serve</span></code> can use them. They differ in <em>who has the last word</em>:</p>
+<p>Both commands talk to the running daemon over a local admin channel, not
+the network: a Unix socket at <code class="docutils literal notranslate"><span class="pre">~/.opendesk/admin.sock</span></code> (mode 0600), or on
+Windows a localhost TCP port recorded in <code class="docutils literal notranslate"><span class="pre">~/.opendesk/admin.port</span></code>. They
+differ in <em>who has the last word</em>:</p>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">disconnect</span></code></strong> is <strong>cooperative</strong>. The server sends a
-<code class="docutils literal notranslate"><span class="pre">session.evicted</span></code> PUSH frame and closes the connection. A cooperative
-client (<code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code>) sees the frame, suppresses its auto-reconnect,
-and raises <code class="docutils literal notranslate"><span class="pre">SessionEvicted</span></code> on subsequent calls. Trust is preserved —
-the same controller can come back when it decides to reconnect. A hostile
-client could ignore the PUSH and reconnect immediately; for that case,
-use <code class="docutils literal notranslate"><span class="pre">unpair</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">session.evicted</span></code> PUSH frame and closes the connection. Trust is
+preserved — the same controller can reconnect (the Rust client does not
+act on the PUSH; its next call simply opens a new connection). A
+controller that should not come back needs <code class="docutils literal notranslate"><span class="pre">unpair</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">unpair</span> <span class="pre">NAME</span></code></strong> is <strong>enforced</strong>. The peer is removed
 from the trusted-peers store, then disconnected (via the same admin
 IPC channel as <code class="docutils literal notranslate"><span class="pre">disconnect</span></code>). Their next reconnect attempt fails
@@ -531,7 +530,7 @@ authentication outright.</p></li>
 <p>In short: <code class="docutils literal notranslate"><span class="pre">disconnect</span></code> says <em>“please leave, you can come back later”</em>;
 <code class="docutils literal notranslate"><span class="pre">unpair</span></code> says <em>“you are not welcome here anymore.”</em></p>
 <hr class="docutils" />
-<p>Next: <a class="reference internal" href="programmatic.html"><span class="std std-doc">Programmatic Use →</span></a> — connect from Python or JS code directly.</p>
+<p>Next: <a class="reference internal" href="programmatic.html"><span class="std std-doc">Programmatic Use →</span></a> — use the Rust crate, or MCP from any language.</p>
 </section>
 </section>
 

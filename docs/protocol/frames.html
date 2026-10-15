@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -520,9 +520,11 @@ msgpack dict with at minimum <code class="docutils literal notranslate"><span cl
 established, before any REQ/RES exchange.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code> carries the server’s <code class="docutils literal notranslate"><span class="pre">CapabilityManifest</span></code> (supported methods,
 platform, backend info) so the client can check before calling.</p></li>
-<li><p>A server can <strong>reject</strong> the connection at the application level by setting
-<code class="docutils literal notranslate"><span class="pre">error</span></code> — e.g. <code class="docutils literal notranslate"><span class="pre">{&quot;code&quot;:</span> <span class="pre">&quot;busy&quot;,</span> <span class="pre">&quot;message&quot;:</span> <span class="pre">&quot;laptop</span> <span class="pre">is</span> <span class="pre">the</span> <span class="pre">active</span> <span class="pre">controller&quot;}</span></code>.
-The client’s <code class="docutils literal notranslate"><span class="pre">Peer.hello()</span></code> raises <code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code> on a non-null error field.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">error</span></code> lets a side reject the session at the application level. Note that
+the Rust server rejects a second controller differently: it sends a RES
+frame with <code class="docutils literal notranslate"><span class="pre">id:</span> <span class="pre">0</span></code> and <code class="docutils literal notranslate"><span class="pre">error.code</span> <span class="pre">=</span> <span class="pre">&quot;busy&quot;</span></code>
+(<code class="docutils literal notranslate"><span class="pre">&quot;server</span> <span class="pre">is</span> <span class="pre">busy:</span> <span class="pre">NAME</span> <span class="pre">is</span> <span class="pre">the</span> <span class="pre">active</span> <span class="pre">controller&quot;</span></code>) and closes the
+connection.</p></li>
 </ul>
 </section>
 <section id="req">
@@ -539,8 +541,10 @@ The client’s <code class="docutils literal notranslate"><span class="pre">Peer
 </div>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">stream=false</span></code> (default): unary call, expects exactly one RES.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">stream=true</span></code>: streaming call, expects multiple RES frames with <code class="docutils literal notranslate"><span class="pre">end=false</span></code>
-followed by a final RES with <code class="docutils literal notranslate"><span class="pre">end=true</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stream=true</span></code>: reserved for streaming calls (multiple RES frames with
+<code class="docutils literal notranslate"><span class="pre">end=false</span></code>, then a final one with <code class="docutils literal notranslate"><span class="pre">end=true</span></code>). The Rust server implements
+no streaming methods and answers every REQ with a single RES; requests on
+one session are handled one at a time.</p></li>
 </ul>
 </section>
 <section id="res">
@@ -575,7 +579,8 @@ followed by a final RES with <code class="docutils literal notranslate"><span cl
 </div>
 <p>Valid for both unary and streaming calls. The peer SHOULD respond with a
 final RES carrying <code class="docutils literal notranslate"><span class="pre">error.code</span> <span class="pre">=</span> <span class="pre">&quot;cancelled&quot;</span></code>. Callers must tolerate
-receiving the final RES before the CANCEL is processed.</p>
+receiving the final RES before the CANCEL is processed. (The Rust server
+currently only logs CANCEL; the call runs to completion.)</p>
 </section>
 <section id="push">
 <h3>PUSH<a class="headerlink" href="#push" title="Link to this heading">#</a></h3>
@@ -600,7 +605,7 @@ recognise a topic SHOULD ignore it.</p>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">session.evicted</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">{&quot;reason&quot;:</span> <span class="pre">&quot;&lt;string&gt;&quot;}</span></code></p></td>
-<td><p>Server asked the client to leave (cooperative disconnect). A well-behaved client suppresses auto-reconnect and raises <code class="docutils literal notranslate"><span class="pre">SessionEvicted</span></code> on subsequent calls.</p></td>
+<td><p>Server asked the client to leave (cooperative disconnect) and is closing the connection. The Rust client ignores PUSH frames; its next call reconnects.</p></td>
 </tr>
 </tbody>
 </table>
@@ -610,54 +615,49 @@ recognise a topic SHOULD ignore it.</p>
 <hr class="docutils" />
 <section id="error-codes">
 <h2>8. Error codes<a class="headerlink" href="#error-codes" title="Link to this heading">#</a></h2>
-<p>The closed set of <code class="docutils literal notranslate"><span class="pre">ErrorCode</span></code> values (stable strings):</p>
+<p><code class="docutils literal notranslate"><span class="pre">ErrorCode</span></code> in <code class="docutils literal notranslate"><span class="pre">protocol/frames.rs</span></code> defines these stable strings:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Code</p></th>
-<th class="head"><p>Python exception</p></th>
 <th class="head"><p>Meaning</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">capability_unsupported</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">CapabilityUnsupported</span></code></p></td>
 <td><p>Method not supported by this platform or backend.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">permission_denied</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">PermissionDeniedError</span></code></p></td>
-<td><p>Server-side policy gate rejected the call.</p></td>
+<td><p>The call was refused.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">invalid_argument</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code></p></td>
 <td><p>Malformed or out-of-range parameter.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">not_found</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code></p></td>
 <td><p>Target resource (file, window, peer) doesn’t exist.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">timeout</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code></p></td>
 <td><p>Operation timed out on the server side.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cancelled</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">asyncio.CancelledError</span></code></p></td>
 <td><p>Call was cancelled (either side).</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">internal</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code></p></td>
 <td><p>Unclassified server-side error.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">protocol</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code></p></td>
 <td><p>Wire-level violation (bad frame, wrong version, etc.).</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">busy</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code></p></td>
 <td><p>Server already has an active controller session.</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>In practice the Rust server reports every failed method call with
+<code class="docutils literal notranslate"><span class="pre">code</span> <span class="pre">=</span> <span class="pre">&quot;error&quot;</span></code> and the error text as <code class="docutils literal notranslate"><span class="pre">message</span></code> (including
+<code class="docutils literal notranslate"><span class="pre">unknown</span> <span class="pre">method:</span> <span class="pre">NAME</span></code> and guard refusals such as <code class="docutils literal notranslate"><span class="pre">input</span> <span class="pre">refused:</span> <span class="pre">...</span></code>); of
+the codes above it currently only sends <code class="docutils literal notranslate"><span class="pre">busy</span></code>. Clients should treat any
+non-null <code class="docutils literal notranslate"><span class="pre">error</span></code> as a failure and show its <code class="docutils literal notranslate"><span class="pre">message</span></code>.</p>
 <hr class="docutils" />
 <p>Next: <a class="reference internal" href="session.html"><span class="std std-doc">Session Lifecycle &amp; Method Namespace →</span></a></p>
 </section>

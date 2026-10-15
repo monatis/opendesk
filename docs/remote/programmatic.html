@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -495,7 +495,7 @@
                   
   <section id="programmatic-use">
 <h1>Programmatic Use<a class="headerlink" href="#programmatic-use" title="Link to this heading">#</a></h1>
-<p>OpenDesk can be embedded directly into Rust applications via the <code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code> crate, or consumed over standard Model Context Protocol (MCP) JSON-RPC from any programming language.</p>
+<p>OpenDesk can be embedded directly into Rust applications via the <code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code> crate, or consumed over standard Model Context Protocol (MCP) JSON-RPC from any programming language. There is no Python package in the Rust version.</p>
 <section id="rust-library-opendesk-rs">
 <h2>Rust Library (<code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code>)<a class="headerlink" href="#rust-library-opendesk-rs" title="Link to this heading">#</a></h2>
 <p>Add <code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code> to your <code class="docutils literal notranslate"><span class="pre">Cargo.toml</span></code>:</p>
@@ -507,27 +507,28 @@
 </div>
 <section id="driving-a-paired-remote-peer">
 <h3>Driving a Paired Remote Peer<a class="headerlink" href="#driving-a-paired-remote-peer" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">connect(peer,</span> <span class="pre">rendezvous_url,</span> <span class="pre">rendezvous_token,</span> <span class="pre">home)</span></code> loads the identity and
+trusted peers from <code class="docutils literal notranslate"><span class="pre">home</span></code> (default <code class="docutils literal notranslate"><span class="pre">~/.opendesk</span></code>) and opens an authenticated,
+encrypted session. With <code class="docutils literal notranslate"><span class="pre">peer</span> <span class="pre">=</span> <span class="pre">None</span></code> it uses the persistent default peer.</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="p">;</span>
-<span class="k">use</span><span class="w"> </span><span class="n">opendesk_rs</span><span class="p">::</span><span class="n">protocol</span><span class="p">::</span><span class="n">identity</span><span class="p">::</span><span class="n">Identity</span><span class="p">;</span>
-<span class="k">use</span><span class="w"> </span><span class="n">opendesk_rs</span><span class="p">::</span><span class="n">protocol</span><span class="p">::</span><span class="n">storage</span><span class="p">::</span><span class="n">TrustedPeers</span><span class="p">;</span>
 <span class="k">use</span><span class="w"> </span><span class="n">opendesk_rs</span><span class="p">::</span><span class="n">remote</span><span class="p">::</span><span class="n">client</span><span class="p">::</span><span class="n">connect</span><span class="p">;</span>
 
 <span class="cp">#[tokio::main]</span>
 <span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">home</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dirs</span><span class="p">::</span><span class="n">home_dir</span><span class="p">().</span><span class="n">expect</span><span class="p">(</span><span class="s">"home dir"</span><span class="p">).</span><span class="n">join</span><span class="p">(</span><span class="s">".opendesk"</span><span class="p">);</span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">identity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Identity</span><span class="p">::</span><span class="n">load_or_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">home</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">trusted</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TrustedPeers</span><span class="p">::</span><span class="n">load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">home</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
-
 <span class="w">    </span><span class="c1">// Connect to a paired peer (e.g., 'work-pc')</span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">remote</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">connect</span><span class="p">(</span><span class="s">"work-pc"</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">home</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">identity</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">trusted</span><span class="p">,</span><span class="w"> </span><span class="nb">None</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">remote</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">connect</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="s">"work-pc"</span><span class="p">),</span><span class="w"> </span><span class="nb">None</span><span class="p">,</span><span class="w"> </span><span class="nb">None</span><span class="p">,</span><span class="w"> </span><span class="nb">None</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
 
-<span class="w">    </span><span class="c1">// Capture screenshot as native binary PNG bytes</span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">png_bytes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">remote</span><span class="p">.</span><span class="n">screenshot_bytes</span><span class="p">().</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="c1">// Capture a screenshot as PNG bytes</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">png_bytes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">remote</span><span class="p">.</span><span class="n">screenshot_bytes</span><span class="p">(</span><span class="nb">None</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
 <span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">"Captured screenshot: {} bytes"</span><span class="p">,</span><span class="w"> </span><span class="n">png_bytes</span><span class="p">.</span><span class="n">len</span><span class="p">());</span>
 
 <span class="w">    </span><span class="c1">// Type text and trigger hotkeys</span>
 <span class="w">    </span><span class="n">remote</span><span class="p">.</span><span class="n">keyboard_type</span><span class="p">(</span><span class="s">"Hello from Rust!"</span><span class="p">).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
 <span class="w">    </span><span class="n">remote</span><span class="p">.</span><span class="n">keyboard_hotkey</span><span class="p">(</span><span class="o">&amp;</span><span class="p">[</span><span class="s">"ctrl"</span><span class="p">,</span><span class="w"> </span><span class="s">"s"</span><span class="p">]).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+
+<span class="w">    </span><span class="c1">// Run a command (command, shell, timeout in seconds)</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">res</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">remote</span><span class="p">.</span><span class="n">exec</span><span class="p">(</span><span class="s">"hostname"</span><span class="p">,</span><span class="w"> </span><span class="nb">None</span><span class="p">,</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="mi">10</span><span class="p">)).</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">"{} (timed out: {})"</span><span class="p">,</span><span class="w"> </span><span class="n">res</span><span class="p">.</span><span class="n">stdout</span><span class="p">.</span><span class="n">trim</span><span class="p">(),</span><span class="w"> </span><span class="n">res</span><span class="p">.</span><span class="n">timed_out</span><span class="p">);</span>
 
 <span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
 <span class="p">}</span>
@@ -554,12 +555,14 @@
 <span class="p">}</span>
 </pre></div>
 </div>
+<p>These are the crate’s internal types, not a stable public API; check the
+signatures in <code class="docutils literal notranslate"><span class="pre">opendesk-rs/src</span></code> for the version you build against.</p>
 </section>
 </section>
 <hr class="docutils" />
 <section id="language-agnostic-use-via-mcp">
 <h2>Language-Agnostic Use via MCP<a class="headerlink" href="#language-agnostic-use-via-mcp" title="Link to this heading">#</a></h2>
-<p>For Python, Node.js, Go, or any other language, connect to the standalone <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> binary via standard stdio JSON-RPC.</p>
+<p>For Python, Node.js, Go, or any other language, start the <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> binary and speak MCP JSON-RPC over its stdin/stdout (<code class="docutils literal notranslate"><span class="pre">tools/list</span></code>, <code class="docutils literal notranslate"><span class="pre">tools/call</span></code>). See <a class="reference internal" href="../integrations/custom.html"><span class="std std-doc">Custom / Generic Integration</span></a>.</p>
 </section>
 </section>
 

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Remote Computer Use — Python / CLI &#8212; opendesk</title>
+    <title>Remote Computer Use — CLI &#8212; opendesk</title>
   
   
   
@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -466,7 +466,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Remote Computer Use — Python / CLI</h1>
+    <h1>Remote Computer Use — CLI</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -489,12 +489,13 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="remote-computer-use-python-cli">
-<h1>Remote Computer Use — Python / CLI<a class="headerlink" href="#remote-computer-use-python-cli" title="Link to this heading">#</a></h1>
-<p>Use an opendesk agent on one machine to control another over the LAN. Every
-existing tool (screenshot, mouse, keyboard, ui, app, clipboard, ocr) works
-the same — the <code class="docutils literal notranslate"><span class="pre">Computer</span></code> abstraction just lives on the other end of an
-encrypted WebSocket.</p>
+  <section id="remote-computer-use-cli">
+<h1>Remote Computer Use — CLI<a class="headerlink" href="#remote-computer-use-cli" title="Link to this heading">#</a></h1>
+<p>Use an opendesk agent on one machine to control another over the LAN (or the
+Internet via a rendezvous relay). The computer-use tools (screenshot, mouse,
+keyboard, ui, app, clipboard, opendesk_exec) work the same: on the controller
+they go through a <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code>, which sends each call over an encrypted
+WebSocket to <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">serve</span></code>, where a <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> performs it.</p>
 <div class="highlight-mermaid notranslate"><div class="highlight"><pre><span></span>flowchart LR
     A["&lt;b&gt;Controller&lt;/b&gt;&lt;br/&gt;Claude Code, etc&lt;br/&gt;RemoteComputer"]
     B["&lt;b&gt;Controlled Machine&lt;/b&gt;&lt;br/&gt;opendesk serve&lt;br/&gt;LocalComputer"]
@@ -514,7 +515,7 @@ encrypted WebSocket.</p>
 <td><p>The one being controlled. Runs <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">pair</span></code> once, then <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">serve</span></code> long-running. In protocol terms it’s the <strong>server</strong> — it listens.</p></td>
 </tr>
 <tr class="row-odd"><td><p><strong>Controller</strong></p></td>
-<td><p>The machine running the agent (Claude Code, Claude Desktop, etc.). Runs <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">pair-with</span></code> once, then talks to the controlled machine over MCP / the Python API. In protocol terms it’s the <strong>client</strong> — it initiates.</p></td>
+<td><p>The machine running the agent (Claude Code, Claude Desktop, etc.). Runs <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">pair-with</span></code> once, then talks to the controlled machine over MCP, the CLI, or the Rust crate. In protocol terms it’s the <strong>client</strong> — it initiates.</p></td>
 </tr>
 <tr class="row-even"><td><p><strong>Pairing</strong></p></td>
 <td><p>One-time exchange that establishes mutual trust via a 6-digit code shown on the controlled machine. After pairing, both ends know each other’s long-lived public keys and can reconnect without the code.</p></td>
@@ -537,7 +538,7 @@ encrypted WebSocket.</p>
 <li><p><a class="reference internal" href="cli.html"><span class="std std-doc">CLI Reference</span></a></p></li>
 <li><p><a class="reference internal" href="service.html"><span class="std std-doc">Service Install</span></a> — survive reboots</p></li>
 <li><p><a class="reference internal" href="concurrency.html"><span class="std std-doc">Concurrency</span></a> — single-controller policy, disconnect vs unpair</p></li>
-<li><p><a class="reference internal" href="programmatic.html"><span class="std std-doc">Programmatic Use</span></a> — Python API</p></li>
+<li><p><a class="reference internal" href="programmatic.html"><span class="std std-doc">Programmatic Use</span></a> — Rust crate, or MCP from any language</p></li>
 <li><p><a class="reference internal" href="troubleshooting.html"><span class="std std-doc">Troubleshooting</span></a></p></li>
 </ul>
 </section>

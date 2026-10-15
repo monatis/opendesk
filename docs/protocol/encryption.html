@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -495,14 +495,14 @@
 <h2>3. Encryption<a class="headerlink" href="#encryption" title="Link to this heading">#</a></h2>
 <p>After a successful handshake (§5 or §6) the two peers share two 32-byte
 session keys — one per direction — and all subsequent frames pass through
-<code class="docutils literal notranslate"><span class="pre">EncryptedConnection</span></code> (<code class="docutils literal notranslate"><span class="pre">protocol/auth/encrypted.py</span></code>).</p>
+the session channel in <code class="docutils literal notranslate"><span class="pre">opendesk-rs/src/protocol/crypto.rs</span></code>.</p>
 <p><strong>Algorithm:</strong> ChaCha20-Poly1305 AEAD (RFC 8439).</p>
 <p><strong>Nonce:</strong> A per-direction monotonic counter encoded as a 96-bit big-endian
 integer. The counter starts at 0, increments by 1 per frame, and is <strong>not
 transmitted</strong> — both ends maintain their own copy. Because the transport is
 reliable and ordered, both counters stay in sync.</p>
-<p><strong>Effect of tampering or desync:</strong> AEAD verification fails → <code class="docutils literal notranslate"><span class="pre">ConnectionClosed</span></code>
-is raised immediately on the receiving side. There is no retry; the TCP
+<p><strong>Effect of tampering or desync:</strong> AEAD verification fails and the receiving
+side ends the session immediately. There is no retry; the TCP
 connection must be re-established and a new handshake run.</p>
 <p><strong>Key lifetime:</strong> Session keys are ephemeral — they exist for one TCP
 connection. Long-lived static keys never appear in frame payloads.</p>
@@ -511,7 +511,7 @@ connection. Long-lived static keys never appear in frame payloads.</p>
 <section id="identity-and-key-material">
 <h2>4. Identity and key material<a class="headerlink" href="#identity-and-key-material" title="Link to this heading">#</a></h2>
 <p>Each machine holds a long-lived X25519 static keypair in its <strong>identity</strong>
-(<code class="docutils literal notranslate"><span class="pre">protocol/auth/identity.py</span></code>):</p>
+(<code class="docutils literal notranslate"><span class="pre">opendesk-rs/src/protocol/identity.rs</span></code>):</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>File</p></th>

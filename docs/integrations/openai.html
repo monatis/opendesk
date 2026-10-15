@@ -143,10 +143,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -214,7 +210,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +231,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +262,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -453,9 +449,7 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</button>
+
 </div></div>
       
     </div>
@@ -471,17 +465,6 @@
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agentic-loop">Agentic loop</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-groq">With Groq</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-ollama">With Ollama</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-control">Manual control</a></li>
-</ul>
-            </nav>
         </div>
     </div>
 </div>
@@ -493,62 +476,13 @@
                   
   <section id="openai-function-calling">
 <h1>OpenAI Function Calling<a class="headerlink" href="#openai-function-calling" title="Link to this heading">#</a></h1>
-<p>Works with OpenAI API and any OpenAI-compatible endpoint (Groq, Together AI, Ollama, LiteLLM, vLLM, Fireworks, etc.).</p>
-<section id="agentic-loop">
-<h2>Agentic loop<a class="headerlink" href="#agentic-loop" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">openai</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenAI</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.integrations.openai_compat</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenAIAdapter</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_registry</span>
-
-<span class="n">client</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">()</span>
-<span class="n">adapter</span> <span class="o">=</span> <span class="n">OpenAIAdapter</span><span class="p">(</span><span class="n">create_registry</span><span class="p">())</span>
-
-<span class="n">messages</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Take a screenshot and describe what you see"</span><span class="p">}]</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">adapter</span><span class="o">.</span><span class="n">run_loop</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">"gpt-4o"</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="with-groq">
-<h2>With Groq<a class="headerlink" href="#with-groq" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">groq</span><span class="w"> </span><span class="kn">import</span> <span class="n">Groq</span>
-<span class="n">client</span> <span class="o">=</span> <span class="n">Groq</span><span class="p">()</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">adapter</span><span class="o">.</span><span class="n">run_loop</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">"llama-3.3-70b-versatile"</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="with-ollama">
-<h2>With Ollama<a class="headerlink" href="#with-ollama" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">openai</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenAI</span>
-<span class="n">client</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="s2">"http://localhost:11434/v1"</span><span class="p">,</span> <span class="n">api_key</span><span class="o">=</span><span class="s2">"ollama"</span><span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">adapter</span><span class="o">.</span><span class="n">run_loop</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">"qwen2.5:72b"</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="manual-control">
-<h2>Manual control<a class="headerlink" href="#manual-control" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">openai</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenAI</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.integrations.openai_compat</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenAIAdapter</span>
-
-<span class="n">client</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">()</span>
-<span class="n">adapter</span> <span class="o">=</span> <span class="n">OpenAIAdapter</span><span class="p">()</span>
-
-<span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-    <span class="n">model</span><span class="o">=</span><span class="s2">"gpt-4o"</span><span class="p">,</span>
-    <span class="n">tools</span><span class="o">=</span><span class="n">adapter</span><span class="o">.</span><span class="n">tool_definitions</span><span class="p">(),</span>
-    <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="n">choice</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-<span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">choice</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
-
-<span class="k">if</span> <span class="n">choice</span><span class="o">.</span><span class="n">finish_reason</span> <span class="o">==</span> <span class="s2">"tool_calls"</span><span class="p">:</span>
-    <span class="n">tool_messages</span> <span class="o">=</span> <span class="k">await</span> <span class="n">adapter</span><span class="o">.</span><span class="n">handle_response</span><span class="p">(</span><span class="n">choice</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
-    <span class="n">messages</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tool_messages</span><span class="p">)</span>
-</pre></div>
-</div>
+<p><strong>Not available in the Rust version.</strong> There is no <code class="docutils literal notranslate"><span class="pre">OpenAIAdapter</span></code>.</p>
+<p>To use opendesk with OpenAI or an OpenAI-compatible endpoint, run an MCP
+client in your agent, connect it to <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> over stdio, convert the
+listed tool schemas (<code class="docutils literal notranslate"><span class="pre">inputSchema</span></code>) to function definitions, and forward each
+function call as an MCP <code class="docutils literal notranslate"><span class="pre">tools/call</span></code>. See <a class="reference internal" href="../mcp/index.html"><span class="std std-doc">MCP Integration</span></a>.</p>
 <hr class="docutils" />
 <p>Using LangChain or LangGraph? See <a class="reference internal" href="langchain.html"><span class="std std-doc">LangChain →</span></a></p>
-</section>
 </section>
 
 
@@ -586,26 +520,6 @@
             </div>
             
             
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item"><div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agentic-loop">Agentic loop</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-groq">With Groq</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-ollama">With Ollama</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-control">Manual control</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
           </div>

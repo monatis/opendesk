@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -493,25 +493,28 @@
 <h1>Transport &amp; Encoding<a class="headerlink" href="#transport-encoding" title="Link to this heading">#</a></h1>
 <section id="transport">
 <h2>1. Transport<a class="headerlink" href="#transport" title="Link to this heading">#</a></h2>
-<p>All traffic runs over <strong>binary WebSocket</strong> (RFC 6455) on top of TCP.</p>
+<p>All protocol traffic runs over <strong>binary WebSocket</strong> (RFC 6455) messages on top of TCP.</p>
 <ul class="simple">
 <li><p>Default port: <strong>8423</strong> on the server (controlled machine).</p></li>
-<li><p>Text frames are rejected as a protocol violation.</p></li>
+<li><p>A text message where a protocol frame is expected is an error. Text
+messages are used only for the JSON control messages of the rendezvous
+relay (see <a class="reference internal" href="../remote/internet-transport.html"><span class="std std-doc">Internet Remote Transport</span></a>).</p></li>
 <li><p>The transport is <strong>reliable and ordered</strong>, which the encryption layer depends on (see <a class="reference internal" href="encryption.html"><span class="std std-doc">Encryption</span></a>).</p></li>
-<li><p>Future: QUIC transport is planned for v2 (eliminates head-of-line blocking for concurrent streams).</p></li>
 </ul>
+<p>Implementation: <code class="docutils literal notranslate"><span class="pre">opendesk-rs/src/remote/transport.rs</span></code>.</p>
 </section>
 <hr class="docutils" />
 <section id="encoding">
 <h2>2. Encoding<a class="headerlink" href="#encoding" title="Link to this heading">#</a></h2>
-<p>Every frame is <strong>msgpack-encoded</strong> (see <code class="docutils literal notranslate"><span class="pre">protocol/codec.py</span></code>).</p>
+<p>Every frame is <strong>msgpack-encoded</strong> with <code class="docutils literal notranslate"><span class="pre">rmp-serde</span></code> using named fields
+(see <code class="docutils literal notranslate"><span class="pre">opendesk-rs/src/protocol/frames.rs</span></code>).</p>
 <p>Key conventions:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">bytes</span></code> values round-trip as native msgpack <code class="docutils literal notranslate"><span class="pre">bin</span></code> — <strong>never base64</strong>.
-Pixmaps, file contents, and public keys are all raw bytes on the wire.</p></li>
-<li><p>Python <code class="docutils literal notranslate"><span class="pre">set</span></code> is encoded as a msgpack array.</p></li>
-<li><p>Python <code class="docutils literal notranslate"><span class="pre">Enum</span></code> is encoded as its <code class="docutils literal notranslate"><span class="pre">.value</span></code>.</p></li>
-<li><p>Unknown fields on received frames are ignored (forward-compatible reads).</p></li>
+<li><p>Byte payloads such as screenshot data travel as native msgpack <code class="docutils literal notranslate"><span class="pre">bin</span></code> —
+<strong>never base64</strong>.</p></li>
+<li><p>Method params and results are dynamic msgpack values (<code class="docutils literal notranslate"><span class="pre">rmpv::Value</span></code>).</p></li>
+<li><p>Missing optional fields take defaults (<code class="docutils literal notranslate"><span class="pre">v</span></code> defaults to the protocol version,
+RES <code class="docutils literal notranslate"><span class="pre">end</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">true</span></code>).</p></li>
 </ul>
 <hr class="docutils" />
 <p>Next: <a class="reference internal" href="encryption.html"><span class="std std-doc">Encryption &amp; Identity →</span></a></p>

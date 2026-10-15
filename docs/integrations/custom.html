@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -476,7 +476,9 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sandbox-configuration">Sandbox configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#mcp-over-stdio-any-language">1. MCP over stdio (any language)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-rust-crate">2. The Rust crate</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#restricting-what-the-agent-can-do">Restricting what the agent can do</a></li>
 </ul>
             </nav>
         </div>
@@ -490,63 +492,42 @@
                   
   <section id="custom-generic-integration">
 <h1>Custom / Generic Integration<a class="headerlink" href="#custom-generic-integration" title="Link to this heading">#</a></h1>
-<p>If your framework isn’t listed, use the raw tool API directly:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_registry</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">allow_all_context</span>
-
-<span class="n">registry</span> <span class="o">=</span> <span class="n">create_registry</span><span class="p">()</span>
-<span class="n">ctx</span> <span class="o">=</span> <span class="n">allow_all_context</span><span class="p">()</span>
-
-<span class="c1"># Get JSON schemas for all tools (to pass to your LLM)</span>
-<span class="n">tool_schemas</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="p">{</span>
-        <span class="s2">"name"</span><span class="p">:</span> <span class="n">tool</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-        <span class="s2">"description"</span><span class="p">:</span> <span class="n">tool</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
-        <span class="s2">"parameters"</span><span class="p">:</span> <span class="n">tool</span><span class="o">.</span><span class="n">get_schema</span><span class="p">(),</span>
-    <span class="p">}</span>
-    <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">registry</span><span class="o">.</span><span class="n">tools</span><span class="p">()</span>
-<span class="p">]</span>
-
-<span class="c1"># Execute a tool from LLM output</span>
-<span class="n">tool_name</span> <span class="o">=</span> <span class="s2">"screenshot"</span>       <span class="c1"># from LLM response</span>
-<span class="n">arguments</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"marks"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>    <span class="c1"># from LLM response</span>
-
-<span class="n">tool</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">tool_name</span><span class="p">)</span>
-<span class="n">params</span> <span class="o">=</span> <span class="n">tool</span><span class="o">.</span><span class="n">parse_params</span><span class="p">(</span><span class="n">arguments</span><span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
-
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
-<span class="k">for</span> <span class="n">att</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">attachments</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Attachment: </span><span class="si">{</span><span class="n">att</span><span class="o">.</span><span class="n">filename</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">att</span><span class="o">.</span><span class="n">media_type</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">att</span><span class="o">.</span><span class="n">content</span><span class="p">)</span><span class="si">}</span><span class="s2"> bytes)"</span><span class="p">)</span>
-</pre></div>
-</div>
+<p>The Python tool registry, <code class="docutils literal notranslate"><span class="pre">ToolContext</span></code>, and <code class="docutils literal notranslate"><span class="pre">configure_sandbox</span></code> of the
+earlier Python version are <strong>not available</strong> in the Rust version. There are
+two supported routes:</p>
+<section id="mcp-over-stdio-any-language">
+<h2>1. MCP over stdio (any language)<a class="headerlink" href="#mcp-over-stdio-any-language" title="Link to this heading">#</a></h2>
+<p>Start <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> as a child process and speak MCP JSON-RPC on its
+stdin/stdout:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tools/list</span></code> returns every tool with its JSON <code class="docutils literal notranslate"><span class="pre">inputSchema</span></code>
+(see the <a class="reference internal" href="../tools/index.html"><span class="std std-doc">Tools reference</span></a>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tools/call</span></code> with <code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;:</span> <span class="pre">...,</span> <span class="pre">&quot;arguments&quot;:</span> <span class="pre">{...}}</span></code> runs one; screenshots
+come back as MCP image content.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> accepts <code class="docutils literal notranslate"><span class="pre">--home</span> <span class="pre">DIR</span></code>, <code class="docutils literal notranslate"><span class="pre">--rendezvous</span> <span class="pre">URL</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--rendezvous-token</span> <span class="pre">TOKEN</span></code>.</p>
+</section>
+<section id="the-rust-crate">
+<h2>2. The Rust crate<a class="headerlink" href="#the-rust-crate" title="Link to this heading">#</a></h2>
+<p>Link <code class="docutils literal notranslate"><span class="pre">opendesk-rs</span></code> and call <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code> or <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> directly. See
+<a class="reference internal" href="../remote/programmatic.html"><span class="std std-doc">Programmatic Use</span></a>.</p>
+</section>
+<section id="restricting-what-the-agent-can-do">
+<h2>Restricting what the agent can do<a class="headerlink" href="#restricting-what-the-agent-can-do" title="Link to this heading">#</a></h2>
+<p>There is no allowed-apps / screen-region sandbox in the Rust version. The
+controls that exist are:</p>
+<ul class="simple">
+<li><p>the <a class="reference internal" href="../tools/index.html#input-guard"><span class="std std-ref">input guard</span></a> (<code class="docutils literal notranslate"><span class="pre">guard</span></code> argument and
+<code class="docutils literal notranslate"><span class="pre">opendesk_guard</span></code>), which refuses mouse / keyboard input unless the expected
+window is in the foreground;</p></li>
+<li><p>on a controlled machine, pairing (only trusted peers can connect), the
+single-controller rule, <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">unpair</span></code>, and the
+<a class="reference internal" href="../tools/audit.html"><span class="std std-doc">audit log</span></a>.</p></li>
+</ul>
 <hr class="docutils" />
-<section id="sandbox-configuration">
-<h2>Sandbox configuration<a class="headerlink" href="#sandbox-configuration" title="Link to this heading">#</a></h2>
-<p>Restrict what the agent can do in a session:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.computer.sandbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">configure_sandbox</span><span class="p">,</span> <span class="n">get_sandbox</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolContext</span>
-
-<span class="c1"># Only allow specific apps and a screen region</span>
-<span class="n">configure_sandbox</span><span class="p">(</span>
-    <span class="n">session_id</span><span class="o">=</span><span class="s2">"restricted"</span><span class="p">,</span>
-    <span class="n">allowed_apps</span><span class="o">=</span><span class="p">[</span><span class="s2">"Safari"</span><span class="p">,</span> <span class="s2">"Terminal"</span><span class="p">],</span>
-    <span class="n">screen_region</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1280</span><span class="p">,</span> <span class="mi">800</span><span class="p">),</span>  <span class="c1"># (x, y, width, height)</span>
-<span class="p">)</span>
-
-<span class="n">ctx</span> <span class="o">=</span> <span class="n">ToolContext</span><span class="p">(</span><span class="n">session_id</span><span class="o">=</span><span class="s2">"restricted"</span><span class="p">)</span>
-<span class="c1"># Now the agent can only screenshot/click within x:0–1280, y:0–800</span>
-<span class="c1"># and can only open/focus Safari or Terminal.</span>
-
-<span class="c1"># Audit everything that happened</span>
-<span class="n">sandbox</span> <span class="o">=</span> <span class="n">get_sandbox</span><span class="p">(</span><span class="s2">"restricted"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">sandbox</span><span class="o">.</span><span class="n">summary</span><span class="p">())</span>
-<span class="n">log</span> <span class="o">=</span> <span class="n">sandbox</span><span class="o">.</span><span class="n">export_audit_log</span><span class="p">()</span>  <span class="c1"># list of dicts</span>
-</pre></div>
-</div>
-<hr class="docutils" />
-<p>That covers all integrations. From here you might want the <a class="reference internal" href="../tools/index.html"><span class="std std-doc">Tools reference →</span></a> for full parameter docs, or <a class="reference internal" href="../architecture/index.html"><span class="std std-doc">Architecture →</span></a> to understand how the layers fit together.</p>
+<p>From here you might want the <a class="reference internal" href="../tools/index.html"><span class="std std-doc">Tools reference →</span></a>, or
+<a class="reference internal" href="../architecture/index.html"><span class="std std-doc">Architecture →</span></a> to understand how the pieces fit together.</p>
 </section>
 </section>
 
@@ -597,7 +578,9 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sandbox-configuration">Sandbox configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#mcp-over-stdio-any-language">1. MCP over stdio (any language)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-rust-crate">2. The Rust crate</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#restricting-what-the-agent-can-do">Restricting what the agent can do</a></li>
 </ul>
   </nav></div>
 

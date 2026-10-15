@@ -1,36 +1,23 @@
 # Adding a Custom Tool
 
-```python
-from opendesk.tools.base import Tool, ToolContext, ToolResult
-from opendesk.registry import create_registry
-from pydantic import Field
+The Rust version has no plugin API or tool registry; the Python
+`Tool` / `create_registry` interface is not available. Adding a tool means
+changing `opendesk-rs/src/mcp/server.rs`:
 
-class PingTool(Tool):
-    name = "ping"
-    description = "Check if a host is reachable from the active computer."
+1. Add its JSON schema to `McpServer::list_tools`.
+2. Handle its name in `McpServer::call_tool` — a local branch using
+   `LocalComputer`, and, if it should work on peers, a remote branch using
+   `RemoteComputer`.
+3. If the remote branch needs a capability the protocol doesn't have yet, add
+   a method to `RemoteComputer` (`remote/client.rs`) and a matching arm to
+   `dispatch_call` (`remote/server.rs`) on the controlled side.
 
-    class Params(Tool.Params):
-        host: str = Field(description="Hostname or IP to ping.")
-        count: int = Field(default=3, description="Number of pings.")
+Often no new tool is needed: `opendesk_exec` already runs arbitrary commands
+locally or on a peer.
 
-    async def execute(self, ctx: ToolContext, params: "PingTool.Params") -> ToolResult:
-        result = await ctx.computer.exec(["ping", "-c", str(params.count), params.host])
-        return ToolResult(
-            title=f"Ping {params.host}",
-            output=result.stdout_text(),
-            error=result.returncode != 0,
-        )
-
-# Register and use
-registry = create_registry()
-registry.register(PingTool())
-```
-
-Because the tool calls `ctx.computer.exec(...)`, it runs on the local
-machine when `ctx.computer = LocalComputer`, on a remote peer when
-`ctx.computer = RemoteComputer` — same code, both paths. And because the
-schema comes from Pydantic, it automatically appears in MCP, Anthropic,
-OpenAI, and LangChain adapters with no extra adapter code.
+Alternatively, run your own MCP server next to `opendesk-mcp` in the same
+client, or call the crate from your own Rust program (see
+[Programmatic Use](../remote/programmatic.md)).
 
 ---
 

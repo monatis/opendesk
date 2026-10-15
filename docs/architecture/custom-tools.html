@@ -210,7 +210,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -231,8 +231,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -262,7 +262,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -476,36 +476,23 @@
                   
   <section id="adding-a-custom-tool">
 <h1>Adding a Custom Tool<a class="headerlink" href="#adding-a-custom-tool" title="Link to this heading">#</a></h1>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tool</span><span class="p">,</span> <span class="n">ToolContext</span><span class="p">,</span> <span class="n">ToolResult</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_registry</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">Field</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">PingTool</span><span class="p">(</span><span class="n">Tool</span><span class="p">):</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="s2">"ping"</span>
-    <span class="n">description</span> <span class="o">=</span> <span class="s2">"Check if a host is reachable from the active computer."</span>
-
-    <span class="k">class</span><span class="w"> </span><span class="nc">Params</span><span class="p">(</span><span class="n">Tool</span><span class="o">.</span><span class="n">Params</span><span class="p">):</span>
-        <span class="n">host</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Hostname or IP to ping."</span><span class="p">)</span>
-        <span class="n">count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">"Number of pings."</span><span class="p">)</span>
-
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">ToolContext</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="s2">"PingTool.Params"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolResult</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">computer</span><span class="o">.</span><span class="n">exec</span><span class="p">([</span><span class="s2">"ping"</span><span class="p">,</span> <span class="s2">"-c"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">count</span><span class="p">),</span> <span class="n">params</span><span class="o">.</span><span class="n">host</span><span class="p">])</span>
-        <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span>
-            <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Ping </span><span class="si">{</span><span class="n">params</span><span class="o">.</span><span class="n">host</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
-            <span class="n">output</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">stdout_text</span><span class="p">(),</span>
-            <span class="n">error</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">returncode</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">,</span>
-        <span class="p">)</span>
-
-<span class="c1"># Register and use</span>
-<span class="n">registry</span> <span class="o">=</span> <span class="n">create_registry</span><span class="p">()</span>
-<span class="n">registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">PingTool</span><span class="p">())</span>
-</pre></div>
-</div>
-<p>Because the tool calls <code class="docutils literal notranslate"><span class="pre">ctx.computer.exec(...)</span></code>, it runs on the local
-machine when <code class="docutils literal notranslate"><span class="pre">ctx.computer</span> <span class="pre">=</span> <span class="pre">LocalComputer</span></code>, on a remote peer when
-<code class="docutils literal notranslate"><span class="pre">ctx.computer</span> <span class="pre">=</span> <span class="pre">RemoteComputer</span></code> — same code, both paths. And because the
-schema comes from Pydantic, it automatically appears in MCP, Anthropic,
-OpenAI, and LangChain adapters with no extra adapter code.</p>
+<p>The Rust version has no plugin API or tool registry; the Python
+<code class="docutils literal notranslate"><span class="pre">Tool</span></code> / <code class="docutils literal notranslate"><span class="pre">create_registry</span></code> interface is not available. Adding a tool means
+changing <code class="docutils literal notranslate"><span class="pre">opendesk-rs/src/mcp/server.rs</span></code>:</p>
+<ol class="arabic simple">
+<li><p>Add its JSON schema to <code class="docutils literal notranslate"><span class="pre">McpServer::list_tools</span></code>.</p></li>
+<li><p>Handle its name in <code class="docutils literal notranslate"><span class="pre">McpServer::call_tool</span></code> — a local branch using
+<code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code>, and, if it should work on peers, a remote branch using
+<code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code>.</p></li>
+<li><p>If the remote branch needs a capability the protocol doesn’t have yet, add
+a method to <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> (<code class="docutils literal notranslate"><span class="pre">remote/client.rs</span></code>) and a matching arm to
+<code class="docutils literal notranslate"><span class="pre">dispatch_call</span></code> (<code class="docutils literal notranslate"><span class="pre">remote/server.rs</span></code>) on the controlled side.</p></li>
+</ol>
+<p>Often no new tool is needed: <code class="docutils literal notranslate"><span class="pre">opendesk_exec</span></code> already runs arbitrary commands
+locally or on a peer.</p>
+<p>Alternatively, run your own MCP server next to <code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code> in the same
+client, or call the crate from your own Rust program (see
+<a class="reference internal" href="../remote/programmatic.html"><span class="std std-doc">Programmatic Use</span></a>).</p>
 <hr class="docutils" />
 <p>That covers the architecture. For the low-level wire format, see the <a class="reference internal" href="../protocol/index.html"><span class="std std-doc">Protocol reference →</span></a></p>
 </section>

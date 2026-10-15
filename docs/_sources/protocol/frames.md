@@ -23,9 +23,11 @@ msgpack dict with at minimum `{"v": 1, "type": "<name>", ...}`.
   established, before any REQ/RES exchange.
 * `capabilities` carries the server's `CapabilityManifest` (supported methods,
   platform, backend info) so the client can check before calling.
-* A server can **reject** the connection at the application level by setting
-  `error` — e.g. `{"code": "busy", "message": "laptop is the active controller"}`.
-  The client's `Peer.hello()` raises `ProtocolError` on a non-null error field.
+* `error` lets a side reject the session at the application level. Note that
+  the Rust server rejects a second controller differently: it sends a RES
+  frame with `id: 0` and `error.code = "busy"`
+  (`"server is busy: NAME is the active controller"`) and closes the
+  connection.
 
 ### REQ
 
@@ -41,8 +43,10 @@ msgpack dict with at minimum `{"v": 1, "type": "<name>", ...}`.
 ```
 
 * `stream=false` (default): unary call, expects exactly one RES.
-* `stream=true`: streaming call, expects multiple RES frames with `end=false`
-  followed by a final RES with `end=true`.
+* `stream=true`: reserved for streaming calls (multiple RES frames with
+  `end=false`, then a final one with `end=true`). The Rust server implements
+  no streaming methods and answers every REQ with a single RES; requests on
+  one session are handled one at a time.
 
 ### RES
 
@@ -76,7 +80,8 @@ msgpack dict with at minimum `{"v": 1, "type": "<name>", ...}`.
 
 Valid for both unary and streaming calls. The peer SHOULD respond with a
 final RES carrying `error.code = "cancelled"`. Callers must tolerate
-receiving the final RES before the CANCEL is processed.
+receiving the final RES before the CANCEL is processed. (The Rust server
+currently only logs CANCEL; the call runs to completion.)
 
 ### PUSH
 
@@ -96,25 +101,31 @@ recognise a topic SHOULD ignore it.
 
 | Topic | Payload | Meaning |
 |---|---|---|
-| `session.evicted` | `{"reason": "<string>"}` | Server asked the client to leave (cooperative disconnect). A well-behaved client suppresses auto-reconnect and raises `SessionEvicted` on subsequent calls. |
+| `session.evicted` | `{"reason": "<string>"}` | Server asked the client to leave (cooperative disconnect) and is closing the connection. The Rust client ignores PUSH frames; its next call reconnects. |
 
 ---
 
 ## 8. Error codes
 
-The closed set of `ErrorCode` values (stable strings):
+`ErrorCode` in `protocol/frames.rs` defines these stable strings:
 
-| Code | Python exception | Meaning |
-|---|---|---|
-| `capability_unsupported` | `CapabilityUnsupported` | Method not supported by this platform or backend. |
-| `permission_denied` | `PermissionDeniedError` | Server-side policy gate rejected the call. |
-| `invalid_argument` | `ProtocolError` | Malformed or out-of-range parameter. |
-| `not_found` | `ProtocolError` | Target resource (file, window, peer) doesn't exist. |
-| `timeout` | `ProtocolError` | Operation timed out on the server side. |
-| `cancelled` | `asyncio.CancelledError` | Call was cancelled (either side). |
-| `internal` | `ProtocolError` | Unclassified server-side error. |
-| `protocol` | `ProtocolError` | Wire-level violation (bad frame, wrong version, etc.). |
-| `busy` | `ProtocolError` | Server already has an active controller session. |
+| Code | Meaning |
+|---|---|
+| `capability_unsupported` | Method not supported by this platform or backend. |
+| `permission_denied` | The call was refused. |
+| `invalid_argument` | Malformed or out-of-range parameter. |
+| `not_found` | Target resource (file, window, peer) doesn't exist. |
+| `timeout` | Operation timed out on the server side. |
+| `cancelled` | Call was cancelled (either side). |
+| `internal` | Unclassified server-side error. |
+| `protocol` | Wire-level violation (bad frame, wrong version, etc.). |
+| `busy` | Server already has an active controller session. |
+
+In practice the Rust server reports every failed method call with
+`code = "error"` and the error text as `message` (including
+`unknown method: NAME` and guard refusals such as `input refused: ...`); of
+the codes above it currently only sends `busy`. Clients should treat any
+non-null `error` as a failure and show its `message`.
 
 ---
 

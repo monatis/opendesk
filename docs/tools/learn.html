@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>learn — Record and Replay Tasks &#8212; opendesk</title>
+    <title>learn — Save and Replay Procedures &#8212; opendesk</title>
   
   
   
@@ -52,7 +52,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Automation — Learn, Replay &amp; Schedule" href="../automation/index.html" />
-    <link rel="prev" title="audit — Session Audit Log &amp; Replay" href="audit.html" />
+    <link rel="prev" title="audit — Audit Log" href="audit.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -466,7 +466,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>learn — Record and Replay Tasks</h1>
+    <h1>learn — Save and Replay Procedures</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -478,7 +478,7 @@
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actions">Actions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
             </nav>
         </div>
@@ -490,13 +490,12 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="learn-record-and-replay-tasks">
-<h1><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks<a class="headerlink" href="#learn-record-and-replay-tasks" title="Link to this heading">#</a></h1>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">opendesk.tools.learn</span><span class="w"> </span><span class="kn">import</span> <span class="n">LearnTool</span>
-<span class="n">tool</span> <span class="o">=</span> <span class="n">LearnTool</span><span class="p">()</span>
-</pre></div>
-</div>
-<p>Requires <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'opendesk[learn]'</span></code> (installs <code class="docutils literal notranslate"><span class="pre">pynput</span></code>).</p>
+  <section id="learn-save-and-replay-procedures">
+<h1><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures<a class="headerlink" href="#learn-save-and-replay-procedures" title="Link to this heading">#</a></h1>
+<p>Stores written procedures so an agent can repeat a task later. The Rust
+version <strong>does not record</strong> mouse or keyboard input: there is no <code class="docutils literal notranslate"><span class="pre">start</span></code> /
+<code class="docutils literal notranslate"><span class="pre">stop</span></code> (calling them returns an error). The agent writes the procedure itself,
+for example from the steps it just performed.</p>
 <section id="actions">
 <h2>Actions<a class="headerlink" href="#actions" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -507,84 +506,49 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">start</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">task_name</span></code></p></td>
-<td><p>Begin recording mouse, keyboard, and screenshots globally</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">stop</span></code></p></td>
-<td><p>—</p></td>
-<td><p>Stop recording; returns trajectory summary and screenshots</p></td>
-</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">save</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">task_name</span></code>, <code class="docutils literal notranslate"><span class="pre">procedure</span></code></p></td>
-<td><p>Save a procedure JSON string to <code class="docutils literal notranslate"><span class="pre">.opendesk/learned/</span></code></p></td>
+<td><p>Save a procedure string (JSON) as <code class="docutils literal notranslate"><span class="pre">~/.opendesk/procedures/&lt;task_name&gt;.json</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">replay</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">task_name</span></code></p></td>
-<td><p>Load a procedure and return step-by-step replay instructions</p></td>
+<td><p>Return the saved procedure text for the agent to follow</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
 <td><p>—</p></td>
-<td><p>List all saved procedures in the current directory</p></td>
+<td><p>List saved procedure names</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">replay</span></code> does not execute anything; it hands the stored steps back to the
+agent, which carries them out with the normal tools against the current screen.</p>
 </section>
 <section id="ask-claude">
 <h2>Ask Claude<a class="headerlink" href="#ask-claude" title="Link to this heading">#</a></h2>
-<p><strong>Recording a workflow:</strong></p>
 <blockquote>
-<div><p>“Watch me fill out this form and remember it as ‘expense-report’”</p>
+<div><p>“Save what you just did as a procedure called expense-report”</p>
 </div></blockquote>
-<p>Claude will call <code class="docutils literal notranslate"><span class="pre">learn(start)</span></code>, wait for you to perform the task, then call <code class="docutils literal notranslate"><span class="pre">learn(stop)</span></code> and summarize what it saw.</p>
-<p><strong>Replaying a saved workflow:</strong></p>
 <blockquote>
-<div><p>“Replay the expense-report task”
-“Run the fill-form procedure again”</p>
+<div><p>“Replay the expense-report procedure”</p>
 </div></blockquote>
-<p><strong>Listing saved workflows:</strong></p>
 <blockquote>
-<div><p>“What tasks have you learned?”
-“Show me all saved procedures”</p>
+<div><p>“What procedures have you saved?”</p>
 </div></blockquote>
-<p>!!! note
-<code class="docutils literal notranslate"><span class="pre">learn</span></code> + <code class="docutils literal notranslate"><span class="pre">replay</span></code> teaches Claude to re-execute a workflow using <em>current screen state</em> — it adapts to the environment rather than replaying raw coordinates. For exact action-by-action replay of a session, use <a class="reference internal" href="audit.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">audit(action='replay')</span></code></span></a> instead.</p>
 </section>
-<hr class="docutils" />
-<section id="sdk-examples">
-<h2>SDK examples<a class="headerlink" href="#sdk-examples" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">params</span> <span class="o">=</span> <span class="n">LearnTool</span><span class="o">.</span><span class="n">Params</span>
-
-<span class="c1"># Start recording</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"start"</span><span class="p">,</span> <span class="n">task_name</span><span class="o">=</span><span class="s2">"fill-form"</span><span class="p">))</span>
-
-<span class="c1"># ... user performs the task ...</span>
-
-<span class="c1"># Stop and review trajectory</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"stop"</span><span class="p">))</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
-
-<span class="c1"># Save procedure (JSON string)</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-<span class="n">procedure</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span>
-    <span class="s2">"task_name"</span><span class="p">:</span> <span class="s2">"fill-form"</span><span class="p">,</span>
-    <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Fill and submit the expense form"</span><span class="p">,</span>
-    <span class="s2">"steps"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"Open the form"</span><span class="p">,</span> <span class="s2">"Fill in fields"</span><span class="p">,</span> <span class="s2">"Click Submit"</span><span class="p">],</span>
-    <span class="s2">"procedure"</span><span class="p">:</span> <span class="s2">"Navigate to the form application. Fill each required field. Submit."</span>
-<span class="p">})</span>
-<span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"save"</span><span class="p">,</span> <span class="n">task_name</span><span class="o">=</span><span class="s2">"fill-form"</span><span class="p">,</span> <span class="n">procedure</span><span class="o">=</span><span class="n">procedure</span><span class="p">))</span>
-
-<span class="c1"># Replay</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"replay"</span><span class="p">,</span> <span class="n">task_name</span><span class="o">=</span><span class="s2">"fill-form"</span><span class="p">))</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>  <span class="c1"># step-by-step instructions for the agent</span>
-
-<span class="c1"># List all</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">params</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"list"</span><span class="p">))</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
+<section id="example-calls">
+<h2>Example calls<a class="headerlink" href="#example-calls" title="Link to this heading">#</a></h2>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"save"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"task_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fill-form"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"procedure"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{\"description\": \"Fill and submit the expense form\", \"steps\": [\"Open the form\", \"Fill in fields\", \"Click Submit\"]}"</span>
+<span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"replay"</span><span class="p">,</span><span class="w"> </span><span class="nt">"task_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fill-form"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">{</span><span class="w"> </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"list"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
-<p>See <a class="reference internal" href="../automation/index.html"><span class="std std-doc">Automation</span></a> for the full guide including scheduling, storage format, and platform support.</p>
+<p>The procedure is stored verbatim; no particular JSON shape is enforced.</p>
+<p>See <a class="reference internal" href="../automation/index.html"><span class="std std-doc">Automation</span></a> for how this fits with <code class="docutils literal notranslate"><span class="pre">schedule</span></code>.</p>
 </section>
 </section>
 
@@ -605,7 +569,7 @@
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</p>
+        <p class="prev-next-title"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</p>
       </div>
     </a>
     <a class="right-next"
@@ -637,7 +601,7 @@
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actions">Actions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask-claude">Ask Claude</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-examples">SDK examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-calls">Example calls</a></li>
 </ul>
   </nav></div>
 

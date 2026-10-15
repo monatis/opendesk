@@ -1,91 +1,60 @@
 # Scheduler
 
+!!! warning
+    In the Rust version, schedules are **stored only**. Nothing executes them:
+    `opendesk scheduler start` just logs enabled schedules once a minute. Run
+    the task yourself (or ask the agent to) when it matters.
+
+## The `schedule` tool
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| `add` | `name`, `task`, `timing` | Store a schedule (replaces one with the same name) |
+| `remove` | `name` | Remove a schedule by name |
+| `list` | — | Show stored schedules |
+
+There is no `run` action; calling it returns an error.
+
 ## Ask Claude
 
-> "Schedule a task called daily-backup to run every day at 9am"
-
-> "Schedule expense-report to run every Friday at 5pm"
+> "Store a schedule called daily-backup: every day at 09:00, task: back up the reports folder"
 
 > "List my scheduled tasks"
 
-> "Run the daily-backup task now"
-
 > "Remove the hourly-check schedule"
 
-Claude adds, lists, and removes schedules. Start the daemon separately so they actually run:
+---
 
-```bash
-opendesk scheduler start
-```
+## Timing strings
+
+`timing` is stored as free text and is not parsed or validated. The tool
+description suggests forms like `every 30m`, `every 2h`,
+`every day at 09:00`, `every friday at 17:00`.
 
 ---
 
-## Start the background runner
-
-Schedules are saved to disk but only execute when the daemon is running:
+## CLI
 
 ```bash
-opendesk scheduler start
+opendesk scheduler list  [--dir PROJECT_DIR]   # print stored schedules
+opendesk scheduler start [--dir PROJECT_DIR]   # log enabled schedules every 60 s; runs nothing
 ```
 
-To list schedules without starting the daemon:
-
-```bash
-opendesk scheduler list
-```
-
-Natural language tasks (non-replay) require Claude API access:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export OPENDESK_MODEL=claude-sonnet-4-6  # optional, this is the default
-opendesk scheduler start
-```
-
----
-
-## Timing formats
-
-| Format | Example | Meaning |
-|--------|---------|---------|
-| Interval | `every 30m` | Every 30 minutes |
-| Interval | `every 2h` | Every 2 hours |
-| Interval | `every 1d` | Every day |
-| Daily | `every day at 09:00` | Daily at 9am |
-| Weekly | `every friday at 17:00` | Every Friday at 5pm |
-| Weekly | `every monday at 8am` | Every Monday at 8am |
-| Cron | `0 17 * * 5` | Raw cron expression |
-
----
-
-## Installation
-
-```bash
-pip install 'opendesk[learn]'     # recording and replay (pynput)
-pip install 'opendesk[schedule]'  # scheduled tasks (apscheduler)
-pip install 'opendesk[all]'       # everything
-```
+`--dir` defaults to the current directory.
 
 ---
 
 ## Storage
 
-Procedures: `.opendesk/learned/<name>.json`  
-Schedules: `.opendesk/schedules.json`
+| What | Where |
+|---|---|
+| Schedules | `<project>/.opendesk/schedules.json`, where `<project>` is the working directory of the MCP server (for the tool) or `--dir` / the current directory (for the CLI) |
+| Procedures (`learn`) | `~/.opendesk/procedures/<name>.json` |
 
-Both are plain JSON — you can edit, share, or version-control them.
-
----
-
-## Platform support
-
-| Feature | macOS | Linux | Windows |
-|---------|-------|-------|---------|
-| Recording | ✓ | ✓ | ✓ |
-| Accessibility context (optional) | atomacos | pyatspi | pywinauto |
-| Replay | ✓ | ✓ | ✓ |
-| Scheduling | ✓ | ✓ | ✓ |
+Both are plain JSON. A schedule entry has `id`, `name`, `task`, `timing`,
+`enabled`, `created_at`, and the unused fields `cron`, `interval_seconds`,
+`last_run`, `last_status`.
 
 ---
 
-That's the full automation system. If you want to run tasks on a remote machine, check out [Remote Computer Use →](../remote/index.md)
+If you want to run tasks on a remote machine, check out [Remote Computer Use →](../remote/index.md)

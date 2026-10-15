@@ -214,7 +214,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../mcp/claude-desktop.html">Claude Desktop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/cursor.html">Cursor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/continue.html">Continue (VS Code)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: In-process Server &amp; Restrictions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/advanced.html">Advanced: Server Options &amp; Restrictions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Integrations</span></p>
@@ -235,8 +235,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../tools/app.html"><code class="docutils literal notranslate"><span class="pre">app</span></code> — Application Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/clipboard.html"><code class="docutils literal notranslate"><span class="pre">clipboard</span></code> — Clipboard Read/Write</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tools/ocr.html"><code class="docutils literal notranslate"><span class="pre">ocr</span></code> — Text Extraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Session Audit Log &amp; Replay</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Record and Replay Tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/audit.html"><code class="docutils literal notranslate"><span class="pre">audit</span></code> — Audit Log</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tools/learn.html"><code class="docutils literal notranslate"><span class="pre">learn</span></code> — Save and Replay Procedures</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Automation</span></p>
 <ul class="nav bd-sidenav">
@@ -266,7 +266,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Remote</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — Python / CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../remote/index.html">Remote Computer Use — CLI</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/setup.html">One-time Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/running.html">Running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../remote/internet-transport.html">Internet Remote Transport (Rendezvous &amp; Relay)</a></li>
@@ -476,11 +476,14 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-4-remote">Layer 4: <code class="docutils literal notranslate"><span class="pre">remote/</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-5-integrations">Layer 5: <code class="docutils literal notranslate"><span class="pre">integrations/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mcp-py"><code class="docutils literal notranslate"><span class="pre">mcp.py</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mcpsession-mcp-session-py"><code class="docutils literal notranslate"><span class="pre">MCPSession</span></code> (<code class="docutils literal notranslate"><span class="pre">mcp_session.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#claude-code-py-openai-compat-py-langchain-compat-py"><code class="docutils literal notranslate"><span class="pre">claude_code.py</span></code>, <code class="docutils literal notranslate"><span class="pre">openai_compat.py</span></code>, <code class="docutils literal notranslate"><span class="pre">langchain_compat.py</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote"><code class="docutils literal notranslate"><span class="pre">remote/</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#service-rs"><code class="docutils literal notranslate"><span class="pre">service.rs</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#automation-scheduler-rs"><code class="docutils literal notranslate"><span class="pre">automation/scheduler.rs</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#app"><code class="docutils literal notranslate"><span class="pre">app/</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#mcp"><code class="docutils literal notranslate"><span class="pre">mcp/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mcpserver-server-rs"><code class="docutils literal notranslate"><span class="pre">McpServer</span></code> (<code class="docutils literal notranslate"><span class="pre">server.rs</span></code>)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mcpsession"><code class="docutils literal notranslate"><span class="pre">McpSession</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-adapters">SDK adapters</a></li>
 </ul>
 </li>
 </ul>
@@ -496,76 +499,90 @@
                   
   <section id="remote-integrations-layers">
 <h1>Remote &amp; Integrations Layers<a class="headerlink" href="#remote-integrations-layers" title="Link to this heading">#</a></h1>
-<section id="layer-4-remote">
-<h2>Layer 4: <code class="docutils literal notranslate"><span class="pre">remote/</span></code><a class="headerlink" href="#layer-4-remote" title="Link to this heading">#</a></h2>
-<p>User-facing stitching for the LAN flow.</p>
+<section id="remote">
+<h2><code class="docutils literal notranslate"><span class="pre">remote/</span></code><a class="headerlink" href="#remote" title="Link to this heading">#</a></h2>
+<p>User-facing stitching for the LAN and Internet flows.</p>
 <ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">server.py</span></code> — <code class="docutils literal notranslate"><span class="pre">OpendeskServer</span></code>. Accepts WebSocket connections, runs the
-right handshake (pair vs. auth), wraps each session in a <code class="docutils literal notranslate"><span class="pre">Peer</span></code> +
-<code class="docutils literal notranslate"><span class="pre">ComputerDispatcher</span></code>, tracks sessions in a <code class="docutils literal notranslate"><span class="pre">SessionRegistry</span></code>.
-<code class="docutils literal notranslate"><span class="pre">enable_pairing(code)</span></code> flips into one-shot pairing mode.</p>
+<li><p><code class="docutils literal notranslate"><span class="pre">server.rs</span></code> — <code class="docutils literal notranslate"><span class="pre">OpendeskServer</span></code>. Accepts WebSocket connections (directly
+and/or through rendezvous relays), runs the pairing or auth handshake,
+exchanges HELLO, then handles <code class="docutils literal notranslate"><span class="pre">REQ</span></code> frames one at a time through
+<code class="docutils literal notranslate"><span class="pre">dispatch_call</span></code>. <code class="docutils literal notranslate"><span class="pre">run_pair</span></code> is the one-shot pairing mode behind
+<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">pair</span></code>.</p>
 <p><strong>Single-controller policy:</strong> at most one peer holds an active session
-at any moment. Same-peer reconnect bumps the previous session (the
+at any moment. Same-peer reconnect replaces the previous session (the
 common case after a Wi-Fi blip or controller crash). A <em>different</em>
-peer hitting an active server gets rejected with <code class="docutils literal notranslate"><span class="pre">ErrorCode.BUSY</span></code> —
-carried on the HELLO frame so the client raises a clean
-<code class="docutils literal notranslate"><span class="pre">ProtocolError</span></code> instead of seeing a generic disconnect. Two
-controllers fighting over the same mouse / keyboard is the failure
-mode this prevents; multi-session / observer support is a phase-2
-design item with its own session-kind, not a numeric knob.</p>
+peer hitting an active server gets an error response with code <code class="docutils literal notranslate"><span class="pre">busy</span></code>
+(“server is busy: NAME is the active controller”) and is disconnected.</p>
 </li>
-<li><p><code class="docutils literal notranslate"><span class="pre">policy.py</span></code> — <code class="docutils literal notranslate"><span class="pre">Policy</span></code> Protocol + <code class="docutils literal notranslate"><span class="pre">AllowAllPolicy</span></code> (default) and
-<code class="docutils literal notranslate"><span class="pre">ConsolePolicy</span></code> (stdin-prompts gated methods, auto-allows observations).
-Server-side gate applied per call.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">audit.py</span></code> — <code class="docutils literal notranslate"><span class="pre">AuditLog</span></code>. Append-only JSONL at
-<code class="docutils literal notranslate"><span class="pre">&lt;home&gt;/audit/YYYY-MM-DD.jsonl</span></code>. Records session lifecycle plus every
-protocol method invocation with outcome.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">admin.py</span></code> — local Unix-socket (or Windows named-pipe) IPC. Used by
-<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">sessions</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">disconnect</span></code>, and <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">unpair</span></code> /
-<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">peers</span> <span class="pre">remove</span></code> (which both kick the active session via this
-channel when revoking trust). Local-only, no network exposure.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">service.py</span></code> — generates systemd / launchd / Task Scheduler entries
-for <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">serve</span></code> (one-command install / uninstall).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">discovery.py</span></code> — <code class="docutils literal notranslate"><span class="pre">advertise(name,</span> <span class="pre">port,</span> <span class="pre">public_key)</span></code> and <code class="docutils literal notranslate"><span class="pre">discover(timeout)</span></code>
-via Zeroconf. Service type <code class="docutils literal notranslate"><span class="pre">_opendesk._tcp.local.</span></code> with TXT records
-carrying the host’s public key + fingerprint.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">client.py</span></code> — <code class="docutils literal notranslate"><span class="pre">connect(target)</span></code> (auto-reconnect on transient drops by
-default) and <code class="docutils literal notranslate"><span class="pre">pair_with(host,</span> <span class="pre">port,</span> <span class="pre">code)</span></code>. Resolves a peer name →
-mDNS → WebSocket → <code class="docutils literal notranslate"><span class="pre">auth_client</span></code> → <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code>. When no target
-is supplied, falls back to the persistent default peer
-(<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">peers</span> <span class="pre">default</span> <span class="pre">&lt;name&gt;</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">audit.rs</span></code> — <code class="docutils literal notranslate"><span class="pre">AuditLog</span></code>. Append-only JSONL at
+<code class="docutils literal notranslate"><span class="pre">&lt;home&gt;/audit/YYYY-MM-DD.jsonl</span></code>. Records session lifecycle (opened,
+closed, rejected) plus every protocol method call with its outcome.
+<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">serve</span> <span class="pre">--no-audit</span></code> turns it off.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">admin.rs</span></code> — local IPC: Unix socket <code class="docutils literal notranslate"><span class="pre">~/.opendesk/admin.sock</span></code> (mode
+0600), or on Windows localhost TCP on a port recorded in
+<code class="docutils literal notranslate"><span class="pre">~/.opendesk/admin.port</span></code>. Used by <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">sessions</span></code>,
+<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">disconnect</span></code>, and <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">unpair</span></code> / <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">peers</span> <span class="pre">remove</span></code>.
+No network exposure.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">discovery.rs</span></code> — mDNS advertise / browse (<code class="docutils literal notranslate"><span class="pre">mdns-sd</span></code>). Service type
+<code class="docutils literal notranslate"><span class="pre">_opendesk._tcp.local.</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rendezvous.rs</span></code> — the standalone relay server (<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">rendezvous</span></code>),
+the serve-side agent that registers with it, and the client side used to
+list and reach peers through it. Frames stay end-to-end encrypted.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">client.rs</span></code> — <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code>, <code class="docutils literal notranslate"><span class="pre">pair_with(...)</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">connect(peer,</span> <span class="pre">rendezvous_url,</span> <span class="pre">rendezvous_token,</span> <span class="pre">home)</span></code>. With no peer it
+falls back to the persistent default peer (<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">peers</span> <span class="pre">default</span></code>).</p></li>
 </ul>
 </section>
-<hr class="docutils" />
-<section id="layer-5-integrations">
-<h2>Layer 5: <code class="docutils literal notranslate"><span class="pre">integrations/</span></code><a class="headerlink" href="#layer-5-integrations" title="Link to this heading">#</a></h2>
-<section id="mcp-py">
-<h3><code class="docutils literal notranslate"><span class="pre">mcp.py</span></code><a class="headerlink" href="#mcp-py" title="Link to this heading">#</a></h3>
-<p>Single MCP server. At list-tools time, augments Computer-use tool schemas
-(<code class="docutils literal notranslate"><span class="pre">screenshot</span></code>, <code class="docutils literal notranslate"><span class="pre">mouse</span></code>, <code class="docutils literal notranslate"><span class="pre">keyboard</span></code>, <code class="docutils literal notranslate"><span class="pre">ui</span></code>, <code class="docutils literal notranslate"><span class="pre">app</span></code>, <code class="docutils literal notranslate"><span class="pre">clipboard</span></code>, <code class="docutils literal notranslate"><span class="pre">ocr</span></code>) with an
-optional <code class="docutils literal notranslate"><span class="pre">peer</span></code> field; appends admin tools (<code class="docutils literal notranslate"><span class="pre">opendesk_peers</span></code>,
-<code class="docutils literal notranslate"><span class="pre">opendesk_discover</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_use</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_status</span></code>,
-<code class="docutils literal notranslate"><span class="pre">opendesk_capabilities</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_disconnect</span></code>).</p>
-<p>At call-tool time, strips <code class="docutils literal notranslate"><span class="pre">peer</span></code> from arguments, resolves to a <code class="docutils literal notranslate"><span class="pre">Computer</span></code>
-via <code class="docutils literal notranslate"><span class="pre">MCPSession</span></code>, builds a fresh <code class="docutils literal notranslate"><span class="pre">ToolContext</span></code> with that Computer, and
-dispatches. Local-only tools (<code class="docutils literal notranslate"><span class="pre">learn</span></code>, <code class="docutils literal notranslate"><span class="pre">schedule</span></code>, <code class="docutils literal notranslate"><span class="pre">audit</span></code>) are passed
-through unchanged.</p>
+<section id="service-rs">
+<h2><code class="docutils literal notranslate"><span class="pre">service.rs</span></code><a class="headerlink" href="#service-rs" title="Link to this heading">#</a></h2>
+<p>Installs <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">serve</span></code> as a user-scoped service: a systemd user unit
+(Linux), a launchd agent (macOS), or a Task Scheduler task that runs at
+logon (Windows). Used by <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">install-service</span></code> /
+<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">uninstall-service</span></code>.</p>
 </section>
-<section id="mcpsession-mcp-session-py">
-<h3><code class="docutils literal notranslate"><span class="pre">MCPSession</span></code> (<code class="docutils literal notranslate"><span class="pre">mcp_session.py</span></code>)<a class="headerlink" href="#mcpsession-mcp-session-py" title="Link to this heading">#</a></h3>
-<p>Per-MCP-session state: explicit default peer, cache of open
-<code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> connections, the local <code class="docutils literal notranslate"><span class="pre">LocalComputer</span></code>. Resolution order:</p>
+<section id="automation-scheduler-rs">
+<h2><code class="docutils literal notranslate"><span class="pre">automation/scheduler.rs</span></code><a class="headerlink" href="#automation-scheduler-rs" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ScheduleStore</span></code> (the JSON file behind the <code class="docutils literal notranslate"><span class="pre">schedule</span></code> tool) and
+<code class="docutils literal notranslate"><span class="pre">run_scheduler_daemon</span></code>, which only logs enabled schedules once a minute.</p>
+</section>
+<section id="app">
+<h2><code class="docutils literal notranslate"><span class="pre">app/</span></code><a class="headerlink" href="#app" title="Link to this heading">#</a></h2>
+<p>Backend for <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">app</span></code> (local web UI and REST API on
+<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8424</span></code>); the same UI is served as the MCP App behind
+<code class="docutils literal notranslate"><span class="pre">opendesk_view</span></code>.</p>
+</section>
+<hr class="docutils" />
+<section id="mcp">
+<h2><code class="docutils literal notranslate"><span class="pre">mcp/</span></code><a class="headerlink" href="#mcp" title="Link to this heading">#</a></h2>
+<section id="mcpserver-server-rs">
+<h3><code class="docutils literal notranslate"><span class="pre">McpServer</span></code> (<code class="docutils literal notranslate"><span class="pre">server.rs</span></code>)<a class="headerlink" href="#mcpserver-server-rs" title="Link to this heading">#</a></h3>
+<p>Single stdio MCP server (<code class="docutils literal notranslate"><span class="pre">opendesk-mcp</span></code>, or <code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">mcp</span></code>). <code class="docutils literal notranslate"><span class="pre">list_tools</span></code>
+returns the computer-use tools (each with an optional <code class="docutils literal notranslate"><span class="pre">peer</span></code> field) and the
+admin tools (<code class="docutils literal notranslate"><span class="pre">opendesk_peers</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_discover</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_use</span></code>,
+<code class="docutils literal notranslate"><span class="pre">opendesk_status</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_describe</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_capabilities</span></code>,
+<code class="docutils literal notranslate"><span class="pre">opendesk_disconnect</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_guard</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_privacy</span></code>,
+<code class="docutils literal notranslate"><span class="pre">opendesk_view</span></code>, <code class="docutils literal notranslate"><span class="pre">opendesk_app_api</span></code>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">call_tool</span></code> resolves the target, applies the input guard to <code class="docutils literal notranslate"><span class="pre">mouse</span></code> /
+<code class="docutils literal notranslate"><span class="pre">keyboard</span></code>, and runs the local or remote branch. Remote calls retry once on a
+fresh connection after a connection error; cached connections idle for more
+than 30 s are pinged before reuse.</p>
+</section>
+<section id="mcpsession">
+<h3><code class="docutils literal notranslate"><span class="pre">McpSession</span></code><a class="headerlink" href="#mcpsession" title="Link to this heading">#</a></h3>
+<p>Per-session state: the explicit default peer from <code class="docutils literal notranslate"><span class="pre">opendesk_use</span></code>, the
+input guard, cached <code class="docutils literal notranslate"><span class="pre">RemoteComputer</span></code> connections, trusted peers, and
+rendezvous settings. Resolution order for a call without <code class="docutils literal notranslate"><span class="pre">peer</span></code>:</p>
 <ol class="arabic simple">
-<li><p>Per-call <code class="docutils literal notranslate"><span class="pre">peer:</span></code> argument</p></li>
 <li><p>Explicit default from <code class="docutils literal notranslate"><span class="pre">opendesk_use</span></code></p></li>
-<li><p>Lone trusted peer (implicit default)</p></li>
-<li><p>Multiple peers + no default → <strong>error</strong> (forces explicit choice)</p></li>
-<li><p>No peers paired → local</p></li>
+<li><p>Persistent default peer (<code class="docutils literal notranslate"><span class="pre">opendesk</span> <span class="pre">peers</span> <span class="pre">default</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">local</span></code></p></li>
 </ol>
 </section>
-<section id="claude-code-py-openai-compat-py-langchain-compat-py">
-<h3><code class="docutils literal notranslate"><span class="pre">claude_code.py</span></code>, <code class="docutils literal notranslate"><span class="pre">openai_compat.py</span></code>, <code class="docutils literal notranslate"><span class="pre">langchain_compat.py</span></code><a class="headerlink" href="#claude-code-py-openai-compat-py-langchain-compat-py" title="Link to this heading">#</a></h3>
-<p>Adapters that present tools in the native format of each agent SDK.</p>
+<section id="sdk-adapters">
+<h3>SDK adapters<a class="headerlink" href="#sdk-adapters" title="Link to this heading">#</a></h3>
+<p>The Python version’s <code class="docutils literal notranslate"><span class="pre">claude_code.py</span></code>, <code class="docutils literal notranslate"><span class="pre">openai_compat.py</span></code> and
+<code class="docutils literal notranslate"><span class="pre">langchain_compat.py</span></code> adapters do not exist in the Rust version; MCP is the
+integration point.</p>
 <hr class="docutils" />
 <p>Next: <a class="reference internal" href="data-flow.html"><span class="std std-doc">Data Flow →</span></a> — trace a call end-to-end, both locally and over the wire.</p>
 </section>
@@ -619,11 +636,14 @@ through unchanged.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-4-remote">Layer 4: <code class="docutils literal notranslate"><span class="pre">remote/</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-5-integrations">Layer 5: <code class="docutils literal notranslate"><span class="pre">integrations/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mcp-py"><code class="docutils literal notranslate"><span class="pre">mcp.py</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mcpsession-mcp-session-py"><code class="docutils literal notranslate"><span class="pre">MCPSession</span></code> (<code class="docutils literal notranslate"><span class="pre">mcp_session.py</span></code>)</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#claude-code-py-openai-compat-py-langchain-compat-py"><code class="docutils literal notranslate"><span class="pre">claude_code.py</span></code>, <code class="docutils literal notranslate"><span class="pre">openai_compat.py</span></code>, <code class="docutils literal notranslate"><span class="pre">langchain_compat.py</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remote"><code class="docutils literal notranslate"><span class="pre">remote/</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#service-rs"><code class="docutils literal notranslate"><span class="pre">service.rs</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#automation-scheduler-rs"><code class="docutils literal notranslate"><span class="pre">automation/scheduler.rs</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#app"><code class="docutils literal notranslate"><span class="pre">app/</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#mcp"><code class="docutils literal notranslate"><span class="pre">mcp/</span></code></a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mcpserver-server-rs"><code class="docutils literal notranslate"><span class="pre">McpServer</span></code> (<code class="docutils literal notranslate"><span class="pre">server.rs</span></code>)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mcpsession"><code class="docutils literal notranslate"><span class="pre">McpSession</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sdk-adapters">SDK adapters</a></li>
 </ul>
 </li>
 </ul>
