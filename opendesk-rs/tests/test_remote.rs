@@ -6,8 +6,13 @@ use opendesk_rs::remote::rendezvous::RendezvousServer;
 use opendesk_rs::remote::server::OpendeskServer;
 use std::sync::Arc;
 
+/// Tests that round-trip the real system clipboard run one at a time;
+/// in parallel they overwrite each other's text.
+static CLIPBOARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[tokio::test]
 async fn test_live_pairing_and_rpc() -> Result<()> {
+    let _clipboard = CLIPBOARD.lock().await;
     let server_dir = tempfile::tempdir()?;
     let client_dir = tempfile::tempdir()?;
 
@@ -54,6 +59,7 @@ async fn test_live_pairing_and_rpc() -> Result<()> {
 
 #[tokio::test]
 async fn test_live_reconnect_and_serve() -> Result<()> {
+    let _clipboard = CLIPBOARD.lock().await;
     let server_dir = tempfile::tempdir()?;
     let client_dir = tempfile::tempdir()?;
 
@@ -162,15 +168,17 @@ async fn test_live_exec_timeout_returns_partial_output() -> Result<()> {
 
     #[cfg(target_os = "windows")]
     let (cmd, shell) = (
-        "Write-Output \"partial \"\"quoted\"\"\"; Start-Sleep 30",
+        "Write-Output \"partial \"\"quoted\"\"\"; Start-Sleep 120",
         "powershell",
     );
     #[cfg(not(target_os = "windows"))]
-    let (cmd, shell) = ("echo 'partial \"quoted\"'; sleep 30", "sh");
+    let (cmd, shell) = ("echo 'partial \"quoted\"'; sleep 120", "sh");
 
+    // Generous enough for PowerShell to start and print under parallel test
+    // load, far below the 120 s the command would otherwise run.
     let start = std::time::Instant::now();
-    let res = remote.exec(cmd, Some(shell), Some(2)).await?;
-    assert!(start.elapsed() < std::time::Duration::from_secs(15));
+    let res = remote.exec(cmd, Some(shell), Some(10)).await?;
+    assert!(start.elapsed() < std::time::Duration::from_secs(30));
     assert!(res.timed_out, "{res:?}");
     assert!(!res.success);
     assert!(res.stdout.contains("partial \"quoted\""), "{res:?}");
@@ -188,6 +196,7 @@ async fn test_live_exec_timeout_returns_partial_output() -> Result<()> {
 
 #[tokio::test]
 async fn test_live_rendezvous_signaling_and_relay() -> Result<()> {
+    let _clipboard = CLIPBOARD.lock().await;
     let r_port = 18426;
 
     let r_server = RendezvousServer::new("127.0.0.1", r_port, Some("test-token".to_string()));
@@ -262,6 +271,7 @@ async fn wait_for_count<F: Fn() -> usize>(
 
 #[tokio::test]
 async fn test_rendezvous_relay_sessions_do_not_leak_connections() -> Result<()> {
+    let _clipboard = CLIPBOARD.lock().await;
     let r_port = 18428;
 
     let r_server = Arc::new(RendezvousServer::new(
