@@ -768,11 +768,11 @@ impl McpServer {
             }),
             json!({
                 "name": "schedule",
-                "description": "Schedule tasks to run automatically on a timer.\n\nActions:\n- add: schedule a task. task can be natural language ('take a screenshot and save it') or a learned procedure ('replay expense-report'). timing examples: 'every 30m', 'every 2h', 'every day at 09:00', 'every friday at 17:00'\n- remove: remove a schedule by name\n- list: show all scheduled tasks\n- run: run a scheduled task immediately (for testing)\n\nAfter adding schedules, start the background runner with: opendesk scheduler start",
+                "description": "Store named schedules (a task description plus a timing) in the current project's schedule file.\n\nActions:\n- add: store a schedule. timing examples: 'every 30m', 'every 2h', 'every day at 09:00', 'every friday at 17:00'\n- remove: remove a schedule by name\n- list: show all stored schedules\n\nNOTE: this build stores schedules but does not execute them: `opendesk scheduler start` only logs when one is due. Run the task yourself when it matters.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["add", "remove", "list", "run"], "description": "Schedule action: add, remove, list, run" },
+                        "action": { "type": "string", "enum": ["add", "remove", "list"], "description": "Schedule action: add, remove, list" },
                         "name": { "type": "string", "description": "Schedule name" },
                         "task": { "type": "string", "description": "Task description or procedure to run" },
                         "timing": { "type": "string", "description": "Timing expression, e.g. 'every 30m', 'every 2h', 'every day at 09:00'" }
@@ -782,11 +782,11 @@ impl McpServer {
             }),
             json!({
                 "name": "learn",
-                "description": "Record and replay computer tasks. Actions:\n- start: begin recording mouse/keyboard/screenshots for a named task\n- stop: stop recording; returns trajectory summary and screenshots for you to summarize into a procedure, then call learn(save) with the JSON\n- save: save a procedure JSON returned from stop\n- replay: load a saved procedure and return step-by-step replay instructions\n- list: list all saved procedures\n\nTypical workflow: learn(start) → user performs task → learn(stop) → summarize the trajectory → learn(save) → later: learn(replay)",
+                "description": "Save and replay written procedures for computer tasks. Actions:\n- save: save a procedure JSON you wrote (e.g. the steps you just performed)\n- replay: load a saved procedure and return its step-by-step instructions\n- list: list all saved procedures\n\nThis build does not record the user's mouse/keyboard: write the procedure from the steps you took.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["start", "stop", "save", "replay", "list"], "description": "Learn action: start, stop, save, replay, list" },
+                        "action": { "type": "string", "enum": ["save", "replay", "list"], "description": "Learn action: save, replay, list" },
                         "task_name": { "type": "string", "description": "Task name" },
                         "procedure": { "type": "string", "description": "JSON procedure string for save action" }
                     },
@@ -1401,8 +1401,14 @@ impl McpServer {
                         ])
                     }
                     "get_value" => {
-                        let dump = self.computer.ui_tree(app, Some(6))?;
-                        Ok(vec![json!({ "type": "text", "text": dump })])
+                        // Used to ignore the element and dump the app's tree.
+                        let selector = args
+                            .get("selector")
+                            .or_else(|| args.get("title"))
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'selector' or 'title' required"))?;
+                        let value = self.computer.ui_get_value(app, selector)?;
+                        Ok(vec![json!({ "type": "text", "text": value })])
                     }
                     _ => Err(anyhow!("Unknown ui action: {action}")),
                 }
@@ -2675,15 +2681,10 @@ impl McpServer {
                 );
                 Ok(vec![json!({ "type": "text", "text": lines.join("\n") })])
             }
-            "run" => {
-                let name = args
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow!("missing name"))?;
-                Ok(vec![
-                    json!({ "type": "text", "text": format!("Ran '{name}': success") }),
-                ])
-            }
+            // Used to answer "Ran '<name>': success" without running anything.
+            "run" => Err(anyhow!(
+                "schedule 'run' is not supported: this build stores schedules but cannot execute their tasks; perform the task directly"
+            )),
             _ => Err(anyhow!("Unknown schedule action: {action}")),
         }
     }
@@ -2697,20 +2698,11 @@ impl McpServer {
         let _ = std::fs::create_dir_all(&proc_dir);
 
         match action {
-            "start" => {
-                let task_name = args
-                    .get("task_name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unnamed");
-                Ok(vec![json!({
-                    "type": "text",
-                    "text": format!("Recording started for task '{task_name}'. Perform the task now, then call learn(action=stop) when done.")
-                })])
-            }
-            "stop" => Ok(vec![json!({
-                "type": "text",
-                "text": "Recording stopped. Summarize this recording into a procedure JSON and call learn(action=save, task_name=..., procedure='...')"
-            })]),
+            // These used to claim a recording was running while recording
+            // nothing.
+            "start" | "stop" => Err(anyhow!(
+                "learn '{action}' is not supported: this build cannot record mouse/keyboard input; write the procedure from the steps you took and call learn(action=save)"
+            )),
             "save" => {
                 let task_name = args
                     .get("task_name")
@@ -2753,7 +2745,7 @@ impl McpServer {
                 }
                 if names.is_empty() {
                     Ok(vec![
-                        json!({ "type": "text", "text": "No learned procedures yet. Record one with learn(action=start, task_name=...)" }),
+                        json!({ "type": "text", "text": "No saved procedures yet. Save one with learn(action=save, task_name=..., procedure=...)" }),
                     ])
                 } else {
                     Ok(vec![

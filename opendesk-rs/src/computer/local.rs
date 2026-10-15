@@ -94,6 +94,9 @@ pub mod win_input {
     }
 }
 
+/// Depth used for UI tree reads when the caller gives none.
+pub const DEFAULT_TREE_DEPTH: usize = 8;
+
 #[derive(Clone)]
 pub struct LocalComputer {
     pub privacy: std::sync::Arc<crate::computer::privacy::PrivacyController>,
@@ -872,9 +875,11 @@ impl LocalComputer {
             None => App::foreground(Duration::from_secs(2))
                 .map_err(|e| anyhow!("no foreground app: {e}"))?,
         };
+        // `None` would walk the whole subtree (an entire browser page); the
+        // tools document a default depth of 8.
         let tree_node = app
             .as_element()
-            .tree(max_depth)
+            .tree(Some(max_depth.unwrap_or(DEFAULT_TREE_DEPTH)))
             .map_err(|e| anyhow!("dump tree failed: {e}"))?;
         let mut out = String::new();
         format_tree_node(&tree_node, 0, &mut out);
@@ -891,6 +896,25 @@ impl LocalComputer {
         locator
             .press()
             .map_err(|e| anyhow!("locator press '{selector}' failed: {e}"))
+    }
+
+    /// The value of the element matching `selector` (its name if it has no
+    /// value, e.g. a label).
+    pub fn ui_get_value(&self, app_name: Option<&str>, selector: &str) -> Result<String> {
+        let app = match app_name {
+            Some(name) => Self::find_app(name)?,
+            None => App::foreground(Duration::from_secs(2))
+                .map_err(|e| anyhow!("no foreground app: {e}"))?,
+        };
+        let el = app
+            .locator(selector)
+            .element()
+            .map_err(|e| anyhow!("no element matches '{selector}': {e}"))?;
+        Ok(el
+            .value
+            .clone()
+            .or_else(|| el.name.clone())
+            .unwrap_or_default())
     }
 
     pub fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {
