@@ -1,81 +1,57 @@
 # Protocol Layer
 
-## Layer 3: `protocol/`
+## `protocol/`
 
-The transport-agnostic wire protocol. Five frame types carry every byte
-exchanged between peers:
+The wire protocol. Five frame types carry every message exchanged between
+peers after the handshake:
 
 | Frame | Direction | Purpose |
 |---|---|---|
-| `HELLO` | both | First frame each side sends. Carries protocol version, role, principal, auth proof, capability manifest. |
-| `REQ` | caller → peer | Unary call (`stream=false`) or stream-starting call (`stream=true`). |
-| `RES` | peer → caller | Response or one frame of a streaming response. Carries `result` or `error`. |
-| `CANCEL` | either | Abort an in-flight call. |
-| `PUSH` | either | Server-originated event not tied to a prior request. |
+| `HELLO` | both | First frame each side sends. Carries protocol version, role, principal, auth data, capability map, optional error. |
+| `REQ` | caller → peer | A call: `id`, `method`, `params`. |
+| `RES` | peer → caller | `result` or `error` for a request id. |
+| `CANCEL` | either | Abort an in-flight call (the server currently only logs it). |
+| `PUSH` | either | Server-originated event not tied to a prior request (e.g. `session.evicted`). |
 
-### `frames.py`
+### `frames.rs`
 
-Pydantic models for the five frame types and `ErrorInfo` with a stable
-`ErrorCode` enum (`capability_unsupported`, `permission_denied`,
-`invalid_argument`, `not_found`, `timeout`, `cancelled`, `internal`,
-`protocol`).
+serde types for the five frames (`Frame` is internally tagged by `type`) and
+`ErrorInfo` with an `ErrorCode` enum (`capability_unsupported`,
+`permission_denied`, `invalid_argument`, `not_found`, `timeout`, `cancelled`,
+`internal`, `protocol`, `busy`). Frames are encoded with `rmp-serde`
+(msgpack, named fields); dynamic params and results are `rmpv::Value`.
 
-### `codec.py`
+### `identity.rs`
 
-msgpack encode/decode. Bytes round-trip as native msgpack `bin`; no base64
-ever. A `default` hook converts Python `set` and `Enum` instances to
-list / value so Pydantic models with those types serialise cleanly.
+`Identity` — long-lived X25519 keypair persisted at
+`~/.opendesk/identity.key`, created on first use.
 
-### `connection.py`
+### `storage.rs`
 
-The transport-shaped interface a `Peer` runs on. `Connection` ABC with
-`send(bytes)`, `recv() → bytes`, `aclose()`. Includes `LoopbackConnection`
-for hermetic in-process testing.
+`TrustedPeers` — `~/.opendesk/trusted-peers.json`: paired peers (public key,
+name, description and local description override, last host/port, optional
+rendezvous URL) and the persistent default peer.
 
-### `transports/websocket.py`
+### `handshake.rs`
 
-`WebSocketConnection`, `connect_websocket(url)`, `serve_websocket(handler, host, port)`.
-Binary-only — text frames are rejected as a protocol violation.
+* `pair_server` / `pair_client` — 3-message PSK-authenticated handshake.
+  PSK derived from the 6-digit code via PBKDF2-HMAC-SHA256 at 200 000
+  iterations. Both sides learn each other's static public key.
+* `auth_server` / `auth_client` — 2-message mutual-static-key handshake.
+  The server rejects clients whose key isn't trusted; the client rejects
+  servers that don't hold the expected static key.
 
-### `peer.py`
+### `crypto.rs`
 
-`Peer` correlates call ids over a `Connection`. Public API:
+Session channel: ChaCha20-Poly1305 AEAD per frame, with separate send and
+receive counters as the nonce (not transmitted). A failed decrypt ends the
+session.
 
-```python
-peer = Peer(connection, role="client", dispatcher=optional)
-await peer.hello(my_manifest)        # 1 RTT handshake
-peer.start()                          # spawn recv loop
-result = await peer.call("display.capture", {...})
-async for frame in peer.stream("display.subscribe", {...}): ...
-await peer.aclose()
-```
+### Transport (`remote/transport.rs`)
 
-Owns in-flight tables (unary, stream, inbound), routes cancellation in both
-directions, maps wire error codes to Python exceptions (`cancelled` →
-`CancelledError`, `permission_denied` → `PermissionDeniedError`, everything
-else → `ProtocolError(code, message, details)`).
-
-### `auth/`
-
-* `identity.py` — `Identity` long-lived X25519 keypair persisted at
-  `~/.opendesk/identity.key` (mode 0600, atomic write).
-* `storage.py` — `TrustedPeers` JSON file with entries
-  `{public_key, name, paired_at, description, description_override,
-  last_host, last_port}`. `description` is cached from the peer's
-  mDNS/HELLO broadcast; `description_override` is the local user label
-  (wins when non-empty). `last_host`/`last_port` allow reconnecting
-  without an mDNS round-trip — essential in WSL2 environments.
-* `handshake.py` — two flavours:
-  * `pair_server` / `pair_client` — 3-message PSK-authenticated handshake.
-    PSK derived from the 6-digit code via PBKDF2-HMAC-SHA256 at 200 000
-    iterations. Both sides learn each other's static public key.
-  * `auth_server` / `auth_client` — 2-message mutual-static-key handshake.
-    Server rejects clients whose key isn't in `TrustedPeers`; client rejects
-    servers that don't hold the expected static key.
-* `encrypted.py` — `EncryptedConnection` wraps a Connection with
-  ChaCha20-Poly1305 AEAD per frame. Per-direction counter as the nonce;
-  counter not transmitted (sender and receiver each maintain their own).
-  Tamper or sync loss → `ConnectionClosed`.
+`WebSocketTransport` — binary WebSocket messages for protocol frames (an
+unexpected text message is an error). Text messages are used only for the
+rendezvous relay's JSON control messages.
 
 ---
 

@@ -6,9 +6,9 @@ fighting over a single mouse / keyboard / focused window is the failure
 mode this policy prevents.
 
 * **Different peer trying to connect while one is active** → rejected
-  with a clean `BUSY` error. The client sees a `ProtocolError`
-  ("server is busy: laptop is the active controller…") so the agent
-  knows to back off or ask the operator.
+  with a `busy` error ("server is busy: laptop is the active
+  controller") and the connection is closed, so the agent knows to back
+  off or ask the operator.
 * **Same peer reconnecting** (Wi-Fi blip, controller crash, network
   roam) → bumps the previous session cleanly. No need to wait out the
   stale TCP connection.
@@ -24,17 +24,16 @@ opendesk unpair NAME          # revoke trust entirely (enforced)
 
 ## Disconnect vs unpair — the trust model
 
-Both commands talk to the running daemon over a local Unix socket /
-named pipe (`~/.opendesk/admin.sock`), not the network — only the user
-running `serve` can use them. They differ in *who has the last word*:
+Both commands talk to the running daemon over a local admin channel, not
+the network: a Unix socket at `~/.opendesk/admin.sock` (mode 0600), or on
+Windows a localhost TCP port recorded in `~/.opendesk/admin.port`. They
+differ in *who has the last word*:
 
 * **`opendesk disconnect`** is **cooperative**. The server sends a
-  `session.evicted` PUSH frame and closes the connection. A cooperative
-  client (`RemoteComputer`) sees the frame, suppresses its auto-reconnect,
-  and raises `SessionEvicted` on subsequent calls. Trust is preserved —
-  the same controller can come back when it decides to reconnect. A hostile
-  client could ignore the PUSH and reconnect immediately; for that case,
-  use `unpair`.
+  `session.evicted` PUSH frame and closes the connection. Trust is
+  preserved — the same controller can reconnect (the Rust client does not
+  act on the PUSH; its next call simply opens a new connection). A
+  controller that should not come back needs `unpair`.
 * **`opendesk unpair NAME`** is **enforced**. The peer is removed
   from the trusted-peers store, then disconnected (via the same admin
   IPC channel as `disconnect`). Their next reconnect attempt fails
@@ -45,4 +44,4 @@ In short: `disconnect` says *"please leave, you can come back later"*;
 
 ---
 
-Next: [Programmatic Use →](programmatic.md) — connect from Python or JS code directly.
+Next: [Programmatic Use →](programmatic.md) — use the Rust crate, or MCP from any language.

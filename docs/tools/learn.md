@@ -1,73 +1,41 @@
-# `learn` — Record and Replay Tasks
+# `learn` — Save and Replay Procedures
 
-```python
-from opendesk.tools.learn import LearnTool
-tool = LearnTool()
-```
-
-Requires `pip install 'opendesk[learn]'` (installs `pynput`).
+Stores written procedures so an agent can repeat a task later. The Rust
+version **does not record** mouse or keyboard input: there is no `start` /
+`stop` (calling them returns an error). The agent writes the procedure itself,
+for example from the steps it just performed.
 
 ## Actions
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| `start` | `task_name` | Begin recording mouse, keyboard, and screenshots globally |
-| `stop` | — | Stop recording; returns trajectory summary and screenshots |
-| `save` | `task_name`, `procedure` | Save a procedure JSON string to `.opendesk/learned/` |
-| `replay` | `task_name` | Load a procedure and return step-by-step replay instructions |
-| `list` | — | List all saved procedures in the current directory |
+| `save` | `task_name`, `procedure` | Save a procedure string (JSON) as `~/.opendesk/procedures/<task_name>.json` |
+| `replay` | `task_name` | Return the saved procedure text for the agent to follow |
+| `list` | — | List saved procedure names |
+
+`replay` does not execute anything; it hands the stored steps back to the
+agent, which carries them out with the normal tools against the current screen.
 
 ## Ask Claude
 
-**Recording a workflow:**
-> "Watch me fill out this form and remember it as 'expense-report'"
+> "Save what you just did as a procedure called expense-report"
 
-Claude will call `learn(start)`, wait for you to perform the task, then call `learn(stop)` and summarize what it saw.
+> "Replay the expense-report procedure"
 
-**Replaying a saved workflow:**
-> "Replay the expense-report task"
-> "Run the fill-form procedure again"
+> "What procedures have you saved?"
 
-**Listing saved workflows:**
-> "What tasks have you learned?"
-> "Show me all saved procedures"
+## Example calls
 
-!!! note
-    `learn` + `replay` teaches Claude to re-execute a workflow using *current screen state* — it adapts to the environment rather than replaying raw coordinates. For exact action-by-action replay of a session, use [`audit(action='replay')`](audit.md) instead.
-
----
-
-## SDK examples
-
-```python
-params = LearnTool.Params
-
-# Start recording
-await tool.execute(ctx, params(action="start", task_name="fill-form"))
-
-# ... user performs the task ...
-
-# Stop and review trajectory
-result = await tool.execute(ctx, params(action="stop"))
-print(result.output)
-
-# Save procedure (JSON string)
-import json
-procedure = json.dumps({
-    "task_name": "fill-form",
-    "description": "Fill and submit the expense form",
-    "steps": ["Open the form", "Fill in fields", "Click Submit"],
-    "procedure": "Navigate to the form application. Fill each required field. Submit."
-})
-await tool.execute(ctx, params(action="save", task_name="fill-form", procedure=procedure))
-
-# Replay
-result = await tool.execute(ctx, params(action="replay", task_name="fill-form"))
-print(result.output)  # step-by-step instructions for the agent
-
-# List all
-result = await tool.execute(ctx, params(action="list"))
-print(result.output)
+```json
+{
+  "action": "save",
+  "task_name": "fill-form",
+  "procedure": "{\"description\": \"Fill and submit the expense form\", \"steps\": [\"Open the form\", \"Fill in fields\", \"Click Submit\"]}"
+}
+{ "action": "replay", "task_name": "fill-form" }
+{ "action": "list" }
 ```
 
-See [Automation](../automation/index.md) for the full guide including scheduling, storage format, and platform support.
+The procedure is stored verbatim; no particular JSON shape is enforced.
+
+See [Automation](../automation/index.md) for how this fits with `schedule`.

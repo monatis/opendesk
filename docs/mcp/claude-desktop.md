@@ -1,8 +1,9 @@
 # Claude Desktop
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Edit `claude_desktop_config.json`:
 
-## Python
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -14,13 +15,14 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-If `opendesk-mcp` is not on your PATH (e.g. in a virtualenv), use the full path:
+If `opendesk-mcp` is not on the PATH Claude Desktop sees, use the full path
+(by default `~/.cargo/bin/opendesk-mcp`, or `opendesk-mcp.exe` on Windows):
 
 ```json
 {
   "mcpServers": {
     "opendesk": {
-      "command": "/path/to/venv/bin/opendesk-mcp"
+      "command": "C:\\Users\\you\\.cargo\\bin\\opendesk-mcp.exe"
     }
   }
 }

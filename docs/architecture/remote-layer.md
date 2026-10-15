@@ -1,75 +1,89 @@
 # Remote & Integrations Layers
 
-## Layer 4: `remote/`
+## `remote/`
 
-User-facing stitching for the LAN flow.
+User-facing stitching for the LAN and Internet flows.
 
-* `server.py` — `OpendeskServer`. Accepts WebSocket connections, runs the
-  right handshake (pair vs. auth), wraps each session in a `Peer` +
-  `ComputerDispatcher`, tracks sessions in a `SessionRegistry`.
-  `enable_pairing(code)` flips into one-shot pairing mode.
+* `server.rs` — `OpendeskServer`. Accepts WebSocket connections (directly
+  and/or through rendezvous relays), runs the pairing or auth handshake,
+  exchanges HELLO, then handles `REQ` frames one at a time through
+  `dispatch_call`. `run_pair` is the one-shot pairing mode behind
+  `opendesk pair`.
 
   **Single-controller policy:** at most one peer holds an active session
-  at any moment. Same-peer reconnect bumps the previous session (the
+  at any moment. Same-peer reconnect replaces the previous session (the
   common case after a Wi-Fi blip or controller crash). A *different*
-  peer hitting an active server gets rejected with `ErrorCode.BUSY` —
-  carried on the HELLO frame so the client raises a clean
-  `ProtocolError` instead of seeing a generic disconnect. Two
-  controllers fighting over the same mouse / keyboard is the failure
-  mode this prevents; multi-session / observer support is a phase-2
-  design item with its own session-kind, not a numeric knob.
-* `policy.py` — `Policy` Protocol + `AllowAllPolicy` (default) and
-  `ConsolePolicy` (stdin-prompts gated methods, auto-allows observations).
-  Server-side gate applied per call.
-* `audit.py` — `AuditLog`. Append-only JSONL at
-  `<home>/audit/YYYY-MM-DD.jsonl`. Records session lifecycle plus every
-  protocol method invocation with outcome.
-* `admin.py` — local Unix-socket (or Windows named-pipe) IPC. Used by
-  `opendesk sessions`, `opendesk disconnect`, and `opendesk unpair` /
-  `opendesk peers remove` (which both kick the active session via this
-  channel when revoking trust). Local-only, no network exposure.
-* `service.py` — generates systemd / launchd / Task Scheduler entries
-  for `opendesk serve` (one-command install / uninstall).
-* `discovery.py` — `advertise(name, port, public_key)` and `discover(timeout)`
-  via Zeroconf. Service type `_opendesk._tcp.local.` with TXT records
-  carrying the host's public key + fingerprint.
-* `client.py` — `connect(target)` (auto-reconnect on transient drops by
-  default) and `pair_with(host, port, code)`. Resolves a peer name →
-  mDNS → WebSocket → `auth_client` → `RemoteComputer`. When no target
-  is supplied, falls back to the persistent default peer
-  (`opendesk peers default <name>`).
+  peer hitting an active server gets an error response with code `busy`
+  ("server is busy: NAME is the active controller") and is disconnected.
+* `audit.rs` — `AuditLog`. Append-only JSONL at
+  `<home>/audit/YYYY-MM-DD.jsonl`. Records session lifecycle (opened,
+  closed, rejected) plus every protocol method call with its outcome.
+  `opendesk serve --no-audit` turns it off.
+* `admin.rs` — local IPC: Unix socket `~/.opendesk/admin.sock` (mode
+  0600), or on Windows localhost TCP on a port recorded in
+  `~/.opendesk/admin.port`. Used by `opendesk sessions`,
+  `opendesk disconnect`, and `opendesk unpair` / `opendesk peers remove`.
+  No network exposure.
+* `discovery.rs` — mDNS advertise / browse (`mdns-sd`). Service type
+  `_opendesk._tcp.local.`.
+* `rendezvous.rs` — the standalone relay server (`opendesk rendezvous`),
+  the serve-side agent that registers with it, and the client side used to
+  list and reach peers through it. Frames stay end-to-end encrypted.
+* `client.rs` — `RemoteComputer`, `pair_with(...)`, and
+  `connect(peer, rendezvous_url, rendezvous_token, home)`. With no peer it
+  falls back to the persistent default peer (`opendesk peers default`).
+
+## `service.rs`
+
+Installs `opendesk serve` as a user-scoped service: a systemd user unit
+(Linux), a launchd agent (macOS), or a Task Scheduler task that runs at
+logon (Windows). Used by `opendesk install-service` /
+`opendesk uninstall-service`.
+
+## `automation/scheduler.rs`
+
+`ScheduleStore` (the JSON file behind the `schedule` tool) and
+`run_scheduler_daemon`, which only logs enabled schedules once a minute.
+
+## `app/`
+
+Backend for `opendesk app` (local web UI and REST API on
+`http://127.0.0.1:8424`); the same UI is served as the MCP App behind
+`opendesk_view`.
 
 ---
 
-## Layer 5: `integrations/`
+## `mcp/`
 
-### `mcp.py`
+### `McpServer` (`server.rs`)
 
-Single MCP server. At list-tools time, augments Computer-use tool schemas
-(`screenshot`, `mouse`, `keyboard`, `ui`, `app`, `clipboard`, `ocr`) with an
-optional `peer` field; appends admin tools (`opendesk_peers`,
-`opendesk_discover`, `opendesk_use`, `opendesk_status`,
-`opendesk_capabilities`, `opendesk_disconnect`).
+Single stdio MCP server (`opendesk-mcp`, or `opendesk mcp`). `list_tools`
+returns the computer-use tools (each with an optional `peer` field) and the
+admin tools (`opendesk_peers`, `opendesk_discover`, `opendesk_use`,
+`opendesk_status`, `opendesk_describe`, `opendesk_capabilities`,
+`opendesk_disconnect`, `opendesk_guard`, `opendesk_privacy`,
+`opendesk_view`, `opendesk_app_api`).
 
-At call-tool time, strips `peer` from arguments, resolves to a `Computer`
-via `MCPSession`, builds a fresh `ToolContext` with that Computer, and
-dispatches. Local-only tools (`learn`, `schedule`, `audit`) are passed
-through unchanged.
+`call_tool` resolves the target, applies the input guard to `mouse` /
+`keyboard`, and runs the local or remote branch. Remote calls retry once on a
+fresh connection after a connection error; cached connections idle for more
+than 30 s are pinged before reuse.
 
-### `MCPSession` (`mcp_session.py`)
+### `McpSession`
 
-Per-MCP-session state: explicit default peer, cache of open
-`RemoteComputer` connections, the local `LocalComputer`. Resolution order:
+Per-session state: the explicit default peer from `opendesk_use`, the
+input guard, cached `RemoteComputer` connections, trusted peers, and
+rendezvous settings. Resolution order for a call without `peer`:
 
-1. Per-call `peer:` argument
-2. Explicit default from `opendesk_use`
-3. Lone trusted peer (implicit default)
-4. Multiple peers + no default → **error** (forces explicit choice)
-5. No peers paired → local
+1. Explicit default from `opendesk_use`
+2. Persistent default peer (`opendesk peers default`)
+3. `local`
 
-### `claude_code.py`, `openai_compat.py`, `langchain_compat.py`
+### SDK adapters
 
-Adapters that present tools in the native format of each agent SDK.
+The Python version's `claude_code.py`, `openai_compat.py` and
+`langchain_compat.py` adapters do not exist in the Rust version; MCP is the
+integration point.
 
 ---
 

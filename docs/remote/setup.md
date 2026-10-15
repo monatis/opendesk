@@ -2,8 +2,10 @@
 
 ## On the controlled machine
 
+Install the binaries on both machines (`cargo install --path opendesk-rs`),
+then:
+
 ```bash
-pip install 'opendesk[core,remote]'
 opendesk pair
 ```
 
@@ -28,7 +30,6 @@ pairs, the process exits.
 ## On the controller
 
 ```bash
-pip install 'opendesk[remote]'
 opendesk discover
 ```
 

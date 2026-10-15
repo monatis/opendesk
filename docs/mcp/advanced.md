@@ -1,87 +1,57 @@
-# Advanced: In-process Server & Restrictions
+# Advanced: Server Options & Restrictions
 
-## Running the MCP server in Python
+## Server options
 
-If you need to embed the server in your own process or customize permissions:
+`opendesk-mcp` (and `opendesk mcp`) accept:
 
-```python
-import asyncio
-from mcp.server.stdio import stdio_server
-from opendesk.integrations.mcp import create_mcp_server
-from opendesk.registry import create_registry
-from opendesk.tools.base import ToolContext, PermissionDeniedError
+| Flag | Purpose |
+|---|---|
+| `--home DIR` | Identity / trusted-peers directory (default `~/.opendesk`) |
+| `--rendezvous URL` | Rendezvous relay for reaching peers across the Internet |
+| `--rendezvous-token TOKEN` | Token for that relay |
 
-# Custom permission policy: block any app launch
-async def my_policy(tool: str, argument: str, description: str) -> None:
-    if tool == "app" and "open" in argument:
-        raise PermissionDeniedError("App launching is disabled in this session.")
+Logging goes to stderr and is off by default; set `RUST_LOG` (for example
+`RUST_LOG=debug`) to enable it.
 
-ctx = ToolContext(session_id="my-session", permission_handler=my_policy)
-server = create_mcp_server(registry=create_registry(), ctx=ctx)
-
-async def main():
-    async with stdio_server() as (r, w):
-        await server.run(r, w, server.create_initialization_options())
-
-asyncio.run(main())
-```
+The working directory of the MCP server process is where the `schedule` tool
+stores `.opendesk/schedules.json`.
 
 ---
 
-## Restricting what the agent can do
+## Embedding and permission policies
 
-Lock down the sandbox before starting the server:
+The Python version's in-process server (`create_mcp_server`), custom
+permission handlers, and `configure_sandbox` (allowed apps / screen region)
+are **not available** in the Rust version. To embed opendesk in a Rust
+program, use the crate directly — see
+[Programmatic Use](../remote/programmatic.md).
 
-```python
-from opendesk.computer.sandbox import configure_sandbox
-from opendesk.tools.base import ToolContext
+---
 
-# Only allow Safari and Terminal; only act within the left half of the screen
-configure_sandbox(
-    session_id="restricted",
-    allowed_apps=["Safari", "Terminal"],
-    screen_region=(0, 0, 1280, 1600),
-)
+## Restricting where input lands
 
-ctx = ToolContext(session_id="restricted")
-server = create_mcp_server(ctx=ctx)
+Use the input guard so mouse and keyboard calls are refused unless the
+expected window is in the foreground:
+
+```json
+// opendesk_guard
+{ "action": "set", "process": "notepad" }
 ```
 
-All screenshots and mouse clicks outside `(0,0,1280,1600)` will be rejected with an error
-the LLM sees, so it knows to stay in bounds.
+Every later `mouse` / `keyboard` call in the session (local or remote) is then
+checked on the target machine right before the input is sent. A per-call
+`guard` argument overrides the default; `{ "action": "clear" }` removes it.
+Foreground detection is Windows-only; see
+[Input guard](../tools/index.md#input-guard).
 
 ---
 
 ## Audit log
 
-Every action is recorded in the session sandbox:
-
-```python
-from opendesk.computer.sandbox import get_sandbox
-
-sandbox = get_sandbox("my-session")
-print(sandbox.summary())
-# session=my-session… | 12 actions: 3x screenshot, 4x ui_action, 2x keyboard_type, 3x mouse_click
-
-log = sandbox.export_audit_log()
-# [{"id": "...", "timestamp": 1234567890.0, "action": "screenshot", "params": {...}, ...}, ...]
-```
-
-### Custom permission handler with MCP
-
-```python
-from opendesk.tools.base import ToolContext, PermissionDeniedError
-
-BLOCKED_APPS = {"System Preferences", "Keychain Access"}
-
-async def policy(tool: str, argument: str, description: str) -> None:
-    for blocked in BLOCKED_APPS:
-        if blocked.lower() in argument.lower():
-            raise PermissionDeniedError(f"Blocked: {blocked}")
-
-ctx = ToolContext(session_id="mcp", permission_handler=policy)
-server = create_mcp_server(ctx=ctx)
-```
+The `audit` tool and `opendesk audit` show the audit log that `opendesk serve`
+writes on a controlled machine (`~/.opendesk/audit/YYYY-MM-DD.jsonl`). Calls
+the MCP server performs on the local machine are not logged. See
+[`audit`](../tools/audit.md).
 
 ---
 
