@@ -1,43 +1,33 @@
 # `app` — Application Control
 
-```python
-from opendesk.tools.app import AppTool
-tool = AppTool()
-```
-
 ## Actions
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| `open` | `name` | Launch application by name or path |
-| `close` | `name` | Quit application |
-| `focus` | `name` | Bring window to foreground |
-| `list` | — | List all running applications |
+| `open` | `name` | Launch an application by name or full executable path |
+| `close` | `name` | Close the application |
+| `focus` | `name` | Bring its window to the foreground |
+| `list` | — | List running applications / windows |
+
+All actions accept an optional `peer`.
 
 ## Ask Claude
 
-> "Open TextEdit"
+> "Open Notepad"
 
-> "Open Spotify"
+> "Close the browser"
 
-> "Close Safari"
-
-> "Switch to Finder"
+> "Switch to File Explorer"
 
 > "What apps are currently running?"
 
----
+## Example calls
 
-## SDK examples
-
-```python
-params = AppTool.Params
-
-await tool.execute(ctx, params(action="open", name="TextEdit"))
-await tool.execute(ctx, params(action="focus", name="Safari"))
-result = await tool.execute(ctx, params(action="list"))
-print(result.output)
-await tool.execute(ctx, params(action="close", name="TextEdit"))
+```json
+{ "action": "open", "name": "notepad" }
+{ "action": "focus", "name": "Notepad" }
+{ "action": "list" }
+{ "action": "close", "name": "Notepad", "peer": "work-pc" }
 ```
 
 ---

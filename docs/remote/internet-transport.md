@@ -159,40 +159,38 @@ Or connect directly by hex public key:
 opendesk connect 7a3f89e1b2c4... --rendezvous ws://rendezvous.example.com:8424
 ```
 
-### Via Python API
+### Via the Rust crate
 
-The `connect()` function transparently resolves stored rendezvous URLs:
+`opendesk_rs::remote::client::connect` uses the peer's stored rendezvous URL
+when you don't pass one (there is no Python API in the Rust version):
 
-```python
-import asyncio
-from opendesk.computer import Point, PointerAction, PointerEvent
-from opendesk.remote.client import connect
+```rust
+use opendesk_rs::remote::client::connect;
 
-async def main():
-    # Resolves 'cloud-vm' from TrustedPeers, negotiates P2P or relay
-    remote = await connect("cloud-vm")
-    try:
-        # Screen capture (E2E encrypted)
-        pix = await remote.capture()
-        print(f"Captured screen: {pix.width}x{pix.height}")
-
-        # Cursor inspection & mouse move
-        pos = await remote.cursor_position()
-        print(f"Cursor currently at: ({pos.x}, {pos.y})")
-        await remote.pointer(PointerEvent(action=PointerAction.MOVE, point=Point(x=100, y=200)))
-    finally:
-        await remote.aclose()
-
-asyncio.run(main())
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // peer, rendezvous URL, rendezvous token, home dir
+    let remote = connect(Some("cloud-vm"), None, None, None).await?;
+    let png = remote.screenshot_bytes(None).await?;
+    println!("Captured {} bytes", png.len());
+    remote.mouse_move(100, 200).await?;
+    Ok(())
+}
 ```
 
 ### Via MCP for AI Agents
 
-Point Claude Code, Cursor, or any MCP client to the remote machine over the Internet:
+Register the MCP server with the relay, then pick the peer from the agent.
+There is no `--target` flag:
 
 ```bash
-opendesk mcp --target cloud-vm
+opendesk install --rendezvous ws://rendezvous.example.com:8424 --rendezvous-token YOUR_TOKEN
+# or: opendesk set-rendezvous ws://rendezvous.example.com:8424 --token YOUR_TOKEN
 ```
+
+Then in the conversation, `opendesk_use` with `peer: "cloud-vm"` (or pass
+`peer: "cloud-vm"` on individual calls). To make it the default for every
+session, run `opendesk peers default cloud-vm`.
 
 Claude can now inspect, click, type, and automate the remote machine across the Internet without any port forwarding or VPNs.
 

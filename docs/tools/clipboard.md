@@ -1,16 +1,13 @@
 # `clipboard` — Clipboard Read/Write
 
-```python
-from opendesk.tools.clipboard import ClipboardTool
-tool = ClipboardTool()
-```
-
 ## Actions
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| `read` | — | Return current clipboard text |
-| `write` | `text` | Set clipboard text |
+| `read` | — | Return the current clipboard text |
+| `write` | `text` | Set the clipboard text |
+
+Both accept an optional `peer`.
 
 ## Ask Claude
 
@@ -18,24 +15,16 @@ tool = ClipboardTool()
 
 > "Copy this text to my clipboard: 'hello world'"
 
-> "Paste the clipboard contents into the active window"
+## Example calls
 
----
-
-## SDK examples
-
-```python
-params = ClipboardTool.Params
-
-# Read
-result = await tool.execute(ctx, params(action="read"))
-print(result.output)
-
-# Write, then paste
-await tool.execute(ctx, params(action="write", text="Hello from opendesk"))
-# Then use keyboard tool to paste with Ctrl/Cmd+V
+```json
+{ "action": "read" }
+{ "action": "write", "text": "Hello from opendesk" }
 ```
 
+To paste, follow a `write` with the [`keyboard`](keyboard.md) tool
+(`{"action": "press", "key": "ctrl+v"}`).
+
 ---
 
-Next: [ocr →](ocr.md) — extract text from any region without the clipboard.
+Next: [audit →](audit.md)

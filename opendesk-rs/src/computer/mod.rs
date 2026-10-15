@@ -1,3 +1,11 @@
+pub mod environment;
+pub mod files;
+pub mod foreground;
+pub mod jobs;
+pub mod keys;
 pub mod local;
 pub mod permissions;
 pub mod privacy;
+pub mod process;
+pub mod viewer;
+pub mod watch;

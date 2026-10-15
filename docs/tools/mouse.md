@@ -1,11 +1,8 @@
 # `mouse` — Mouse Control
 
-```python
-from opendesk.tools.mouse import MouseTool
-tool = MouseTool()
-```
-
-**Always provide `image_width` and `image_height` from the screenshot tool.** This ensures correct coordinate translation on Retina / HiDPI displays.
+Use pixel coordinates exactly as they appear in the most recent screenshot of
+the same machine. They are mapped onto that machine's desktop automatically;
+there are no `image_width` / `image_height` parameters.
 
 ## Actions
 
@@ -15,50 +12,36 @@ tool = MouseTool()
 | `double_click` | `x, y` | Double left-click |
 | `triple_click` | `x, y` | Triple-click (select word/line) |
 | `right_click` | `x, y` | Right-click |
-| `middle_click` | `x, y` | Middle-click (open link in new tab) |
+| `middle_click` | `x, y` | Middle-click |
 | `move` | `x, y` | Move without clicking |
-| `scroll` | `x, y, direction, amount` | Scroll up/down/left/right |
+| `scroll` | `x, y, direction, amount` | Scroll `amount` clicks (default 3) |
 | `drag` | `x, y, end_x, end_y` | Click-and-drag |
-| `left_down` | `x, y` | Press and hold left button |
-| `left_up` | `x, y` | Release left button |
-| `cursor_position` | — | Return current cursor location |
+| `left_down` | `x, y` | Press and hold the left button |
+| `left_up` | `x, y` | Release the left button |
+| `cursor_position` | — | Return the current cursor location |
+
+Optional on every action: `settle_ms` (wait after the action), `guard`
+(refuse unless the foreground window matches; see
+[Input guard](index.md#input-guard)), and `peer`.
+
+Only vertical scrolling is implemented: `direction: "down"` scrolls down and
+any other value scrolls up.
 
 ## Ask Claude
 
 > "Click the Save button"
 
-> "Right-click on the Desktop"
-
 > "Scroll down on the page"
-
-> "Drag the window from the left side to the right"
 
 > "Where is the cursor right now?"
 
-Claude will take a screenshot first to get the dimensions, then click the right spot automatically.
+## Example calls
 
----
-
-## SDK examples
-
-```python
-params = MouseTool.Params
-
-# Always get screenshot dimensions first
-shot = await registry.get("screenshot").execute(ctx, ScreenshotTool.Params())
-w = shot.metadata["width"]
-h = shot.metadata["height"]
-
-# Click at image coordinates (auto-scaled to logical coords)
-await tool.execute(ctx, params(action="click", x=400, y=300, image_width=w, image_height=h))
-
-# Scroll down
-await tool.execute(ctx, params(action="scroll", x=760, y=400, direction="down", amount=5,
-                               image_width=w, image_height=h))
-
-# Drag
-await tool.execute(ctx, params(action="drag", x=100, y=100, end_x=500, end_y=300,
-                               image_width=w, image_height=h))
+```json
+{ "action": "click", "x": 400, "y": 300 }
+{ "action": "scroll", "x": 760, "y": 400, "direction": "down", "amount": 5 }
+{ "action": "drag", "x": 100, "y": 100, "end_x": 500, "end_y": 300 }
+{ "action": "click", "x": 400, "y": 300, "guard": { "title": "Notepad" } }
 ```
 
 ---

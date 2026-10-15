@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, mpsc};
 use tokio_tungstenite::connect_async;
@@ -48,6 +49,23 @@ pub struct RendezvousServer {
     token: Option<String>,
     agents: Arc<Mutex<HashMap<String, RegisteredAgent>>>,
     sessions: Arc<Mutex<HashMap<String, PendingSession>>>,
+    connections: Arc<AtomicUsize>,
+}
+
+/// Decrements the live connection counter when a connection handler exits.
+struct ConnectionGuard(Arc<AtomicUsize>);
+
+impl ConnectionGuard {
+    fn new(counter: Arc<AtomicUsize>) -> Self {
+        counter.fetch_add(1, Ordering::SeqCst);
+        Self(counter)
+    }
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 impl RendezvousServer {
@@ -58,7 +76,19 @@ impl RendezvousServer {
             token,
             agents: Arc::new(Mutex::new(HashMap::new())),
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            connections: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// Number of websocket connections currently held open by the server
+    /// (agent control connections plus both legs of every relayed session).
+    pub fn active_connections(&self) -> usize {
+        self.connections.load(Ordering::SeqCst)
+    }
+
+    /// Number of relayed sessions currently tracked by the server.
+    pub async fn active_sessions(&self) -> usize {
+        self.sessions.lock().await.len()
     }
 
     pub async fn serve_forever(&self) -> Result<()> {
@@ -74,12 +104,23 @@ impl RendezvousServer {
         }
 
         loop {
-            let (stream, remote_addr) = listener.accept().await?;
+            // A transient accept failure (e.g. running out of file descriptors)
+            // must not take the whole relay down.
+            let (stream, remote_addr) = match listener.accept().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    warn!("Rendezvous accept error: {}", e);
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
             let token = self.token.clone();
             let agents = self.agents.clone();
             let sessions = self.sessions.clone();
+            let guard = ConnectionGuard::new(self.connections.clone());
 
             tokio::spawn(async move {
+                let _guard = guard;
                 if let Err(e) =
                     handle_rendezvous_ws(stream, remote_addr, token, agents, sessions).await
                 {
@@ -278,7 +319,10 @@ async fn handle_rendezvous_ws(
 
             loop {
                 tokio::select! {
-                    Some(out_msg) = ctrl_out_rx.recv() => {
+                    out_msg = ctrl_out_rx.recv() => {
+                        // `None` means the agent leg has gone away: tear down
+                        // the controller leg too instead of idling forever.
+                        let Some(out_msg) = out_msg else { break };
                         if ws.send(out_msg).await.is_err() {
                             break;
                         }
@@ -319,8 +363,11 @@ async fn handle_rendezvous_ws(
                 }
             }
 
-            let mut sess_map = sessions.lock().await;
-            sess_map.remove(&session_id);
+            // Dropping the session (and our clone of the agent channel) closes
+            // the agent leg's receiver, which makes the join handler exit.
+            sessions.lock().await.remove(&session_id);
+            drop(agent_channel);
+            let _ = ws.close(None).await;
         }
         "join" => {
             let session_id = data
@@ -372,7 +419,10 @@ async fn handle_rendezvous_ws(
 
             loop {
                 tokio::select! {
-                    Some(out_msg) = agent_out_rx.recv() => {
+                    out_msg = agent_out_rx.recv() => {
+                        // `None` means the controller leg has gone away: close
+                        // the agent leg so the agent's session task can exit.
+                        let Some(out_msg) = out_msg else { break };
                         if ws.send(out_msg).await.is_err() {
                             break;
                         }
@@ -400,6 +450,12 @@ async fn handle_rendezvous_ws(
                     }
                 }
             }
+
+            // Removing the session drops the last sender for the controller
+            // leg's channel, which makes the connect handler exit.
+            sessions.lock().await.remove(session_id);
+            drop(ctrl_channel);
+            let _ = ws.close(None).await;
         }
         "list" => {
             let reg = agents.lock().await;
@@ -546,7 +602,9 @@ pub async fn run_rendezvous_agent(
                     }
                 }
                 _ = tokio::time::sleep(std::time::Duration::from_secs(25)) => {
-                    let _ = transport.send_text(&json!({ "action": "ping" }).to_string()).await;
+                    if transport.send_text(&json!({ "action": "ping" }).to_string()).await.is_err() {
+                        break;
+                    }
                 }
             }
         }
@@ -590,7 +648,7 @@ async fn join_rendezvous_session(
     let (_tx, mut rx) = tokio::sync::mpsc::channel(1);
     let audit = crate::remote::audit::AuditLog::new(home.as_deref());
     let peer_name = crate::protocol::storage::default_peer_name(&session.peer_public);
-    run_session_loop(
+    let result = run_session_loop(
         &mut transport,
         session.channel,
         computer,
@@ -602,7 +660,9 @@ async fn join_rendezvous_session(
         &audit,
         false,
     )
-    .await
+    .await;
+    let _ = transport.close().await;
+    result
 }
 
 // ---------------------------------------------------------------------------

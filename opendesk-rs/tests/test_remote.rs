@@ -6,6 +6,20 @@ use opendesk_rs::remote::rendezvous::RendezvousServer;
 use opendesk_rs::remote::server::OpendeskServer;
 use std::sync::Arc;
 
+/// Round-trip an RPC that leaves the desktop alone (no clipboard, no input)
+/// and check the marker comes back.
+async fn assert_echo(remote: &opendesk_rs::remote::client::RemoteComputer, marker: &str) {
+    #[cfg(target_os = "windows")]
+    let shell = "cmd";
+    #[cfg(not(target_os = "windows"))]
+    let shell = "sh";
+    let res = remote
+        .exec(&format!("echo {marker}"), Some(shell), Some(20))
+        .await
+        .unwrap();
+    assert!(res.stdout.contains(marker), "{res:?}");
+}
+
 #[tokio::test]
 async fn test_live_pairing_and_rpc() -> Result<()> {
     let server_dir = tempfile::tempdir()?;
@@ -45,9 +59,7 @@ async fn test_live_pairing_and_rpc() -> Result<()> {
     assert_eq!(server_pub, s_id.public_bytes());
 
     // Test calling an RPC method on the newly paired remote computer
-    remote.clipboard_write("PAIRING_TEST_OK").await?;
-    let text = remote.clipboard_read().await?;
-    assert_eq!(text, "PAIRING_TEST_OK");
+    assert_echo(&remote, "PAIRING_TEST_OK").await;
 
     Ok(())
 }
@@ -86,14 +98,7 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
     // Connect via authenticated static keys
     let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
 
-    // Test remote clipboard write and read
-    remote
-        .clipboard_write("OPENDESK_RUST_REMOTE_SUCCESS")
-        .await?;
-    let read_back = remote.clipboard_read().await?;
-    assert_eq!(read_back, "OPENDESK_RUST_REMOTE_SUCCESS");
-
-    // Test privacy RPC capabilities and set/get
+    // Advertised capabilities
     assert!(remote.capabilities().contains_key("system.privacy"));
     assert!(remote.capabilities().contains_key("process.exec"));
     assert!(remote.capabilities().contains_key("input.sequence"));
@@ -122,6 +127,48 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
     }];
     remote.keyboard_sequence(&seq_steps).await?;
 
+    // Abort server background loop
+    server_task.abort();
+    Ok(())
+}
+
+/// RPCs that act on this machine's real desktop: they overwrite the
+/// clipboard and briefly lock physical keyboard/mouse input.
+#[tokio::test]
+#[ignore = "overwrites the clipboard and locks physical input; run with --ignored on a test machine"]
+async fn test_live_desktop_rpcs() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18434;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+
+    remote
+        .clipboard_write("OPENDESK_RUST_REMOTE_SUCCESS")
+        .await?;
+    assert_eq!(
+        remote.clipboard_read().await?,
+        "OPENDESK_RUST_REMOTE_SUCCESS"
+    );
+
     let st = remote.set_privacy(true, false).await?;
     assert!(st.lock_input);
     let st_status = remote.get_privacy().await?;
@@ -129,7 +176,60 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
     let st_reset = remote.set_privacy(false, false).await?;
     assert!(!st_reset.lock_input);
 
-    // Abort server background loop
+    server_task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_live_exec_timeout_returns_partial_output() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18432;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+
+    #[cfg(target_os = "windows")]
+    let (cmd, shell) = (
+        "Write-Output \"partial \"\"quoted\"\"\"; Start-Sleep 120",
+        "powershell",
+    );
+    #[cfg(not(target_os = "windows"))]
+    let (cmd, shell) = ("echo 'partial \"quoted\"'; sleep 120", "sh");
+
+    // Generous enough for PowerShell to start and print under parallel test
+    // load, far below the 120 s the command would otherwise run.
+    let start = std::time::Instant::now();
+    let res = remote.exec(cmd, Some(shell), Some(10)).await?;
+    assert!(start.elapsed() < std::time::Duration::from_secs(30));
+    assert!(res.timed_out, "{res:?}");
+    assert!(!res.success);
+    assert!(res.stdout.contains("partial \"quoted\""), "{res:?}");
+
+    // The session is still usable after a timed-out command.
+    let res = remote
+        .exec("echo still-alive", Some(shell), Some(20))
+        .await?;
+    assert!(res.stdout.contains("still-alive"), "{res:?}");
+    assert!(!res.timed_out);
+
     server_task.abort();
     Ok(())
 }
@@ -183,11 +283,361 @@ async fn test_live_rendezvous_signaling_and_relay() -> Result<()> {
     .await?;
 
     // Execute command through the relay!
-    remote.clipboard_write("RENDEZVOUS_RELAY_OK").await?;
-    let text = remote.clipboard_read().await?;
-    assert_eq!(text, "RENDEZVOUS_RELAY_OK");
+    assert_echo(&remote, "RENDEZVOUS_RELAY_OK").await;
 
     server_task.abort();
     r_task.abort();
+    Ok(())
+}
+
+/// Polls `f` until it returns `expected` or `timeout` elapses; returns the last value seen.
+async fn wait_for_count<F: Fn() -> usize>(
+    f: F,
+    expected: usize,
+    timeout: std::time::Duration,
+) -> usize {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        let n = f();
+        if n == expected || tokio::time::Instant::now() >= deadline {
+            return n;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+}
+
+#[tokio::test]
+async fn test_rendezvous_relay_sessions_do_not_leak_connections() -> Result<()> {
+    let r_port = 18428;
+
+    let r_server = Arc::new(RendezvousServer::new(
+        "127.0.0.1",
+        r_port,
+        Some("test-token".to_string()),
+    ));
+    let r_clone = r_server.clone();
+    let r_task = tokio::spawn(async move { r_clone.serve_forever().await });
+
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+
+    let server_trusted = TrustedPeers::new(Some(server_dir.path()));
+    server_trusted.add(&client_id.public_bytes(), "my-client", "")?;
+
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+
+    let r_url = format!("ws://127.0.0.1:{}", r_port);
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        18429,
+        Some(server_dir.path()),
+        vec![r_url.clone()],
+        Some("test-token".to_string()),
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+
+    // Only the agent's long-lived control connection should be open.
+    let timeout = std::time::Duration::from_secs(5);
+    let baseline = wait_for_count(|| r_server.active_connections(), 1, timeout).await;
+    assert_eq!(baseline, 1, "agent control connection did not register");
+
+    for i in 0..5 {
+        let remote = remote_connect(
+            Some("my-server"),
+            Some(&r_url),
+            Some("test-token"),
+            Some(client_dir.path()),
+        )
+        .await?;
+
+        // Controller leg + agent leg + control connection.
+        let during = wait_for_count(|| r_server.active_connections(), 3, timeout).await;
+        assert_eq!(
+            during, 3,
+            "unexpected relay connection count in session {}",
+            i
+        );
+
+        assert_echo(&remote, &format!("RELAY_LEAK_TEST_{}", i)).await;
+
+        // Controller disconnects: both relay legs must be torn down.
+        drop(remote);
+        let after = wait_for_count(|| r_server.active_connections(), 1, timeout).await;
+        assert_eq!(
+            after, 1,
+            "relay connections leaked after closing session {}",
+            i
+        );
+        assert_eq!(r_server.active_sessions().await, 0);
+    }
+
+    server_task.abort();
+    r_task.abort();
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+#[tokio::test]
+async fn test_live_input_guard_is_enforced_by_the_peer() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18433;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+    assert!(remote.capabilities().contains_key("input.guard"));
+
+    // The peer refuses before sending anything, so no key reaches the desktop.
+    remote.set_input_guard(Some(opendesk_rs::computer::foreground::WindowGuard {
+        title: Some("opendesk-no-such-window-7f3a".into()),
+        process: None,
+    }));
+    let err = remote
+        .keyboard_press("shift")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("input refused"), "{err}");
+    let err = remote.mouse_move(0, 0).await.unwrap_err().to_string();
+    assert!(err.contains("input refused"), "{err}");
+
+    // Non-input RPCs are unaffected, and the session stays usable.
+    let res = remote.exec("echo guard-ok", Some("cmd"), Some(20)).await?;
+    assert!(res.stdout.contains("guard-ok"), "{res:?}");
+
+    server_task.abort();
+    Ok(())
+}
+
+/// Read-only: watches whatever app is in front and waits on an element that
+/// does not exist. Nothing is typed, clicked or opened.
+#[cfg(target_os = "windows")]
+#[tokio::test]
+async fn test_live_wait_and_events_over_rpc() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18435;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+    assert!(remote.capabilities().contains_key("ui.wait"));
+    assert!(remote.capabilities().contains_key("events"));
+    assert!(remote.capabilities().contains_key("ui.text"));
+
+    let err = remote
+        .ui_wait(
+            None,
+            "button[name=\"opendesk-no-such-element-7f3a\"]",
+            "attached",
+            std::time::Duration::from_millis(500),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("did not become attached"), "{err}");
+
+    // Reading before a watch is an error; after start it returns a batch.
+    assert!(remote.events_read(std::time::Duration::ZERO).await.is_err());
+    if remote.events_start(None).await.is_ok() {
+        let batch = remote
+            .events_read(std::time::Duration::from_millis(200))
+            .await?;
+        assert!(!batch.app.is_empty(), "{batch:?}");
+        assert!(remote.events_stop().await?);
+    }
+
+    // Environment comes back with real values and a clock offset.
+    let (env, offset) = remote.environment().await?;
+    assert!(!env.os_version.is_empty(), "{env:?}");
+    assert!(offset.is_some_and(|o| o.abs() < 5_000), "{offset:?}");
+
+    server_task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_live_file_push_and_pull_are_verified() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let files_dir = tempfile::tempdir()?;
+    let port = 18436;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+
+    // 2.5 MiB: three chunks, the last one partial.
+    let data: Vec<u8> = (0..(2 * 1024 * 1024 + 512 * 1024))
+        .map(|i| (i % 253) as u8)
+        .collect();
+    let local = files_dir.path().join("big.bin");
+    std::fs::write(&local, &data)?;
+    let on_peer = files_dir.path().join("peer").join("big-copy.bin");
+    let on_peer_str = on_peer.to_str().unwrap();
+
+    // Replaces an existing file at the destination.
+    std::fs::create_dir_all(on_peer.parent().unwrap())?;
+    std::fs::write(&on_peer, b"old contents")?;
+    let st = remote.push_file(&local, on_peer_str).await?;
+    assert_eq!(st.size, data.len() as u64);
+    assert_eq!(std::fs::read(&on_peer)?, data);
+    assert_eq!(remote.file_stat(on_peer_str).await?.sha256, st.sha256);
+
+    let back = files_dir.path().join("back").join("big-back.bin");
+    let st2 = remote.pull_file(on_peer_str, &back).await?;
+    assert_eq!(st2.sha256, st.sha256);
+    assert_eq!(std::fs::read(&back)?, data);
+
+    // Empty files survive both directions.
+    let empty = files_dir.path().join("empty.txt");
+    std::fs::write(&empty, b"")?;
+    let empty_peer = files_dir.path().join("peer").join("empty-copy.txt");
+    remote
+        .push_file(&empty, empty_peer.to_str().unwrap())
+        .await?;
+    assert_eq!(std::fs::read(&empty_peer)?.len(), 0);
+    let empty_back = files_dir.path().join("empty-back.txt");
+    remote
+        .pull_file(empty_peer.to_str().unwrap(), &empty_back)
+        .await?;
+    assert_eq!(std::fs::read(&empty_back)?.len(), 0);
+
+    // Missing remote files are a clear error.
+    let err = remote
+        .pull_file(
+            files_dir.path().join("nope.bin").to_str().unwrap(),
+            &files_dir.path().join("x"),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("is not a file"), "{err}");
+
+    server_task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_live_background_jobs_over_rpc() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18437;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+
+    #[cfg(target_os = "windows")]
+    let (quick, long, shell) = (
+        "echo job-one & ping -n 2 127.0.0.1 >nul & echo job-two & exit 7",
+        "ping -n 60 127.0.0.1 >nul",
+        "cmd",
+    );
+    #[cfg(not(target_os = "windows"))]
+    let (quick, long, shell) = (
+        "echo job-one; sleep 1; echo job-two; exit 7",
+        "sleep 60",
+        "sh",
+    );
+
+    let id = remote.job_start(quick, Some(shell), None).await?;
+    let mut out = String::new();
+    let last = loop {
+        let p = remote.job_poll(id).await?;
+        out.push_str(&p.stdout);
+        if !p.running {
+            break p;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    };
+    assert!(out.contains("job-one") && out.contains("job-two"), "{out}");
+    assert_eq!(last.exit_code, Some(7));
+    // Collected once finished.
+    assert!(remote.job_poll(id).await.is_err());
+
+    let id = remote.job_start(long, Some(shell), None).await?;
+    assert!(
+        remote
+            .job_list()
+            .await?
+            .iter()
+            .any(|j| j.job_id == id && j.running)
+    );
+    let killed = remote.job_kill(id).await?;
+    assert!(killed.killed && !killed.running, "{killed:?}");
+
+    server_task.abort();
     Ok(())
 }

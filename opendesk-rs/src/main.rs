@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -300,7 +300,12 @@ enum Commands {
     /// Execute a command directly on local or remote peer
     Exec {
         /// Command string to execute
-        command: String,
+        #[arg(required_unless_present = "file", conflicts_with = "file")]
+        command: Option<String>,
+        /// Read the command from a local script file instead (sidesteps
+        /// quoting in the local shell)
+        #[arg(long)]
+        file: Option<PathBuf>,
         /// Optional peer name (defaults to 'local')
         #[arg(long)]
         peer: Option<String>,
@@ -317,6 +322,46 @@ enum Commands {
         #[arg(long)]
         home: Option<PathBuf>,
     },
+
+    /// Copy a local file to a peer (verified by SHA-256; `~` = the peer's home)
+    Push {
+        local: PathBuf,
+        remote: String,
+        #[arg(long)]
+        peer: String,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
+
+    /// Copy a file from a peer to this machine (verified by SHA-256)
+    Pull {
+        remote: String,
+        local: PathBuf,
+        #[arg(long)]
+        peer: String,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
+}
+
+/// Connect to a paired peer, using the configured rendezvous unless given.
+async fn connect_peer(
+    peer: &str,
+    rendezvous: Option<&str>,
+    rendezvous_token: Option<&str>,
+    home: Option<&std::path::Path>,
+) -> anyhow::Result<opendesk_rs::remote::client::RemoteComputer> {
+    let r_cfg = resolve_rendezvous_config(home, rendezvous, rendezvous_token);
+    let r_url = (!r_cfg.url.is_empty()).then_some(r_cfg.url.as_str());
+    remote_connect(Some(peer), r_url, r_cfg.token.as_deref(), home).await
 }
 
 #[derive(Subcommand)]
@@ -652,6 +697,7 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Exec {
             command,
+            file,
             peer,
             shell,
             timeout,
@@ -664,8 +710,17 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 false
             };
+            let command = match (command, file) {
+                (Some(c), _) => c,
+                (None, Some(path)) => {
+                    let text = std::fs::read_to_string(&path)
+                        .with_context(|| format!("failed to read {}", path.display()))?;
+                    text.strip_prefix('\u{feff}').unwrap_or(&text).to_string()
+                }
+                (None, None) => bail!("provide a command or --file"),
+            };
 
-            if is_remote {
+            let res = if is_remote {
                 let peer_name = peer.unwrap();
                 let r_cfg = resolve_rendezvous_config(
                     home.as_deref(),
@@ -684,29 +739,73 @@ async fn main() -> anyhow::Result<()> {
                     home.as_deref(),
                 )
                 .await?;
-                let res = remote.exec(&command, shell.as_deref(), Some(timeout)).await?;
-                if !res.stdout.is_empty() {
-                    print!("{}", res.stdout);
-                }
-                if !res.stderr.is_empty() {
-                    eprint!("{}", res.stderr);
-                }
-                if res.exit_code != 0 {
-                    std::process::exit(res.exit_code);
-                }
+                remote
+                    .exec(&command, shell.as_deref(), Some(timeout))
+                    .await?
             } else {
                 let computer = opendesk_rs::computer::local::LocalComputer::new();
-                let res = computer.execute_command(&command, shell.as_deref(), Some(timeout))?;
-                if !res.stdout.is_empty() {
-                    print!("{}", res.stdout);
-                }
-                if !res.stderr.is_empty() {
-                    eprint!("{}", res.stderr);
-                }
-                if res.exit_code != 0 {
-                    std::process::exit(res.exit_code);
-                }
+                computer.execute_command(&command, shell.as_deref(), Some(timeout))?
+            };
+            if !res.stdout.is_empty() {
+                print!("{}", res.stdout);
             }
+            if !res.stderr.is_empty() {
+                eprint!("{}", res.stderr);
+            }
+            if res.timed_out {
+                // Same convention as coreutils `timeout`.
+                std::process::exit(124);
+            }
+            if res.exit_code != 0 {
+                std::process::exit(res.exit_code);
+            }
+        }
+
+        Commands::Push {
+            local,
+            remote,
+            peer,
+            rendezvous,
+            rendezvous_token,
+            home,
+        } => {
+            let r = connect_peer(
+                &peer,
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+                home.as_deref(),
+            )
+            .await?;
+            let st = r.push_file(&local, &remote).await?;
+            println!(
+                "{} -> {peer}:{} ({} bytes, sha256 {})",
+                local.display(),
+                st.path,
+                st.size,
+                st.sha256
+            );
+        }
+
+        Commands::Pull {
+            remote,
+            local,
+            peer,
+            rendezvous,
+            rendezvous_token,
+            home,
+        } => {
+            let r = connect_peer(
+                &peer,
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+                home.as_deref(),
+            )
+            .await?;
+            let st = r.pull_file(&remote, &local).await?;
+            println!(
+                "{peer}:{remote} -> {} ({} bytes, sha256 {})",
+                st.path, st.size, st.sha256
+            );
         }
 
         Commands::Discover {
@@ -759,7 +858,7 @@ async fn main() -> anyhow::Result<()> {
             );
             for p in rendezvous_peers {
                 let desc = if p.description.len() > 80 {
-                    &p.description[..80]
+                    opendesk_rs::util::truncate_bytes(&p.description, 80)
                 } else {
                     &p.description
                 };
@@ -770,7 +869,7 @@ async fn main() -> anyhow::Result<()> {
             }
             for p in lan_peers {
                 let desc = if p.description.len() > 80 {
-                    &p.description[..80]
+                    opendesk_rs::util::truncate_bytes(&p.description, 80)
                 } else {
                     &p.description
                 };
@@ -966,7 +1065,7 @@ async fn main() -> anyhow::Result<()> {
                         let desc = p.effective_description();
                         let desc_line = desc.lines().next().unwrap_or("");
                         let short_desc = if desc_line.len() > 60 {
-                            format!("{}…", &desc_line[..60])
+                            format!("{}…", opendesk_rs::util::truncate_bytes(desc_line, 60))
                         } else {
                             desc_line.to_string()
                         };

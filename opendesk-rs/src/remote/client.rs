@@ -40,9 +40,18 @@ pub struct RemoteComputer {
     requests_sent: AtomicU64,
     broken: AtomicBool,
     last_used: std::sync::Mutex<Instant>,
+    input_guard: std::sync::Mutex<Option<crate::computer::foreground::WindowGuard>>,
 }
 
 impl RemoteComputer {
+    /// Attach `guard` to every subsequent `input.*` RPC: the peer refuses
+    /// the input unless its foreground window matches. `None` removes it.
+    pub fn set_input_guard(&self, guard: Option<crate::computer::foreground::WindowGuard>) {
+        if let Ok(mut g) = self.input_guard.lock() {
+            *g = guard.filter(|g| !g.is_empty());
+        }
+    }
+
     pub fn new(
         transport: WebSocketTransport,
         channel: EncryptedChannel,
@@ -56,6 +65,7 @@ impl RemoteComputer {
             requests_sent: AtomicU64::new(0),
             broken: AtomicBool::new(false),
             last_used: std::sync::Mutex::new(Instant::now()),
+            input_guard: std::sync::Mutex::new(None),
         }
     }
 
@@ -102,10 +112,30 @@ impl RemoteComputer {
     pub async fn call(
         &self,
         method: &str,
-        params: HashMap<String, rmpv::Value>,
+        mut params: HashMap<String, rmpv::Value>,
     ) -> Result<rmpv::Value> {
         if self.is_broken() {
             return Err(ConnectionError::Send(anyhow!("connection to peer is closed")).into());
+        }
+        if method == "input.pointer" {
+            // Callers pass coordinates read off this peer's screenshots; the
+            // peer maps them onto its desktop. Older peers ignore the tag.
+            params
+                .entry("space".to_string())
+                .or_insert_with(|| rmpv::Value::from("image"));
+        }
+        if method.starts_with("input.") {
+            let guard = self.input_guard.lock().ok().and_then(|g| g.clone());
+            if let Some(guard) = guard {
+                // An older peer would silently ignore the guard.
+                if !self.capabilities.contains_key("input.guard") {
+                    bail!(
+                        "input refused: this peer's opendesk is too old to enforce a window guard ({}); update it, or call without a guard",
+                        guard.describe()
+                    );
+                }
+                params.insert("guard".to_string(), guard.to_rmpv());
+            }
         }
         let id = self.req_counter.fetch_add(1, Ordering::SeqCst);
         let req = Frame::Req(ReqFrame::new(id, method, params));
@@ -196,7 +226,31 @@ impl RemoteComputer {
         format: Option<&str>,
         quality: Option<u8>,
     ) -> Result<(Vec<u8>, String)> {
+        self.screenshot_region_format(target, None, format, quality)
+            .await
+    }
+
+    /// Like `screenshot_format`, limited to `region` (desktop coordinates)
+    /// when given. Peers without region support return the full screen.
+    pub async fn screenshot_region_format(
+        &self,
+        target: Option<&str>,
+        region: Option<xa11y::Rect>,
+        format: Option<&str>,
+        quality: Option<u8>,
+    ) -> Result<(Vec<u8>, String)> {
         let mut params = HashMap::new();
+        if let Some(r) = region {
+            params.insert(
+                "region".to_string(),
+                rmpv::Value::Map(vec![
+                    (rmpv::Value::from("x"), rmpv::Value::from(r.x)),
+                    (rmpv::Value::from("y"), rmpv::Value::from(r.y)),
+                    (rmpv::Value::from("width"), rmpv::Value::from(r.width)),
+                    (rmpv::Value::from("height"), rmpv::Value::from(r.height)),
+                ]),
+            );
+        }
         if let Some(t) = target {
             params.insert("display_id".to_string(), rmpv::Value::from(t));
         }
@@ -346,6 +400,11 @@ impl RemoteComputer {
     }
 
     pub async fn mouse_scroll(&self, x: i32, y: i32, delta_y: i32) -> Result<()> {
+        self.mouse_scroll_xy(x, y, 0, delta_y).await
+    }
+
+    /// Scroll by ticks: positive `delta_y` up, positive `delta_x` right.
+    pub async fn mouse_scroll_xy(&self, x: i32, y: i32, delta_x: i32, delta_y: i32) -> Result<()> {
         let evt = vec![
             (rmpv::Value::from("action"), rmpv::Value::from("scroll")),
             (
@@ -355,7 +414,7 @@ impl RemoteComputer {
                     (rmpv::Value::from("y"), rmpv::Value::from(y)),
                 ]),
             ),
-            (rmpv::Value::from("dx"), rmpv::Value::from(0.0)),
+            (rmpv::Value::from("dx"), rmpv::Value::from(delta_x as f64)),
             (rmpv::Value::from("dy"), rmpv::Value::from(delta_y as f64)),
         ];
         let mut params = HashMap::new();
@@ -375,65 +434,33 @@ impl RemoteComputer {
         Ok(())
     }
 
+    /// Press a key or chord (`ctrl+s`, `ctrl+-`) on the peer in one RPC.
+    ///
+    /// The peer presses and releases it locally: sending separate down/up
+    /// RPCs would leave keys held if the connection dropped in between, and
+    /// would bypass the peer's layout-aware handling of characters.
     pub async fn keyboard_press(&self, key: &str) -> Result<()> {
-        if key.contains('+') || key.contains('-') {
-            let parts: Vec<&str> = key
-                .split(['+', '-'])
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .collect();
-            return self.keyboard_hotkey(&parts).await;
+        if crate::computer::keys::split_chord(key).is_empty() {
+            bail!("empty key");
         }
-        let down_evt = vec![
-            (rmpv::Value::from("action"), rmpv::Value::from("down")),
-            (rmpv::Value::from("keysym"), rmpv::Value::from(key)),
-        ];
-        let mut down_params = HashMap::new();
-        down_params.insert("event".to_string(), rmpv::Value::Map(down_evt));
-        self.call("input.key", down_params).await?;
-
-        let up_evt = vec![
-            (rmpv::Value::from("action"), rmpv::Value::from("up")),
-            (rmpv::Value::from("keysym"), rmpv::Value::from(key)),
-        ];
-        let mut up_params = HashMap::new();
-        up_params.insert("event".to_string(), rmpv::Value::Map(up_evt));
-        self.call("input.key", up_params).await?;
+        let mut params = HashMap::new();
+        params.insert("key".to_string(), rmpv::Value::from(key));
+        params.insert("action".to_string(), rmpv::Value::from("press"));
+        self.call("input.key", params).await?;
         Ok(())
     }
 
     pub async fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
-        let mut flat_keys = Vec::new();
-        for k in keys {
-            for part in k.split(['+', '-']) {
-                let trimmed = part.trim();
-                if !trimmed.is_empty() {
-                    flat_keys.push(trimmed);
-                }
-            }
+        let flat: Vec<String> = keys
+            .iter()
+            .flat_map(|k| crate::computer::keys::split_chord(k))
+            .collect();
+        if flat.is_empty() {
+            bail!("empty key combination");
         }
-        if flat_keys.is_empty() {
-            return Ok(());
-        }
-        for key in &flat_keys {
-            let down_evt = vec![
-                (rmpv::Value::from("action"), rmpv::Value::from("down")),
-                (rmpv::Value::from("keysym"), rmpv::Value::from(*key)),
-            ];
-            let mut params = HashMap::new();
-            params.insert("event".to_string(), rmpv::Value::Map(down_evt));
-            self.call("input.key", params).await?;
-        }
-        for key in flat_keys.iter().rev() {
-            let up_evt = vec![
-                (rmpv::Value::from("action"), rmpv::Value::from("up")),
-                (rmpv::Value::from("keysym"), rmpv::Value::from(*key)),
-            ];
-            let mut params = HashMap::new();
-            params.insert("event".to_string(), rmpv::Value::Map(up_evt));
-            self.call("input.key", params).await?;
-        }
-        Ok(())
+        // `split_chord` reads a `+` in key position as the key, so joining
+        // with `+` round-trips (["ctrl", "+"] -> "ctrl++").
+        self.keyboard_press(&flat.join("+")).await
     }
 
     pub async fn keyboard_sequence(
@@ -523,6 +550,9 @@ impl RemoteComputer {
             stderr,
             exit_code,
             success,
+            timed_out: value_get(&res, "timed_out")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         })
     }
 
@@ -557,6 +587,9 @@ impl RemoteComputer {
             stderr,
             exit_code,
             success,
+            timed_out: value_get(&res, "timed_out")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         })
     }
 
@@ -635,6 +668,254 @@ impl RemoteComputer {
         }
         self.call("ui.action", params).await?;
         Ok(())
+    }
+
+    /// The peer's environment, and how far its clock is ahead of ours (ms,
+    /// negative = behind), estimated at the midpoint of the round trip.
+    /// The offset is `None` for older peers that do not report their clock.
+    pub async fn environment(
+        &self,
+    ) -> Result<(crate::computer::environment::Environment, Option<i64>)> {
+        let t0 = chrono::Utc::now().timestamp_millis();
+        let res = self.call("system.environment", HashMap::new()).await?;
+        let t1 = chrono::Utc::now().timestamp_millis();
+        let env: crate::computer::environment::Environment = rmpv::ext::from_value(res)
+            .map_err(|e| anyhow!("malformed system.environment reply: {e}"))?;
+        let offset = (env.time_unix_ms > 0).then(|| env.time_unix_ms - (t0 + t1) / 2);
+        Ok((env, offset))
+    }
+
+    fn require_cap(&self, cap: &str, what: &str) -> Result<()> {
+        if self.capabilities.contains_key(cap) {
+            Ok(())
+        } else {
+            bail!("this peer's opendesk is too old for {what} ({cap}); update it")
+        }
+    }
+
+    /// Start `command` in the background on the peer; returns its job id.
+    pub async fn job_start(
+        &self,
+        command: &str,
+        shell: Option<&str>,
+        timeout_secs: Option<u64>,
+    ) -> Result<u64> {
+        self.require_cap("process.jobs", "background jobs")?;
+        let mut params = HashMap::new();
+        params.insert("command".to_string(), rmpv::Value::from(command));
+        if let Some(s) = shell {
+            params.insert("shell".to_string(), rmpv::Value::from(s));
+        }
+        if let Some(t) = timeout_secs {
+            params.insert("timeout_secs".to_string(), rmpv::Value::from(t));
+        }
+        let res = self.call("process.start", params).await?;
+        value_get(&res, "job_id")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| anyhow!("process.start returned no job id"))
+    }
+
+    async fn job_call(&self, method: &str, id: u64) -> Result<crate::computer::process::JobPoll> {
+        self.require_cap("process.jobs", "background jobs")?;
+        let mut params = HashMap::new();
+        params.insert("job_id".to_string(), rmpv::Value::from(id));
+        let res = self.call(method, params).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed {method} reply: {e}"))
+    }
+
+    /// New output since the last poll, and the job's status.
+    pub async fn job_poll(&self, id: u64) -> Result<crate::computer::process::JobPoll> {
+        self.job_call("process.poll", id).await
+    }
+
+    /// Kill the job's whole process tree; returns its final output.
+    pub async fn job_kill(&self, id: u64) -> Result<crate::computer::process::JobPoll> {
+        self.job_call("process.kill", id).await
+    }
+
+    pub async fn job_list(&self) -> Result<Vec<crate::computer::process::JobPoll>> {
+        self.require_cap("process.jobs", "background jobs")?;
+        let res = self.call("process.jobs", HashMap::new()).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed process.jobs reply: {e}"))
+    }
+
+    /// Size and SHA-256 of a file on the peer (`~` = the peer's home).
+    pub async fn file_stat(&self, path: &str) -> Result<crate::computer::files::FileStat> {
+        self.require_cap("fs.transfer", "file transfer")?;
+        let mut params = HashMap::new();
+        params.insert("path".to_string(), rmpv::Value::from(path));
+        let res = self.call("fs.stat", params).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed fs.stat reply: {e}"))
+    }
+
+    /// Copy a local file to `remote` on the peer. The peer writes a part file
+    /// and only replaces `remote` once the SHA-256 of what it received
+    /// matches this file's.
+    pub async fn push_file(
+        &self,
+        local: &Path,
+        remote: &str,
+    ) -> Result<crate::computer::files::FileStat> {
+        use crate::computer::files;
+        self.require_cap("fs.transfer", "file transfer")?;
+        let sha = files::sha256_file(local)?;
+        let mut file = tokio::fs::File::open(local)
+            .await
+            .with_context(|| format!("open {}", local.display()))?;
+        let mut offset = 0u64;
+        let mut buf = vec![0u8; files::CHUNK];
+        loop {
+            use tokio::io::AsyncReadExt;
+            let mut filled = 0;
+            while filled < buf.len() {
+                let n = file.read(&mut buf[filled..]).await?;
+                if n == 0 {
+                    break;
+                }
+                filled += n;
+            }
+            // Always send the first chunk, so empty files are created too.
+            if filled == 0 && offset > 0 {
+                break;
+            }
+            let mut params = HashMap::new();
+            params.insert("path".to_string(), rmpv::Value::from(remote));
+            params.insert("offset".to_string(), rmpv::Value::from(offset));
+            params.insert(
+                "data".to_string(),
+                rmpv::Value::Binary(buf[..filled].to_vec()),
+            );
+            self.call("fs.write", params).await?;
+            offset += filled as u64;
+            if filled < buf.len() {
+                break;
+            }
+        }
+        let mut params = HashMap::new();
+        params.insert("path".to_string(), rmpv::Value::from(remote));
+        params.insert("sha256".to_string(), rmpv::Value::from(sha.as_str()));
+        let res = self.call("fs.commit", params).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed fs.commit reply: {e}"))
+    }
+
+    /// Copy `remote` from the peer to a local file, verified against the
+    /// peer's SHA-256 before it replaces `local`.
+    pub async fn pull_file(
+        &self,
+        remote: &str,
+        local: &Path,
+    ) -> Result<crate::computer::files::FileStat> {
+        use crate::computer::files;
+        let st = self.file_stat(remote).await?;
+        if !st.exists || st.is_dir {
+            bail!("{} is not a file on the peer", st.path);
+        }
+        let local_str = local
+            .to_str()
+            .ok_or_else(|| anyhow!("local path is not valid UTF-8"))?
+            .to_string();
+        let mut offset = 0u64;
+        loop {
+            let mut params = HashMap::new();
+            params.insert("path".to_string(), rmpv::Value::from(remote));
+            params.insert("offset".to_string(), rmpv::Value::from(offset));
+            params.insert("length".to_string(), rmpv::Value::from(files::CHUNK as u64));
+            let res = self.call("fs.read", params).await?;
+            let chunk = res.as_slice().unwrap_or_default().to_vec();
+            if chunk.is_empty() && offset > 0 {
+                break;
+            }
+            let (path, at, data) = (local_str.clone(), offset, chunk.clone());
+            tokio::task::spawn_blocking(move || files::write_chunk(&path, at, &data)).await??;
+            offset += chunk.len() as u64;
+            if chunk.len() < files::CHUNK || offset >= st.size {
+                break;
+            }
+        }
+        let (path, sha) = (local_str, st.sha256.clone());
+        tokio::task::spawn_blocking(move || files::commit(&path, &sha)).await?
+    }
+
+    /// The peer's front window as viewer lines (see computer::viewer).
+    pub async fn window_text(&self, app_name: Option<&str>) -> Result<Vec<String>> {
+        self.require_cap("ui.text", "window text")?;
+        let mut params = HashMap::new();
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
+        }
+        let res = self.call("ui.text", params).await?;
+        Ok(res
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    /// Wait on the peer until `selector` reaches `state` (see computer::watch).
+    pub async fn ui_wait(
+        &self,
+        app_name: Option<&str>,
+        selector: &str,
+        state: &str,
+        timeout: Duration,
+    ) -> Result<String> {
+        self.require_cap("ui.wait", "waiting on UI state")?;
+        let mut params = HashMap::new();
+        params.insert("selector".to_string(), rmpv::Value::from(selector));
+        params.insert("state".to_string(), rmpv::Value::from(state));
+        params.insert(
+            "timeout_ms".to_string(),
+            rmpv::Value::from(timeout.as_millis() as u64),
+        );
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
+        }
+        let res = self.call("ui.wait", params).await?;
+        Ok(res.as_str().unwrap_or_default().to_string())
+    }
+
+    pub async fn events_start(&self, app_name: Option<&str>) -> Result<String> {
+        self.require_cap("events", "event logs")?;
+        let mut params = HashMap::new();
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
+        }
+        let res = self.call("events.start", params).await?;
+        Ok(res.as_str().unwrap_or_default().to_string())
+    }
+
+    pub async fn events_read(&self, wait: Duration) -> Result<crate::computer::watch::EventBatch> {
+        self.require_cap("events", "event logs")?;
+        let mut params = HashMap::new();
+        params.insert(
+            "wait_ms".to_string(),
+            rmpv::Value::from(wait.as_millis() as u64),
+        );
+        let res = self.call("events.read", params).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed events.read reply: {e}"))
+    }
+
+    pub async fn events_stop(&self) -> Result<bool> {
+        self.require_cap("events", "event logs")?;
+        let res = self.call("events.stop", HashMap::new()).await?;
+        Ok(res.as_bool().unwrap_or(false))
+    }
+
+    /// Value (or name) of the element matching `selector` on the peer.
+    pub async fn ui_get_value(&self, app_name: Option<&str>, selector: &str) -> Result<String> {
+        if !self.capabilities.contains_key("ui.value") {
+            bail!("this peer's opendesk is too old to read element values (ui.value); update it");
+        }
+        let mut params = HashMap::new();
+        params.insert("selector".to_string(), rmpv::Value::from(selector));
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
+        }
+        let res = self.call("ui.value", params).await?;
+        Ok(res.as_str().unwrap_or_default().to_string())
     }
 
     pub async fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {

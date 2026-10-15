@@ -58,7 +58,7 @@ It is **never reachable over the network**.
 | Platform | Path |
 |---|---|
 | Linux / macOS | `~/.opendesk/admin.sock` (Unix domain socket) |
-| Windows | `\\.\pipe\opendesk-admin` (named pipe) |
+| Windows | localhost TCP; the port is recorded in `~/.opendesk/admin.port` |
 
 Used by: `opendesk sessions`, `opendesk disconnect`, `opendesk unpair`, and
 the web UI's disconnect / unpair API endpoints.

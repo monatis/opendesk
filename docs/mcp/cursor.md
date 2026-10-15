@@ -2,8 +2,6 @@
 
 Create or edit `.cursor/mcp.json` in your project root (or `~/.cursor/mcp.json` globally):
 
-## Python
-
 ```json
 {
   "mcpServers": {
@@ -14,6 +12,8 @@ Create or edit `.cursor/mcp.json` in your project root (or `~/.cursor/mcp.json` 
   }
 }
 ```
+
+Use the full path to `opendesk-mcp` if it is not on your PATH.
 
 ---
 

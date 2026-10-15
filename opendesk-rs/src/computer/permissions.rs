@@ -77,7 +77,7 @@ fn check_accessibility() -> PermissionStatus {
 fn check_screen_recording() -> PermissionStatus {
     // Try capturing screen pixel
     let computer = crate::computer::local::LocalComputer::new();
-    match computer.screenshot("png", None) {
+    match computer.screenshot(None) {
         Ok(_) => PermissionStatus {
             name: "Screen Recording".into(),
             granted: true,

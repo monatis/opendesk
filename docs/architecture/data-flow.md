@@ -4,45 +4,39 @@
 
 ```
 LLM
-  │ tool_name + arguments
+  │ tools/call: name + arguments
   ▼
-Tool.parse_params  ← Pydantic
+McpServer::call_tool
+  │ resolve target → "local"
+  │ mouse/keyboard: check input guard (foreground window)
   ▼
-ToolContext.check_permission
+LocalComputer (xa11y / SendInput / arboard / process runner)
   ▼
-Tool.execute(ctx, params)
-  ▼
-ctx.computer = LocalComputer
-  ▼
-mss / pyautogui / AppleScript / etc.
-  ▼
-ToolResult → Integration adapter → LLM
+MCP result (text, image) → LLM
 ```
 
 ## Remote call
 
 ```
 LLM
-  │ tool_name + arguments (with optional peer:)
+  │ tools/call: name + arguments (optional peer)
   ▼
-MCPDispatcher: strips peer, resolves Computer
+McpServer::call_tool
+  │ resolve target → peer name → cached or new RemoteComputer
   ▼
-Tool.execute(ctx, params)        ← ctx.computer = RemoteComputer
+RemoteComputer::screenshot_format(...)   (guard attached to input.* calls)
   ▼
-peer.call("display.capture", ...)
+REQ "display.capture" → msgpack → ChaCha20-Poly1305 → binary WebSocket
+  ┌────────── over the wire (direct or via rendezvous relay) ──────────┐
   ▼
-encode (msgpack) → AEAD encrypt → WebSocket binary frame → TCP
-  ┌────────── over the wire ──────────┐
+WebSocket → decrypt → decode → dispatch_call on the controlled machine
+  │ input.*: check guard against its own foreground window
   ▼
-TCP → WebSocket → AEAD decrypt → decode (msgpack)
+LocalComputer on the remote machine  (call written to the audit log)
   ▼
-Peer dispatches → ComputerDispatcher
+RES → encode → encrypt → back through the wire → RemoteComputer
   ▼
-LocalComputer on the remote machine
-  ▼
-result → encode → ... → back through wire → RemoteComputer
-  ▼
-ToolResult → Integration adapter → LLM
+MCP result "[on PEER] ..." → LLM
 ```
 
 ---

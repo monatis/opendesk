@@ -1,10 +1,11 @@
 use crate::automation::scheduler::ScheduleStore;
+use crate::computer::foreground::WindowGuard;
 use crate::computer::local::LocalComputer;
 use crate::protocol::storage::{TrustedPeers, default_home, resolve_rendezvous_config};
 use crate::remote::audit::AuditLog;
 use crate::remote::client::{ConnectionError, RemoteComputer, connect as remote_connect};
 use crate::remote::discovery::discover;
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use data_encoding::BASE64;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -19,6 +20,19 @@ use tracing::error;
 const INDEX_HTML: &str = include_str!("../../static/index.html");
 const STYLES_CSS: &str = include_str!("../../static/styles.css");
 const APP_JS: &str = include_str!("../../static/app.js");
+
+/// JSON schema of the per-call `guard` argument of the input tools.
+fn guard_schema() -> Value {
+    json!({
+        "type": "object",
+        "description": "Optional. Refuse this input unless the target machine's foreground window matches (case-insensitive): `title` is a substring of the window title, `process` the executable name. Overrides the session default from `opendesk_guard`. Use it whenever stray keystrokes could land in the wrong window.",
+        "properties": {
+            "title": { "type": "string" },
+            "process": { "type": "string" }
+        },
+        "additionalProperties": false
+    })
+}
 
 pub fn build_mcp_app_html() -> String {
     let mut html = INDEX_HTML.to_string();
@@ -80,6 +94,8 @@ pub struct McpSession {
     pub trusted: TrustedPeers,
     pub current_peer: Option<String>,
     pub connections: HashMap<String, Arc<RemoteComputer>>,
+    /// Default foreground-window guard for input tools (`opendesk_guard`).
+    pub input_guard: Option<crate::computer::foreground::WindowGuard>,
     pub home: PathBuf,
     pub rendezvous_url: Option<String>,
     pub rendezvous_token: Option<String>,
@@ -123,6 +139,7 @@ impl McpSession {
             trusted: TrustedPeers::new(Some(&home_path)),
             current_peer: None,
             connections: HashMap::new(),
+            input_guard: None,
             home: home_path,
             rendezvous_url: r_url,
             rendezvous_token: r_token,
@@ -478,7 +495,15 @@ impl McpServer {
                     .ok_or_else(|| anyhow!("missing tool name"))?;
 
                 let args = params.get("arguments").cloned().unwrap_or(json!({}));
-                let (content, is_error) = match self.call_tool(tool_name, &args).await {
+                let result = self.call_tool(tool_name, &args).await;
+                // `settle_ms`: let the UI react before the agent looks again.
+                if result.is_ok()
+                    && matches!(tool_name, "mouse" | "keyboard")
+                    && let Some(ms) = args.get("settle_ms").and_then(|v| v.as_u64())
+                {
+                    tokio::time::sleep(Duration::from_millis(ms.min(30_000))).await;
+                }
+                let (content, is_error) = match result {
                     Ok(c) => {
                         let has_err = c.iter().any(|item| {
                             item.get("text")
@@ -532,7 +557,7 @@ impl McpServer {
         vec![
             json!({
                 "name": "screenshot",
-                "description": "Capture a screenshot of the current screen or a sub-region. Returns the image so you can observe the current UI state before deciding which action to take next. Call this frequently to verify that previous actions had the intended effect.\n\nOptions:\n  show_cursor=true  — draw a red dot at the current cursor position\n  marks=true        — overlay numbered boxes on all interactive elements (Set-of-Marks); the output lists each mark so you can say 'click mark 3' instead of guessing pixel coordinates\n  zoom=[x0,y0,x1,y1] — return a cropped close-up of a screen region\n  save_path         — write the PNG to disk\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
+                "description": "Capture a screenshot of the current screen or a sub-region. Returns the image so you can observe the current UI state before deciding which action to take next. Call this frequently to verify that previous actions had the intended effect.\n\nOptions:\n  show_cursor=true  — also report the current cursor position\n  zoom=[x0,y0,x1,y1] — return a cropped close-up of a screen region\n  save_path         — write the image to disk\n\nMouse coordinates you read off the most recent screenshot (including a zoom/region capture) are mapped to the desktop automatically, also with monitors left of or above the primary one.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -548,12 +573,7 @@ impl McpServer {
                         "show_cursor": {
                             "type": "boolean",
                             "default": false,
-                            "description": "When true, overlays a red dot at the current cursor position."
-                        },
-                        "marks": {
-                            "type": "boolean",
-                            "default": false,
-                            "description": "When true, draws numbered bounding boxes (Set-of-Marks) over all interactive UI elements. Uses the platform accessibility API."
+                            "description": "When true, also reports the current cursor position in the text output."
                         },
                         "zoom": {
                             "type": "array",
@@ -578,7 +598,7 @@ impl McpServer {
             }),
             json!({
                 "name": "mouse",
-                "description": "Control the mouse: move to a position, click (left/right/middle), double-click, triple-click, scroll, or drag from one point to another. Always provide image_width and image_height from the screenshot tool output for correct Retina/HiDPI coordinate translation.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
+                "description": "Control the mouse: move to a position, click (left/right/middle), double-click, triple-click, scroll, or drag from one point to another. Use pixel coordinates from the most recent screenshot of the same machine; they are mapped onto its desktop automatically.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -597,12 +617,10 @@ impl McpServer {
                         "y": { "type": "integer", "default": 0, "description": "Y coordinate as it appears in the screenshot." },
                         "end_x": { "type": "integer", "description": "Target X for drag action." },
                         "end_y": { "type": "integer", "description": "Target Y for drag action." },
-                        "image_width": { "type": "integer", "description": "Width of the screenshot the coordinates were read from. ALWAYS provide this for correct Retina/HiDPI scaling." },
-                        "image_height": { "type": "integer", "description": "Height of the screenshot. Provide alongside image_width." },
                         "direction": { "type": "string", "enum": ["up", "down", "left", "right"], "description": "Scroll direction. Used with action='scroll'." },
                         "amount": { "type": "integer", "default": 3, "description": "Scroll amount in clicks." },
-                        "duration": { "type": "number", "default": 0.25, "description": "Movement duration in seconds." },
-                        "settle_ms": { "type": "integer", "default": 500, "description": "Milliseconds to wait after the action for the UI to settle." },
+                        "settle_ms": { "type": "integer", "description": "Optional. Milliseconds to wait after the action for the UI to settle before returning." },
+                        "guard": guard_schema(),
                         "peer": {
                             "type": "string",
                             "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
@@ -638,9 +656,9 @@ impl McpServer {
                                 }
                             }
                         },
-                        "interval": { "type": "number", "default": 0.02, "description": "Seconds between keystrokes (action='type')." },
-                        "settle_ms": { "type": "integer", "default": 300, "description": "Milliseconds to wait after the action." },
+                        "settle_ms": { "type": "integer", "description": "Optional. Milliseconds to wait after the action before returning." },
                         "hold_duration": { "type": "number", "default": 1.0, "description": "Seconds to hold key for action='hold'." },
+                        "guard": guard_schema(),
                         "peer": {
                             "type": "string",
                             "description": "Optional. Name of the peer to run this action on. Defaults to 'local' (this machine) unless an explicit or persistent default peer is configured. Use any name from `opendesk_peers` or set a default via `opendesk_use`."
@@ -667,11 +685,11 @@ impl McpServer {
             }),
             json!({
                 "name": "ui",
-                "description": "Interact with UI elements by name on any OS — no coordinates needed. ALWAYS try this before the mouse tool. Actions:\n  get_tree   — list all accessible elements in the app window\n  click      — click a button or element by its title\n  click_menu — click a menu item, e.g. File → Save\n  type       — type text (clipboard-paste, Unicode-safe)\n  press_key  — press a key or chord: key='return', modifiers=['command']\n  get_value  — read the current text value of a named element\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
+                "description": "Interact with UI elements by name on any OS — no coordinates needed. ALWAYS try this before the mouse tool. Actions:\n  window_text — the front window as plain text lines, like a screen reader's virtual viewer: classic dialogs by screen rows (labels beside values, buttons on their row), modern apps one element per line with role and state. Much cheaper than a screenshot; try it first to read a window.\n  get_tree   — list all accessible elements in the app window\n  click      — click a button or element by its title\n  click_menu — click a menu item, e.g. File → Save\n  type       — type text into an element (Unicode-safe; the clipboard is not used)\n  press_key  — press a key or chord: key='return', modifiers=['command']\n  get_value  — read the current text value of a named element\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["get_tree", "click", "click_menu", "type", "press_key", "get_value"], "description": "UI action to perform." },
+                        "action": { "type": "string", "enum": ["get_tree", "window_text", "click", "click_menu", "type", "press_key", "get_value"], "description": "UI action to perform." },
                         "app": { "type": "string", "description": "Application name / process name. macOS: process name as in Activity Monitor, e.g. 'TextEdit', 'Safari'. Linux: process or window title, e.g. 'gedit', 'firefox'. Windows: executable name or title, e.g. 'Notepad', 'notepad.exe'." },
                         "title": { "type": "string", "description": "Title or label of the UI element." },
                         "role": { "type": "string", "description": "Element role to narrow the search. macOS: 'button', 'text field', 'text area', 'checkbox'. Linux: 'push button', 'entry', 'text', 'check box'. Windows: 'Button', 'Edit', 'Text', 'CheckBox', 'ComboBox'." },
@@ -724,7 +742,12 @@ impl McpServer {
                         "timeout_secs": {
                             "type": "number",
                             "default": 30.0,
-                            "description": "Maximum execution time in seconds before terminating process (default: 30)."
+                            "description": "Maximum execution time in seconds; the whole process tree is killed after it (default: 30; for background jobs, no limit unless given)."
+                        },
+                        "background": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Start the command and return a job id immediately instead of waiting. Use `opendesk_job` to poll its output and status or kill it. For anything that may run longer than a few minutes."
                         },
                         "peer": {
                             "type": "string",
@@ -749,11 +772,11 @@ impl McpServer {
             }),
             json!({
                 "name": "schedule",
-                "description": "Schedule tasks to run automatically on a timer.\n\nActions:\n- add: schedule a task. task can be natural language ('take a screenshot and save it') or a learned procedure ('replay expense-report'). timing examples: 'every 30m', 'every 2h', 'every day at 09:00', 'every friday at 17:00'\n- remove: remove a schedule by name\n- list: show all scheduled tasks\n- run: run a scheduled task immediately (for testing)\n\nAfter adding schedules, start the background runner with: opendesk scheduler start",
+                "description": "Store named schedules (a task description plus a timing) in the current project's schedule file.\n\nActions:\n- add: store a schedule. timing examples: 'every 30m', 'every 2h', 'every day at 09:00', 'every friday at 17:00'\n- remove: remove a schedule by name\n- list: show all stored schedules\n\nNOTE: this build stores schedules but does not execute them: `opendesk scheduler start` only logs when one is due. Run the task yourself when it matters.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["add", "remove", "list", "run"], "description": "Schedule action: add, remove, list, run" },
+                        "action": { "type": "string", "enum": ["add", "remove", "list"], "description": "Schedule action: add, remove, list" },
                         "name": { "type": "string", "description": "Schedule name" },
                         "task": { "type": "string", "description": "Task description or procedure to run" },
                         "timing": { "type": "string", "description": "Timing expression, e.g. 'every 30m', 'every 2h', 'every day at 09:00'" }
@@ -763,11 +786,11 @@ impl McpServer {
             }),
             json!({
                 "name": "learn",
-                "description": "Record and replay computer tasks. Actions:\n- start: begin recording mouse/keyboard/screenshots for a named task\n- stop: stop recording; returns trajectory summary and screenshots for you to summarize into a procedure, then call learn(save) with the JSON\n- save: save a procedure JSON returned from stop\n- replay: load a saved procedure and return step-by-step replay instructions\n- list: list all saved procedures\n\nTypical workflow: learn(start) → user performs task → learn(stop) → summarize the trajectory → learn(save) → later: learn(replay)",
+                "description": "Save and replay written procedures for computer tasks. Actions:\n- save: save a procedure JSON you wrote (e.g. the steps you just performed)\n- replay: load a saved procedure and return its step-by-step instructions\n- list: list all saved procedures\n\nThis build does not record the user's mouse/keyboard: write the procedure from the steps you took.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["start", "stop", "save", "replay", "list"], "description": "Learn action: start, stop, save, replay, list" },
+                        "action": { "type": "string", "enum": ["save", "replay", "list"], "description": "Learn action: save, replay, list" },
                         "task_name": { "type": "string", "description": "Task name" },
                         "procedure": { "type": "string", "description": "JSON procedure string for save action" }
                     },
@@ -840,7 +863,7 @@ impl McpServer {
             }),
             json!({
                 "name": "opendesk_capabilities",
-                "description": "Show what the given peer's backend can do (input devices, screen capture, filesystem, etc.). Omit `peer` for the current default.",
+                "description": "Show what the given peer can do (the capabilities it advertises) and its environment: OS, locale, keyboard layout, time zone, clock offset from this machine, and displays with their scaling. Check it before typing or clicking on an unfamiliar peer. Omit `peer` for the current default.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -869,6 +892,80 @@ impl McpServer {
                     "type": "object",
                     "properties": {
                         "peer": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                }
+            }),
+            json!({
+                "name": "opendesk_job",
+                "description": "Manage background commands started with `opendesk_exec` and `background: true`. `poll` returns the output produced since the last poll plus the job's status (with `wait_ms`, waits until there is output or the job ends); a finished job is forgotten once its final output is returned. `kill` ends the job's whole process tree. `list` shows known jobs.\n\nRoutes to the session's default peer unless 'peer' is provided.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["poll", "kill", "list"] },
+                        "job_id": { "type": "integer" },
+                        "wait_ms": { "type": "integer", "default": 0, "description": "For poll: wait up to this long (max 120000) for output or completion." },
+                        "peer": { "type": "string" }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                }
+            }),
+            json!({
+                "name": "opendesk_file",
+                "description": "Copy files between this machine and a remote peer, verified by SHA-256. `push` sends local_path to remote_path, `pull` fetches remote_path to local_path, `stat` shows a remote file's size and SHA-256. The destination is replaced only after the whole file arrives and its checksum matches, so an interrupted copy never leaves a half-written file. `~` in remote_path is the peer's home directory.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["push", "pull", "stat"] },
+                        "local_path": { "type": "string", "description": "Path on this machine (push: source, pull: destination)." },
+                        "remote_path": { "type": "string", "description": "Path on the peer, e.g. 'C:/Users/me/x.txt' or '~/x.txt'." },
+                        "peer": { "type": "string", "description": "Remote peer; defaults to the session's default peer." }
+                    },
+                    "required": ["action", "remote_path"],
+                    "additionalProperties": false
+                }
+            }),
+            json!({
+                "name": "opendesk_wait",
+                "description": "Wait until a UI element reaches a state, instead of sleeping a fixed time after an action. Returns as soon as the condition holds (with the element and how long it took), or an error after `timeout_secs`. Example: after clicking Save, wait for selector `dialog` to be `detached`.\n\nRoutes to the session's default peer unless 'peer' is provided.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "selector": { "type": "string", "description": "Accessibility selector, e.g. 'button[name=\"OK\"]' or a name." },
+                        "state": { "type": "string", "enum": ["attached", "detached", "visible", "hidden", "enabled", "disabled", "focused", "unfocused"], "default": "visible" },
+                        "app": { "type": "string", "description": "Application to search; defaults to the foreground app." },
+                        "timeout_secs": { "type": "number", "default": 10, "description": "Give up after this long (max 120)." },
+                        "peer": { "type": "string" }
+                    },
+                    "required": ["selector"],
+                    "additionalProperties": false
+                }
+            }),
+            json!({
+                "name": "opendesk_events",
+                "description": "Event log of what changed in an app: focus moves, value/name/state changes, windows and menus opening or closing, live-region announcements. `start` begins watching an app (default: foreground), `read` returns the events since the last read (with `wait_ms`, waits for the first one, so act-then-read sees the reaction), `stop` ends the watch.\n\nRoutes to the session's default peer unless 'peer' is provided.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["start", "read", "stop"] },
+                        "app": { "type": "string", "description": "For start: the application to watch; defaults to the foreground app." },
+                        "wait_ms": { "type": "integer", "default": 0, "description": "For read: wait up to this long for the first event (max 120000)." },
+                        "peer": { "type": "string" }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                }
+            }),
+            json!({
+                "name": "opendesk_guard",
+                "description": "Set a default foreground-window guard for this session's `mouse` and `keyboard` calls (local and remote). While set, input is refused with an error unless the target machine's foreground window matches, so keystrokes never land in a chat, browser or terminal that took focus. A `guard` argument on an individual call overrides it.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["set", "clear", "show"], "default": "show" },
+                        "title": { "type": "string", "description": "Case-insensitive substring of the foreground window title." },
+                        "process": { "type": "string", "description": "Executable name of the foreground window's process, e.g. 'notepad' or 'chrome.exe'." }
                     },
                     "additionalProperties": false
                 }
@@ -920,6 +1017,14 @@ impl McpServer {
             "opendesk_capabilities" => return self.admin_capabilities(args).await,
             "opendesk_disconnect" => return self.admin_disconnect(args).await,
             "opendesk_privacy" => return self.admin_privacy(args).await,
+            "opendesk_guard" => return self.admin_guard(args).await,
+            "opendesk_wait" => return self.admin_wait(args).await,
+            "opendesk_file" => return self.admin_file(args).await,
+            "opendesk_job" => return self.admin_job(args).await,
+            "opendesk_exec" if args.get("background").and_then(|v| v.as_bool()) == Some(true) => {
+                return self.admin_exec_background(args).await;
+            }
+            "opendesk_events" => return self.admin_events(args).await,
             "audit" => return self.execute_audit(args).await,
             "schedule" => return self.execute_schedule(args).await,
             "learn" => return self.execute_learn(args).await,
@@ -935,10 +1040,25 @@ impl McpServer {
             format!("[on {target_name}] ")
         };
 
+        // Mouse and keyboard input only reaches the expected window: the
+        // call's own `guard`, else the session default from opendesk_guard.
+        let guard = if matches!(name, "mouse" | "keyboard") {
+            match WindowGuard::from_json(args.get("guard")) {
+                Some(g) => Some(g),
+                None => self.session.lock().await.input_guard.clone(),
+            }
+        } else {
+            None
+        };
+
         if let Some(remote) = remote_opt {
             return self
-                .call_remote_tool_with_retry(remote, &target_name, &prefix, name, args)
+                .call_remote_tool_with_retry(remote, &target_name, &prefix, name, args, guard)
                 .await;
+        }
+
+        if let Some(g) = &guard {
+            g.check()?;
         }
 
         // Local execution
@@ -973,7 +1093,7 @@ impl McpServer {
 
                 let mut text_lines = vec![
                     format!("{prefix}Captured {width}x{height} screenshot{zoom_desc}{region_desc}{saved_desc}."),
-                    "Mouse coordinates: pass image_width=... and image_height=... to the mouse tool for correct Retina scaling.".to_string(),
+                    "Mouse coordinates: use pixel positions from this image; they are mapped to the desktop automatically.".to_string(),
                 ];
 
                 if args
@@ -1014,6 +1134,8 @@ impl McpServer {
 
                 let x = args.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
                 let y = args.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                // Coordinates are screenshot pixels; map them to the desktop.
+                let (x, y) = self.computer.image_to_screen(x, y);
 
                 match action {
                     "move" => {
@@ -1079,6 +1201,7 @@ impl McpServer {
                             .or_else(|| args.get("to_y"))
                             .and_then(|v| v.as_i64())
                             .unwrap_or(0) as i32;
+                        let (to_x, to_y) = self.computer.image_to_screen(to_x, to_y);
                         self.computer.mouse_drag(x, y, to_x, to_y)?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Dragged from ({x}, {y}) to ({to_x}, {to_y}).") }),
@@ -1091,14 +1214,8 @@ impl McpServer {
                             .get("direction")
                             .and_then(|v| v.as_str())
                             .unwrap_or("up");
-                        let dy = if let Some(custom_dy) = args.get("dy").and_then(|v| v.as_i64()) {
-                            custom_dy as i32
-                        } else if dir == "down" {
-                            -amount
-                        } else {
-                            amount
-                        };
-                        self.computer.mouse_scroll(x, y, dy)?;
+                        let (dx, dy) = scroll_delta(args, dir, amount);
+                        self.computer.mouse_scroll_xy(x, y, dx, dy)?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Scrolled {dir} {amount} click(s) at ({x}, {y}).") }),
                         ])
@@ -1121,7 +1238,7 @@ impl McpServer {
                             .ok_or_else(|| anyhow!("missing text"))?;
                         self.computer.keyboard_type(text)?;
                         let preview = if text.len() > 40 {
-                            format!("{}...", &text[..40])
+                            format!("{}...", crate::util::truncate_bytes(text, 40))
                         } else {
                             text.to_string()
                         };
@@ -1145,10 +1262,8 @@ impl McpServer {
                         {
                             keys.iter().filter_map(|v| v.as_str()).collect()
                         } else if let Some(key) = args.get("key").and_then(|v| v.as_str()) {
-                            key.split(['+', '-'])
-                                .map(|s| s.trim())
-                                .filter(|s| !s.is_empty())
-                                .collect()
+                            // Split by keyboard_hotkey, which handles `ctrl+-`.
+                            vec![key]
                         } else {
                             return Err(anyhow!("missing keys array or key parameter for hotkey"));
                         };
@@ -1296,12 +1411,16 @@ impl McpServer {
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| anyhow!("'menu_item' required"))?;
                         if let Some(app_name) = app {
-                            let _ = self.computer.app_focus(app_name);
+                            self.computer.app_focus(app_name)?;
                         }
                         tokio::time::sleep(Duration::from_millis(150)).await;
-                        let _ = self.computer.ui_click(app, menu);
+                        self.computer
+                            .ui_click(app, menu)
+                            .map_err(|e| anyhow!("could not open menu {menu:?}: {e}"))?;
                         tokio::time::sleep(Duration::from_millis(200)).await;
-                        let _ = self.computer.ui_click(app, item);
+                        self.computer.ui_click(app, item).map_err(|e| {
+                            anyhow!("opened {menu:?} but could not click {item:?}: {e}")
+                        })?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Clicked {menu} → {item} in {}.", app.unwrap_or("app")) }),
                         ])
@@ -1315,13 +1434,13 @@ impl McpServer {
                             self.computer.ui_type(app, selector, text)?;
                         } else {
                             if let Some(app_name) = app {
-                                let _ = self.computer.app_focus(app_name);
+                                self.computer.app_focus(app_name)?;
                             }
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             self.computer.keyboard_type(text)?;
                         }
                         let preview = if text.len() > 40 {
-                            format!("{}...", &text[..40])
+                            format!("{}...", crate::util::truncate_bytes(text, 40))
                         } else {
                             text.to_string()
                         };
@@ -1340,7 +1459,7 @@ impl McpServer {
                             .map(|arr| arr.iter().filter_map(|x| x.as_str()).collect())
                             .unwrap_or_default();
                         if let Some(app_name) = app {
-                            let _ = self.computer.app_focus(app_name);
+                            self.computer.app_focus(app_name)?;
                         }
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         let mut chord = modifiers;
@@ -1350,9 +1469,25 @@ impl McpServer {
                             json!({ "type": "text", "text": format!("{prefix}Pressed {} in {}.", chord.join("+"), app.unwrap_or("app")) }),
                         ])
                     }
+                    "window_text" => {
+                        let computer = self.computer.clone();
+                        let app_owned = app.map(str::to_string);
+                        let lines = tokio::task::spawn_blocking(move || {
+                            computer.window_text(app_owned.as_deref())
+                        })
+                        .await??;
+                        Ok(vec![json!({ "type": "text", "text": lines.join("
+") })])
+                    }
                     "get_value" => {
-                        let dump = self.computer.ui_tree(app, Some(6))?;
-                        Ok(vec![json!({ "type": "text", "text": dump })])
+                        // Used to ignore the element and dump the app's tree.
+                        let selector = args
+                            .get("selector")
+                            .or_else(|| args.get("title"))
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'selector' or 'title' required"))?;
+                        let value = self.computer.ui_get_value(app, selector)?;
+                        Ok(vec![json!({ "type": "text", "text": value })])
                     }
                     _ => Err(anyhow!("Unknown ui action: {action}")),
                 }
@@ -1381,7 +1516,7 @@ impl McpServer {
                             .ok_or_else(|| anyhow!("'text' required"))?;
                         self.computer.clipboard_write(text)?;
                         let preview = if text.len() > 60 {
-                            format!("{}...", &text[..60])
+                            format!("{}...", crate::util::truncate_bytes(text, 60))
                         } else {
                             text.to_string()
                         };
@@ -1398,30 +1533,19 @@ impl McpServer {
                     .get("command")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| anyhow!("missing command"))?;
-                let shell = args.get("shell").and_then(|v| v.as_str());
-                let timeout_secs = args
-                    .get("timeout_secs")
-                    .and_then(|v| v.as_f64())
-                    .map(|s| s as u64);
-                let res = self
-                    .computer
-                    .execute_command(command, shell, timeout_secs)?;
-                let out_text = format!(
-                    "Exit code: {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
-                    res.exit_code,
-                    if res.stdout.trim().is_empty() {
-                        "(empty)"
-                    } else {
-                        res.stdout.trim()
-                    },
-                    if res.stderr.trim().is_empty() {
-                        "(empty)"
-                    } else {
-                        res.stderr.trim()
-                    },
-                );
+                let shell = args
+                    .get("shell")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let timeout_secs = exec_timeout_arg(args);
+                let computer = self.computer.clone();
+                let command = command.to_string();
+                let res = tokio::task::spawn_blocking(move || {
+                    computer.execute_command(&command, shell.as_deref(), timeout_secs)
+                })
+                .await??;
                 Ok(vec![
-                    json!({ "type": "text", "text": format!("{prefix}{out_text}") }),
+                    json!({ "type": "text", "text": format!("{prefix}{}", format_exec_result(&res)) }),
                 ])
             }
 
@@ -1444,7 +1568,11 @@ impl McpServer {
         prefix: &str,
         name: &str,
         args: &Value,
+        guard: Option<WindowGuard>,
     ) -> Result<Vec<Value>> {
+        // Set on every call (including to None) so a guard never leaks
+        // from one tool call into the next.
+        remote.set_input_guard(guard.clone());
         let sent_before = remote.requests_sent();
         let err = match self
             .call_remote_tool(&remote, target, prefix, name, args)
@@ -1467,6 +1595,7 @@ impl McpServer {
             .await
             .map_err(|e| anyhow!("{err:#} (reconnect to '{target}' failed: {e:#})"))?;
         let fresh = fresh.ok_or_else(|| anyhow!("Peer '{target}' is not remote"))?;
+        fresh.set_input_guard(guard);
         // A failure here marks `fresh` broken, so the next resolve evicts it.
         self.call_remote_tool(&fresh, target, prefix, name, args)
             .await
@@ -1490,14 +1619,17 @@ impl McpServer {
                     .get("quality")
                     .and_then(|v| v.as_u64())
                     .map(|q| q as u8);
-                let (bytes, mime) = remote.screenshot_format(None, Some(fmt), quality).await?;
+                let (bytes, mime) = remote
+                    .screenshot_region_format(None, parse_region(args), Some(fmt), quality)
+                    .await?;
                 let b64 = BASE64.encode(&bytes);
                 let mut saved_desc = String::new();
                 if let Some(save_path) = args.get("save_path").and_then(|v| v.as_str()) {
                     if let Some(parent) = std::path::Path::new(save_path).parent() {
                         let _ = std::fs::create_dir_all(parent);
                     }
-                    let _ = std::fs::write(save_path, &bytes);
+                    std::fs::write(save_path, &bytes)
+                        .with_context(|| format!("failed to save screenshot to {save_path}"))?;
                     saved_desc = format!(" -> saved to {save_path}");
                 }
                 Ok(vec![
@@ -1583,14 +1715,8 @@ impl McpServer {
                             .get("direction")
                             .and_then(|v| v.as_str())
                             .unwrap_or("up");
-                        let dy = if let Some(custom_dy) = args.get("dy").and_then(|v| v.as_i64()) {
-                            custom_dy as i32
-                        } else if dir == "down" {
-                            -amount
-                        } else {
-                            amount
-                        };
-                        remote.mouse_scroll(x, y, dy).await?;
+                        let (dx, dy) = scroll_delta(args, dir, amount);
+                        remote.mouse_scroll_xy(x, y, dx, dy).await?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Scrolled {dir} {amount} click(s) at ({x}, {y}).") }),
                         ])
@@ -1611,7 +1737,7 @@ impl McpServer {
                             .ok_or_else(|| anyhow!("missing text"))?;
                         remote.keyboard_type(text).await?;
                         let preview = if text.len() > 40 {
-                            format!("{}...", &text[..40])
+                            format!("{}...", crate::util::truncate_bytes(text, 40))
                         } else {
                             text.to_string()
                         };
@@ -1635,10 +1761,8 @@ impl McpServer {
                         {
                             keys.iter().filter_map(|v| v.as_str()).collect()
                         } else if let Some(key) = args.get("key").and_then(|v| v.as_str()) {
-                            key.split(['+', '-'])
-                                .map(|s| s.trim())
-                                .filter(|s| !s.is_empty())
-                                .collect()
+                            // Split by keyboard_hotkey, which handles `ctrl+-`.
+                            vec![key]
                         } else {
                             return Err(anyhow!("missing keys array or key parameter for hotkey"));
                         };
@@ -1755,6 +1879,67 @@ impl McpServer {
                             json!({ "type": "text", "text": format!("{prefix}Typed into '{selector}'.") }),
                         ])
                     }
+                    "click_menu" => {
+                        let menu = args
+                            .get("menu")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'menu' required"))?;
+                        let item = args
+                            .get("menu_item")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'menu_item' required"))?;
+                        if let Some(app_name) = app {
+                            remote.app_focus(app_name).await?;
+                        }
+                        tokio::time::sleep(Duration::from_millis(150)).await;
+                        remote
+                            .ui_click(app, menu)
+                            .await
+                            .map_err(|e| anyhow!("could not open menu {menu:?}: {e}"))?;
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        remote.ui_click(app, item).await.map_err(|e| {
+                            anyhow!("opened {menu:?} but could not click {item:?}: {e}")
+                        })?;
+                        Ok(vec![
+                            json!({ "type": "text", "text": format!("{prefix}Clicked {menu} → {item} in {}.", app.unwrap_or("app")) }),
+                        ])
+                    }
+                    "press_key" => {
+                        let key = args
+                            .get("key")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'key' required"))?;
+                        let mut chord: Vec<&str> = args
+                            .get("modifiers")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| arr.iter().filter_map(|x| x.as_str()).collect())
+                            .unwrap_or_default();
+                        if let Some(app_name) = app {
+                            remote.app_focus(app_name).await?;
+                        }
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        chord.push(key);
+                        remote.keyboard_hotkey(&chord).await?;
+                        Ok(vec![
+                            json!({ "type": "text", "text": format!("{prefix}Pressed {}.", chord.join("+")) }),
+                        ])
+                    }
+                    "window_text" => {
+                        let lines = remote.window_text(app).await?;
+                        Ok(vec![
+                            json!({ "type": "text", "text": format!("{prefix}{}", lines.join("
+")) }),
+                        ])
+                    }
+                    "get_value" => {
+                        let selector = args
+                            .get("selector")
+                            .or_else(|| args.get("title"))
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'selector' or 'title' required"))?;
+                        let value = remote.ui_get_value(app, selector).await?;
+                        Ok(vec![json!({ "type": "text", "text": value })])
+                    }
                     _ => Err(anyhow!("Unknown remote ui action: {action}")),
                 }
             }
@@ -1784,27 +1969,9 @@ impl McpServer {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| anyhow!("missing command"))?;
                 let shell = args.get("shell").and_then(|v| v.as_str());
-                let timeout_secs = args
-                    .get("timeout_secs")
-                    .and_then(|v| v.as_f64())
-                    .map(|s| s as u64);
-                let res = remote.exec(command, shell, timeout_secs).await?;
-                let out_text = format!(
-                    "Exit code: {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
-                    res.exit_code,
-                    if res.stdout.trim().is_empty() {
-                        "(empty)"
-                    } else {
-                        res.stdout.trim()
-                    },
-                    if res.stderr.trim().is_empty() {
-                        "(empty)"
-                    } else {
-                        res.stderr.trim()
-                    },
-                );
+                let res = remote.exec(command, shell, exec_timeout_arg(args)).await?;
                 Ok(vec![
-                    json!({ "type": "text", "text": format!("{prefix}{out_text}") }),
+                    json!({ "type": "text", "text": format!("{prefix}{}", format_exec_result(&res)) }),
                 ])
             }
             _ => Err(anyhow!("Unknown remote tool: {name}")),
@@ -2243,7 +2410,7 @@ impl McpServer {
             if !desc.is_empty() {
                 let first_line = desc.lines().next().unwrap_or("");
                 let truncated = if first_line.len() > 160 {
-                    format!("{}…", &first_line[..160])
+                    format!("{}…", crate::util::truncate_bytes(first_line, 160))
                 } else {
                     first_line.to_string()
                 };
@@ -2296,7 +2463,7 @@ impl McpServer {
             if !p.description.is_empty() {
                 let first_line = p.description.lines().next().unwrap_or("");
                 let truncated = if first_line.len() > 160 {
-                    format!("{}…", &first_line[..160])
+                    format!("{}…", crate::util::truncate_bytes(first_line, 160))
                 } else {
                     first_line.to_string()
                 };
@@ -2386,15 +2553,34 @@ impl McpServer {
             session.resolve(peer_arg).await?
         };
 
-        if remote_opt.is_none() {
-            let text = "Peer: local\nBackend: xa11y\nProtocol: 1\nCapabilities:\n  - app_close\n  - app_focus\n  - app_list\n  - app_open\n  - clipboard_read\n  - clipboard_write\n  - keyboard_hold\n  - keyboard_hotkey\n  - keyboard_press\n  - keyboard_sequence\n  - keyboard_type\n  - mouse_click\n  - mouse_drag\n  - mouse_move\n  - mouse_scroll\n  - opendesk_exec\n  - screenshot\n  - ui_click\n  - ui_tree\n  - ui_type";
-            Ok(vec![json!({ "type": "text", "text": text })])
-        } else {
-            let text = format!(
-                "Peer: {resolved}\nBackend: opendesk-remote\nProtocol: 1\nCapabilities:\n  - app\n  - clipboard\n  - keyboard\n  - mouse\n  - opendesk_exec\n  - screenshot\n  - ui"
-            );
-            Ok(vec![json!({ "type": "text", "text": text })])
-        }
+        let text = match remote_opt {
+            None => format!(
+                "Peer: local\nBackend: xa11y\nProtocol: 1\n{}\nCapabilities:\n  - app_close\n  - app_focus\n  - app_list\n  - app_open\n  - clipboard_read\n  - clipboard_write\n  - keyboard_hold\n  - keyboard_hotkey\n  - keyboard_press\n  - keyboard_sequence\n  - keyboard_type\n  - mouse_click\n  - mouse_drag\n  - mouse_move\n  - mouse_scroll\n  - opendesk_exec\n  - screenshot\n  - ui_click\n  - ui_tree\n  - ui_type",
+                crate::computer::environment::Environment::current().describe(None)
+            ),
+            Some(remote) => {
+                // What the peer itself advertised, not a canned list.
+                let mut caps: Vec<&str> = remote
+                    .capabilities()
+                    .keys()
+                    .map(String::as_str)
+                    .filter(|k| *k != "description")
+                    .collect();
+                caps.sort_unstable();
+                let env = match remote.environment().await {
+                    Ok((env, offset)) => env.describe(offset),
+                    Err(e) => format!("Environment: unavailable ({e})"),
+                };
+                format!(
+                    "Peer: {resolved}\nBackend: opendesk-remote\nProtocol: 1\n{env}\nCapabilities:\n{}",
+                    caps.iter()
+                        .map(|c| format!("  - {c}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            }
+        };
+        Ok(vec![json!({ "type": "text", "text": text })])
     }
 
     async fn admin_disconnect(&self, args: &Value) -> Result<Vec<Value>> {
@@ -2409,6 +2595,341 @@ impl McpServer {
             }
         } else {
             format!("Closed {n} connection(s).")
+        };
+        Ok(vec![json!({ "type": "text", "text": msg })])
+    }
+
+    async fn admin_exec_background(&self, args: &Value) -> Result<Vec<Value>> {
+        let command = args
+            .get("command")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("missing command"))?;
+        let shell = args.get("shell").and_then(|v| v.as_str());
+        // Unlike foreground exec, background jobs have no default limit.
+        let timeout = args
+            .get("timeout_secs")
+            .is_some()
+            .then(|| exec_timeout_arg(args))
+            .flatten();
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let id = match remote_opt {
+            Some(r) => r.job_start(command, shell, timeout).await?,
+            None => self.computer.job_start(
+                command,
+                shell,
+                timeout.map(std::time::Duration::from_secs),
+            )?,
+        };
+        let on = if target == "local" {
+            String::new()
+        } else {
+            format!(" on {target}")
+        };
+        Ok(vec![json!({
+            "type": "text",
+            "text": format!("Started job {id}{on}. Poll it with opendesk_job (action='poll', job_id={id}).")
+        })])
+    }
+
+    async fn admin_job(&self, args: &Value) -> Result<Vec<Value>> {
+        use crate::computer::process::JobPoll;
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'action' required"))?;
+        let job_id = || {
+            args.get("job_id")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| anyhow!("'job_id' required for {action}"))
+        };
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let poll_once = |id: u64| {
+            let remote = remote_opt.clone();
+            let computer = self.computer.clone();
+            async move {
+                match remote {
+                    Some(r) => r.job_poll(id).await,
+                    None => tokio::task::spawn_blocking(move || computer.job_poll(id)).await?,
+                }
+            }
+        };
+        let describe = |p: &JobPoll| {
+            let status = if p.running {
+                format!("running ({:.0} s)", p.elapsed_secs)
+            } else if p.timed_out {
+                "timed out (process tree killed)".to_string()
+            } else if p.killed {
+                "killed".to_string()
+            } else {
+                format!("exited with code {}", p.exit_code.unwrap_or(-1))
+            };
+            let mut s = format!("Job {} [{status}]: {}", p.job_id, p.command);
+            if !p.stdout.is_empty() {
+                s.push_str(&format!("\n--- new stdout ---\n{}", p.stdout.trim_end()));
+            }
+            if !p.stderr.is_empty() {
+                s.push_str(&format!("\n--- new stderr ---\n{}", p.stderr.trim_end()));
+            }
+            s
+        };
+        let text = match action {
+            "poll" => {
+                let id = job_id()?;
+                let wait = std::time::Duration::from_millis(
+                    args.get("wait_ms")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0)
+                        .min(120_000),
+                );
+                let deadline = std::time::Instant::now() + wait;
+                // Each poll drains output, so gather it across the wait.
+                let mut acc = poll_once(id).await?;
+                while acc.running
+                    && acc.stdout.is_empty()
+                    && acc.stderr.is_empty()
+                    && std::time::Instant::now() < deadline
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    let next = poll_once(id).await?;
+                    acc.stdout.push_str(&next.stdout);
+                    acc.stderr.push_str(&next.stderr);
+                    acc = JobPoll {
+                        stdout: std::mem::take(&mut acc.stdout),
+                        stderr: std::mem::take(&mut acc.stderr),
+                        ..next
+                    };
+                }
+                describe(&acc)
+            }
+            "kill" => {
+                let id = job_id()?;
+                let p = match &remote_opt {
+                    Some(r) => r.job_kill(id).await?,
+                    None => {
+                        let computer = self.computer.clone();
+                        tokio::task::spawn_blocking(move || computer.job_kill(id)).await??
+                    }
+                };
+                describe(&p)
+            }
+            "list" => {
+                let jobs = match &remote_opt {
+                    Some(r) => r.job_list().await?,
+                    None => self.computer.job_list()?,
+                };
+                if jobs.is_empty() {
+                    "No background jobs.".to_string()
+                } else {
+                    jobs.iter()
+                        .map(|j| {
+                            format!(
+                                "Job {} [{}]: {}",
+                                j.job_id,
+                                if j.running {
+                                    "running"
+                                } else {
+                                    "finished, not yet collected"
+                                },
+                                j.command
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            }
+            other => bail!("Unknown job action: {other}"),
+        };
+        let prefix = if target == "local" {
+            String::new()
+        } else {
+            format!("[on {target}] ")
+        };
+        Ok(vec![
+            json!({ "type": "text", "text": format!("{prefix}{text}") }),
+        ])
+    }
+
+    async fn admin_file(&self, args: &Value) -> Result<Vec<Value>> {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'action' required"))?;
+        let remote_path = args
+            .get("remote_path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'remote_path' required"))?;
+        let local_path = || {
+            args.get("local_path")
+                .and_then(|v| v.as_str())
+                .map(std::path::PathBuf::from)
+                .ok_or_else(|| anyhow!("'local_path' required for {action}"))
+        };
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let remote = remote_opt.ok_or_else(|| {
+            anyhow!("opendesk_file copies to or from a remote peer; '{target}' is this machine")
+        })?;
+        let describe = |st: &crate::computer::files::FileStat| {
+            format!("{} ({} bytes, sha256 {})", st.path, st.size, st.sha256)
+        };
+        let text = match action {
+            "push" => {
+                let local = local_path()?;
+                let st = remote.push_file(&local, remote_path).await?;
+                format!("Pushed {} to {target}:{}", local.display(), describe(&st))
+            }
+            "pull" => {
+                let local = local_path()?;
+                let st = remote.pull_file(remote_path, &local).await?;
+                format!("Pulled {target}:{remote_path} to {}", describe(&st))
+            }
+            "stat" => {
+                let st = remote.file_stat(remote_path).await?;
+                if !st.exists {
+                    format!("{target}:{} does not exist", st.path)
+                } else if st.is_dir {
+                    format!("{target}:{} is a directory", st.path)
+                } else {
+                    format!("{target}:{}", describe(&st))
+                }
+            }
+            other => bail!("Unknown file action: {other}"),
+        };
+        Ok(vec![json!({ "type": "text", "text": text })])
+    }
+
+    async fn admin_wait(&self, args: &Value) -> Result<Vec<Value>> {
+        let selector = args
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'selector' required"))?
+            .to_string();
+        let state = args
+            .get("state")
+            .and_then(|v| v.as_str())
+            .unwrap_or("visible")
+            .to_string();
+        let app = args.get("app").and_then(|v| v.as_str()).map(str::to_string);
+        let timeout = std::time::Duration::from_secs_f64(
+            args.get("timeout_secs")
+                .and_then(|v| v.as_f64())
+                .filter(|s| s.is_finite() && *s > 0.0)
+                .unwrap_or(10.0)
+                .min(120.0),
+        );
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let text = match remote_opt {
+            Some(remote) => {
+                remote
+                    .ui_wait(app.as_deref(), &selector, &state, timeout)
+                    .await?
+            }
+            None => {
+                let computer = self.computer.clone();
+                tokio::task::spawn_blocking(move || {
+                    computer.ui_wait(app.as_deref(), &selector, &state, timeout)
+                })
+                .await??
+            }
+        };
+        let prefix = if target == "local" {
+            String::new()
+        } else {
+            format!("[on {target}] ")
+        };
+        Ok(vec![
+            json!({ "type": "text", "text": format!("{prefix}{text}") }),
+        ])
+    }
+
+    async fn admin_events(&self, args: &Value) -> Result<Vec<Value>> {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'action' required"))?;
+        let app = args.get("app").and_then(|v| v.as_str()).map(str::to_string);
+        let wait = std::time::Duration::from_millis(
+            args.get("wait_ms")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                .min(120_000),
+        );
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let computer = self.computer.clone();
+        let text = match (action, remote_opt) {
+            ("start", Some(r)) => format!(
+                "Watching events from {}.",
+                r.events_start(app.as_deref()).await?
+            ),
+            ("start", None) => {
+                let app =
+                    tokio::task::spawn_blocking(move || computer.events_start(app.as_deref()))
+                        .await??;
+                format!("Watching events from {app}.")
+            }
+            ("read", Some(r)) => r.events_read(wait).await?.describe(),
+            ("read", None) => tokio::task::spawn_blocking(move || computer.events_read(wait))
+                .await??
+                .describe(),
+            ("stop", Some(r)) => if r.events_stop().await? {
+                "Event watch stopped."
+            } else {
+                "No event watch was running."
+            }
+            .to_string(),
+            ("stop", None) => if computer.events_stop() {
+                "Event watch stopped."
+            } else {
+                "No event watch was running."
+            }
+            .to_string(),
+            (other, _) => bail!("Unknown events action: {other}"),
+        };
+        let prefix = if target == "local" {
+            String::new()
+        } else {
+            format!("[on {target}] ")
+        };
+        Ok(vec![
+            json!({ "type": "text", "text": format!("{prefix}{text}") }),
+        ])
+    }
+
+    async fn admin_guard(&self, args: &Value) -> Result<Vec<Value>> {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("show");
+        let mut session = self.session.lock().await;
+        let msg = match action {
+            "set" => {
+                let guard = WindowGuard::from_json(Some(args))
+                    .ok_or_else(|| anyhow!("'set' needs a 'title' and/or 'process'"))?;
+                let msg = format!(
+                    "Input guard set: mouse and keyboard input requires a foreground window with {}.",
+                    guard.describe()
+                );
+                session.input_guard = Some(guard);
+                msg
+            }
+            "clear" => {
+                session.input_guard = None;
+                "Input guard cleared.".to_string()
+            }
+            "show" => match &session.input_guard {
+                Some(g) => format!("Input guard: {}.", g.describe()),
+                None => "No input guard is set.".to_string(),
+            },
+            other => bail!("Unknown guard action: {other}"),
         };
         Ok(vec![json!({ "type": "text", "text": msg })])
     }
@@ -2621,15 +3142,10 @@ impl McpServer {
                 );
                 Ok(vec![json!({ "type": "text", "text": lines.join("\n") })])
             }
-            "run" => {
-                let name = args
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow!("missing name"))?;
-                Ok(vec![
-                    json!({ "type": "text", "text": format!("Ran '{name}': success") }),
-                ])
-            }
+            // Used to answer "Ran '<name>': success" without running anything.
+            "run" => Err(anyhow!(
+                "schedule 'run' is not supported: this build stores schedules but cannot execute their tasks; perform the task directly"
+            )),
             _ => Err(anyhow!("Unknown schedule action: {action}")),
         }
     }
@@ -2643,20 +3159,11 @@ impl McpServer {
         let _ = std::fs::create_dir_all(&proc_dir);
 
         match action {
-            "start" => {
-                let task_name = args
-                    .get("task_name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unnamed");
-                Ok(vec![json!({
-                    "type": "text",
-                    "text": format!("Recording started for task '{task_name}'. Perform the task now, then call learn(action=stop) when done.")
-                })])
-            }
-            "stop" => Ok(vec![json!({
-                "type": "text",
-                "text": "Recording stopped. Summarize this recording into a procedure JSON and call learn(action=save, task_name=..., procedure='...')"
-            })]),
+            // These used to claim a recording was running while recording
+            // nothing.
+            "start" | "stop" => Err(anyhow!(
+                "learn '{action}' is not supported: this build cannot record mouse/keyboard input; write the procedure from the steps you took and call learn(action=save)"
+            )),
             "save" => {
                 let task_name = args
                     .get("task_name")
@@ -2699,7 +3206,7 @@ impl McpServer {
                 }
                 if names.is_empty() {
                     Ok(vec![
-                        json!({ "type": "text", "text": "No learned procedures yet. Record one with learn(action=start, task_name=...)" }),
+                        json!({ "type": "text", "text": "No saved procedures yet. Save one with learn(action=save, task_name=..., procedure=...)" }),
                     ])
                 } else {
                     Ok(vec![
@@ -2710,6 +3217,51 @@ impl McpServer {
             _ => Err(anyhow!("Unknown learn action: {action}")),
         }
     }
+}
+
+/// Scroll ticks for a `mouse` scroll: explicit `dx`/`dy` win, else
+/// `direction` × `amount`. Positive dy scrolls up, positive dx right
+/// (xa11y's convention). left/right used to scroll up.
+fn scroll_delta(args: &Value, dir: &str, amount: i32) -> (i32, i32) {
+    let explicit = |k: &str| args.get(k).and_then(|v| v.as_i64()).map(|v| v as i32);
+    if explicit("dx").is_some() || explicit("dy").is_some() {
+        return (explicit("dx").unwrap_or(0), explicit("dy").unwrap_or(0));
+    }
+    match dir {
+        "down" => (0, -amount),
+        "left" => (-amount, 0),
+        "right" => (amount, 0),
+        _ => (0, amount),
+    }
+}
+
+/// `timeout_secs` as whole seconds, rounded up so e.g. 0.5 is not 0.
+fn exec_timeout_arg(args: &Value) -> Option<u64> {
+    args.get("timeout_secs")
+        .and_then(|v| v.as_f64())
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .map(|s| s.ceil() as u64)
+}
+
+fn format_exec_result(res: &crate::computer::local::ExecResult) -> String {
+    let or_empty = |s: &str| {
+        let t = s.trim();
+        if t.is_empty() {
+            "(empty)".to_string()
+        } else {
+            t.to_string()
+        }
+    };
+    let status = if res.timed_out {
+        "TIMED OUT (process tree killed; output below is partial)".to_string()
+    } else {
+        res.exit_code.to_string()
+    };
+    format!(
+        "Exit code: {status}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        or_empty(&res.stdout),
+        or_empty(&res.stderr),
+    )
 }
 
 fn parse_region(args: &Value) -> Option<xa11y::Rect> {
@@ -2763,6 +3315,16 @@ fn parse_region(args: &Value) -> Option<xa11y::Rect> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn scroll_directions_map_to_axes() {
+        let none = json!({});
+        assert_eq!(scroll_delta(&none, "up", 3), (0, 3));
+        assert_eq!(scroll_delta(&none, "down", 3), (0, -3));
+        assert_eq!(scroll_delta(&none, "left", 3), (-3, 0));
+        assert_eq!(scroll_delta(&none, "right", 3), (3, 0));
+        assert_eq!(scroll_delta(&json!({ "dx": 5 }), "up", 3), (5, 0));
+    }
+
     #[tokio::test]
     async fn test_mcp_initialize() {
         let server = McpServer::new();
@@ -2807,8 +3369,61 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_view"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_app_api"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_privacy"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_guard"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_wait"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_file"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_job"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_events"));
 
-        assert_eq!(tools.len(), 20);
+        assert_eq!(tools.len(), 25);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn test_mcp_guard_refuses_input_to_another_window() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = McpServer::with_config(Some(dir.path().to_path_buf()), None, None);
+        let call = |name: &'static str, arguments: Value| {
+            let server = server.clone();
+            async move {
+                server
+                    .handle_method(
+                        "tools/call",
+                        &json!({ "name": name, "arguments": arguments }),
+                    )
+                    .await
+                    .unwrap()
+            }
+        };
+
+        let res = call(
+            "opendesk_guard",
+            json!({ "action": "set", "title": "opendesk-no-such-window-7f3a" }),
+        )
+        .await;
+        assert!(!res["isError"].as_bool().unwrap(), "{res}");
+
+        // Refused before anything is sent, so this never types on the desktop.
+        let res = call(
+            "keyboard",
+            json!({ "action": "press", "key": "shift", "peer": "local" }),
+        )
+        .await;
+        assert!(res["isError"].as_bool().unwrap(), "{res}");
+        let text = res["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("input refused"), "{text}");
+
+        // A per-call guard overrides the session default the same way.
+        call("opendesk_guard", json!({ "action": "clear" })).await;
+        let res = call(
+            "mouse",
+            json!({
+                "action": "click", "x": 0, "y": 0, "peer": "local",
+                "guard": { "process": "opendesk-no-such-process.exe" }
+            }),
+        )
+        .await;
+        assert!(res["isError"].as_bool().unwrap(), "{res}");
     }
 
     #[tokio::test]

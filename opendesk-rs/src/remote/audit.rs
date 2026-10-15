@@ -160,7 +160,11 @@ impl AuditLog {
             entry["error_code"] = json!(code);
         }
         if let Some(msg) = error_message {
-            let truncated = if msg.len() > 200 { &msg[..200] } else { msg };
+            let truncated = if msg.len() > 200 {
+                crate::util::truncate_bytes(msg, 200)
+            } else {
+                msg
+            };
             entry["error_message"] = json!(truncated);
         }
 
@@ -227,7 +231,7 @@ pub fn summarise(method: &str, params: &Value) -> String {
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             let preview = if text.len() > 40 {
-                format!("{}…", &text[..40])
+                format!("{}…", crate::util::truncate_bytes(text, 40))
             } else {
                 text.to_string()
             };
@@ -235,7 +239,11 @@ pub fn summarise(method: &str, params: &Value) -> String {
         }
         "process.shell" => {
             let cmd = params.get("command").and_then(|v| v.as_str()).unwrap_or("");
-            let preview = if cmd.len() > 80 { &cmd[..80] } else { cmd };
+            let preview = if cmd.len() > 80 {
+                crate::util::truncate_bytes(cmd, 80)
+            } else {
+                cmd
+            };
             format!("run shell: '{preview}'")
         }
         "process.exec" => {
@@ -249,7 +257,7 @@ pub fn summarise(method: &str, params: &Value) -> String {
                 })
                 .unwrap_or_default();
             let preview = if joined.len() > 80 {
-                &joined[..80]
+                crate::util::truncate_bytes(&joined, 80)
             } else {
                 &joined
             };

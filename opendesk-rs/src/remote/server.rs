@@ -601,6 +601,10 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
             tracing::info!(
                 "Remote session terminated; resetting privacy screen and unlocking physical inputs"
             );
+            // A controller that drops mid-gesture must not leave Ctrl/Alt or
+            // a mouse button held down on this machine.
+            self.0.release_held_input();
+            self.0.events_stop();
             self.0.reset_privacy();
         }
     }
@@ -624,6 +628,14 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     caps.insert("process.exec".to_string(), rmpv::Value::Boolean(true));
     caps.insert("process.shell".to_string(), rmpv::Value::Boolean(true));
     caps.insert("system.privacy".to_string(), rmpv::Value::Boolean(true));
+    // input.* honours a `guard` parameter (see computer::foreground).
+    caps.insert("input.guard".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("ui.value".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("ui.wait".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("ui.text".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("fs.transfer".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("process.jobs".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("events".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
     if !desc.is_empty() {
@@ -671,8 +683,14 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
                         };
 
                         if !no_audit {
+                            // Binary payloads (file chunks) never reach the
+                            // summary; converting them to JSON is pure cost.
                             let params_val = rmpv_to_json(&rmpv::Value::Map(
-                                req.params.iter().map(|(k, v)| (rmpv::Value::from(k.as_str()), v.clone())).collect()
+                                req.params
+                                    .iter()
+                                    .filter(|(_, v)| !matches!(v, rmpv::Value::Binary(_)))
+                                    .map(|(k, v)| (rmpv::Value::from(k.as_str()), v.clone()))
+                                    .collect()
                             ));
                             audit.record_call(
                                 peer_public,
@@ -711,6 +729,14 @@ pub(crate) async fn dispatch_call(
     method: &str,
     params: &HashMap<String, rmpv::Value>,
 ) -> Result<rmpv::Value, String> {
+    // Checked here, on the machine receiving the input, right before it is
+    // sent, so a focus change on this side is caught.
+    if method.starts_with("input.")
+        && let Some(guard) =
+            crate::computer::foreground::WindowGuard::from_rmpv(params.get("guard"))
+    {
+        guard.check().map_err(|e| e.to_string())?;
+    }
     match method {
         "display.capture" => {
             let fmt = params
@@ -722,8 +748,17 @@ pub(crate) async fn dispatch_call(
                 .get("max_dim")
                 .and_then(|v| v.as_i64())
                 .map(|d| d as u32);
+            let region = params.get("region").and_then(|r| {
+                let int = |k: &str| value_get(r, k).and_then(|v| v.as_i64());
+                Some(xa11y::Rect {
+                    x: int("x")? as i32,
+                    y: int("y")? as i32,
+                    width: int("width")?.max(1) as u32,
+                    height: int("height")?.max(1) as u32,
+                })
+            });
             let (bytes, mime, width, height) = computer
-                .screenshot_format(None, fmt, quality, max_dim)
+                .screenshot_format(region, fmt, quality, max_dim)
                 .map_err(|e| e.to_string())?;
             // Transmit pure native MessagePack binary bytes (bin) - matching Python Pixmap
             Ok(rmpv::Value::Map(vec![
@@ -751,6 +786,13 @@ pub(crate) async fn dispatch_call(
                 .and_then(|p| value_get(p, "y"))
                 .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
                 .unwrap_or(0.0) as i32;
+            // `space: "image"` = pixels of this machine's last screenshot,
+            // which need mapping onto the desktop (negative-origin monitors).
+            let (x, y) = if params.get("space").and_then(|v| v.as_str()) == Some("image") {
+                computer.image_to_screen(x, y)
+            } else {
+                (x, y)
+            };
             match action {
                 "click" => {
                     let btn = evt
@@ -766,12 +808,14 @@ pub(crate) async fn dispatch_call(
                     .map(|_| rmpv::Value::Nil)
                     .map_err(|e| e.to_string()),
                 "scroll" => {
-                    let dy = evt
-                        .and_then(|e| value_get(e, "dy"))
-                        .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
-                        .unwrap_or(0.0) as i32;
+                    let delta = |k: &str| {
+                        evt.and_then(|e| value_get(e, k))
+                            .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+                            .unwrap_or(0.0) as i32
+                    };
+                    let (dx, dy) = (delta("dx"), delta("dy"));
                     computer
-                        .mouse_scroll(x, y, dy)
+                        .mouse_scroll_xy(x, y, dx, dy)
                         .map(|_| rmpv::Value::Nil)
                         .map_err(|e| e.to_string())
                 }
@@ -841,24 +885,11 @@ pub(crate) async fn dispatch_call(
                     .keyboard_up(key)
                     .map(|_| rmpv::Value::Nil)
                     .map_err(|e| e.to_string()),
-                _ => {
-                    if key.contains('+') || key.contains('-') {
-                        let parts: Vec<&str> = key
-                            .split(['+', '-'])
-                            .map(|s| s.trim())
-                            .filter(|s| !s.is_empty())
-                            .collect();
-                        computer
-                            .keyboard_hotkey(&parts)
-                            .map(|_| rmpv::Value::Nil)
-                            .map_err(|e| e.to_string())
-                    } else {
-                        computer
-                            .keyboard_press(key)
-                            .map(|_| rmpv::Value::Nil)
-                            .map_err(|e| e.to_string())
-                    }
-                }
+                // keyboard_press handles single keys and chords (`ctrl+-`).
+                _ => computer
+                    .keyboard_press(key)
+                    .map(|_| rmpv::Value::Nil)
+                    .map_err(|e| e.to_string()),
             }
         }
         "input.sequence" => {
@@ -878,16 +909,21 @@ pub(crate) async fn dispatch_call(
                 let action = value_get(step_val, "action")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
-                let keys = value_get(step_val, "keys").and_then(|v| v.as_array()).map(|arr| {
-                    arr.iter()
-                        .filter_map(|item| item.as_str().map(|s| s.to_string()))
-                        .collect::<Vec<_>>()
-                });
+                let keys = value_get(step_val, "keys")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                            .collect::<Vec<_>>()
+                    });
                 let hotkey = value_get(step_val, "hotkey").and_then(|v| {
                     if let Some(arr) = v.as_array() {
                         let jarr: Vec<serde_json::Value> = arr
                             .iter()
-                            .filter_map(|item| item.as_str().map(|s| serde_json::Value::String(s.to_string())))
+                            .filter_map(|item| {
+                                item.as_str()
+                                    .map(|s| serde_json::Value::String(s.to_string()))
+                            })
                             .collect();
                         Some(serde_json::Value::Array(jarr))
                     } else if let Some(s) = v.as_str() {
@@ -911,32 +947,46 @@ pub(crate) async fn dispatch_call(
                 .map_err(|e| e.to_string())
         }
         "process.exec" | "process.shell" => {
-            let cmd_str = params.get("command").and_then(|v| v.as_str());
-            let shell = params.get("shell").and_then(|v| v.as_str());
+            let command = params
+                .get("command")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let shell = params
+                .get("shell")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
             let timeout_secs = params.get("timeout_secs").and_then(|v| v.as_u64());
-
-            if let Some(argv) = params.get("argv").and_then(|v| v.as_array()) {
-                let argv_strs: Vec<&str> = argv.iter().filter_map(|v| v.as_str()).collect();
-                if !argv_strs.is_empty() {
-                    let res = computer
-                        .execute_argv(&argv_strs, timeout_secs)
-                        .map_err(|e| e.to_string())?;
-                    return Ok(rmpv::Value::Map(vec![
-                        (rmpv::Value::from("stdout"), rmpv::Value::from(res.stdout)),
-                        (rmpv::Value::from("stderr"), rmpv::Value::from(res.stderr)),
-                        (
-                            rmpv::Value::from("exit_code"),
-                            rmpv::Value::from(res.exit_code as i64),
-                        ),
-                        (rmpv::Value::from("success"), rmpv::Value::Boolean(res.success)),
-                    ]));
-                }
+            let argv: Vec<String> = params
+                .get("argv")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if argv.is_empty() && command.is_none() {
+                return Err("missing 'command'".to_string());
             }
 
-            let command = cmd_str.ok_or("missing 'command'")?;
-            let res = computer
-                .execute_command(command, shell, timeout_secs)
-                .map_err(|e| e.to_string())?;
+            // Commands can run for many minutes; keep them off the async
+            // runtime so the session loop stays responsive.
+            let computer = computer.clone();
+            let res = tokio::task::spawn_blocking(move || {
+                if argv.is_empty() {
+                    computer.execute_command(
+                        command.as_deref().unwrap_or_default(),
+                        shell.as_deref(),
+                        timeout_secs,
+                    )
+                } else {
+                    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+                    computer.execute_argv(&argv, timeout_secs)
+                }
+            })
+            .await
+            .map_err(|e| format!("exec task failed: {e}"))?
+            .map_err(|e| e.to_string())?;
             Ok(rmpv::Value::Map(vec![
                 (rmpv::Value::from("stdout"), rmpv::Value::from(res.stdout)),
                 (rmpv::Value::from("stderr"), rmpv::Value::from(res.stderr)),
@@ -944,7 +994,14 @@ pub(crate) async fn dispatch_call(
                     rmpv::Value::from("exit_code"),
                     rmpv::Value::from(res.exit_code as i64),
                 ),
-                (rmpv::Value::from("success"), rmpv::Value::Boolean(res.success)),
+                (
+                    rmpv::Value::from("success"),
+                    rmpv::Value::Boolean(res.success),
+                ),
+                (
+                    rmpv::Value::from("timed_out"),
+                    rmpv::Value::Boolean(res.timed_out),
+                ),
             ]))
         }
         "apps.open" => {
@@ -1023,6 +1080,161 @@ pub(crate) async fn dispatch_call(
                 .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
         }
+        "process.start" => {
+            let command = params
+                .get("command")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'command'")?;
+            let shell = params.get("shell").and_then(|v| v.as_str());
+            let timeout = params
+                .get("timeout_secs")
+                .and_then(|v| v.as_u64())
+                .map(Duration::from_secs);
+            let id = computer
+                .job_start(command, shell, timeout)
+                .map_err(|e| e.to_string())?;
+            Ok(rmpv::Value::Map(vec![(
+                rmpv::Value::from("job_id"),
+                rmpv::Value::from(id),
+            )]))
+        }
+        "process.poll" | "process.kill" => {
+            let id = params
+                .get("job_id")
+                .and_then(|v| v.as_u64())
+                .ok_or("missing 'job_id'")?;
+            let computer = computer.clone();
+            let kill = method == "process.kill";
+            let poll = tokio::task::spawn_blocking(move || {
+                if kill {
+                    computer.job_kill(id)
+                } else {
+                    computer.job_poll(id)
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+            rmpv::ext::to_value(poll).map_err(|e| e.to_string())
+        }
+        "process.jobs" => {
+            let list = computer.job_list().map_err(|e| e.to_string())?;
+            rmpv::ext::to_value(list).map_err(|e| e.to_string())
+        }
+        "fs.stat" | "fs.read" | "fs.write" | "fs.commit" => {
+            use crate::computer::files;
+            let path = params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'path'")?
+                .to_string();
+            let offset = params.get("offset").and_then(|v| v.as_u64()).unwrap_or(0);
+            let method = method.to_string();
+            let data = params
+                .get("data")
+                .and_then(|v| v.as_slice())
+                .map(<[u8]>::to_vec)
+                .unwrap_or_default();
+            let len = params
+                .get("length")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(files::CHUNK as u64) as usize;
+            let sha = params
+                .get("sha256")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            // Hashing and disk I/O can take a while for large files.
+            tokio::task::spawn_blocking(move || -> anyhow::Result<rmpv::Value> {
+                Ok(match method.as_str() {
+                    "fs.stat" => rmpv::ext::to_value(files::stat(&path)?)?,
+                    "fs.read" => rmpv::Value::Binary(files::read_chunk(&path, offset, len)?),
+                    "fs.write" => rmpv::Value::from(files::write_chunk(&path, offset, &data)?),
+                    _ => rmpv::ext::to_value(files::commit(&path, &sha)?)?,
+                })
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("{e:#}"))
+        }
+        "ui.text" => {
+            let app = params
+                .get("app")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let computer = computer.clone();
+            let lines = tokio::task::spawn_blocking(move || computer.window_text(app.as_deref()))
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| e.to_string())?;
+            Ok(rmpv::Value::Array(
+                lines.into_iter().map(rmpv::Value::from).collect(),
+            ))
+        }
+        "ui.wait" => {
+            let app = params
+                .get("app")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let selector = params
+                .get("selector")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'selector'")?
+                .to_string();
+            let state = params
+                .get("state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("visible")
+                .to_string();
+            let timeout = Duration::from_millis(
+                params
+                    .get("timeout_ms")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(10_000),
+            );
+            let computer = computer.clone();
+            tokio::task::spawn_blocking(move || {
+                computer.ui_wait(app.as_deref(), &selector, &state, timeout)
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map(rmpv::Value::from)
+            .map_err(|e| e.to_string())
+        }
+        "events.start" => {
+            let app = params
+                .get("app")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let computer = computer.clone();
+            tokio::task::spawn_blocking(move || computer.events_start(app.as_deref()))
+                .await
+                .map_err(|e| e.to_string())?
+                .map(rmpv::Value::from)
+                .map_err(|e| e.to_string())
+        }
+        "events.read" => {
+            let wait =
+                Duration::from_millis(params.get("wait_ms").and_then(|v| v.as_u64()).unwrap_or(0));
+            let computer = computer.clone();
+            let batch = tokio::task::spawn_blocking(move || computer.events_read(wait))
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| e.to_string())?;
+            rmpv::ext::to_value(batch).map_err(|e| e.to_string())
+        }
+        "events.stop" => Ok(rmpv::Value::Boolean(computer.events_stop())),
+        "ui.value" => {
+            let app_name = params.get("app").and_then(|v| v.as_str());
+            let selector = params
+                .get("selector")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'selector'")?;
+            computer
+                .ui_get_value(app_name, selector)
+                .map(rmpv::Value::from)
+                .map_err(|e| e.to_string())
+        }
         "clipboard.read" => {
             let text = computer.clipboard_read().map_err(|e| e.to_string())?;
             let entry = rmpv::Value::Map(vec![
@@ -1092,17 +1304,11 @@ pub(crate) async fn dispatch_call(
                 (rmpv::Value::from("description"), rmpv::Value::from("")),
             ]))
         }
-        "system.environment" => Ok(rmpv::Value::Map(vec![
-            (
-                rmpv::Value::from("os"),
-                rmpv::Value::from(std::env::consts::OS),
-            ),
-            (rmpv::Value::from("os_version"), rmpv::Value::from("")),
-            (rmpv::Value::from("hostname"), rmpv::Value::from("")),
-            (rmpv::Value::from("locale"), rmpv::Value::from("")),
-            (rmpv::Value::from("timezone"), rmpv::Value::from("")),
-            (rmpv::Value::from("displays"), rmpv::Value::Array(vec![])),
-        ])),
+        // Also the client's liveness ping, so keep it cheap.
+        "system.environment" => {
+            rmpv::ext::to_value(crate::computer::environment::Environment::current())
+                .map_err(|e| e.to_string())
+        }
         "system.privacy" => {
             let lock_input = params
                 .get("lock_input")

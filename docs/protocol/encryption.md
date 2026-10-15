@@ -4,7 +4,7 @@
 
 After a successful handshake (§5 or §6) the two peers share two 32-byte
 session keys — one per direction — and all subsequent frames pass through
-`EncryptedConnection` (`protocol/auth/encrypted.py`).
+the session channel in `opendesk-rs/src/protocol/crypto.rs`.
 
 **Algorithm:** ChaCha20-Poly1305 AEAD (RFC 8439).
 
@@ -13,8 +13,8 @@ integer. The counter starts at 0, increments by 1 per frame, and is **not
 transmitted** — both ends maintain their own copy. Because the transport is
 reliable and ordered, both counters stay in sync.
 
-**Effect of tampering or desync:** AEAD verification fails → `ConnectionClosed`
-is raised immediately on the receiving side. There is no retry; the TCP
+**Effect of tampering or desync:** AEAD verification fails and the receiving
+side ends the session immediately. There is no retry; the TCP
 connection must be re-established and a new handshake run.
 
 **Key lifetime:** Session keys are ephemeral — they exist for one TCP
@@ -25,7 +25,7 @@ connection. Long-lived static keys never appear in frame payloads.
 ## 4. Identity and key material
 
 Each machine holds a long-lived X25519 static keypair in its **identity**
-(`protocol/auth/identity.py`):
+(`opendesk-rs/src/protocol/identity.rs`):
 
 | File | Mode | Contents |
 |---|---|---|

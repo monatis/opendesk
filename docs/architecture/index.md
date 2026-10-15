@@ -1,36 +1,39 @@
 # Architecture
 
-opendesk separates *what a computer can do* (the capability surface) from
-*where that computer lives* (local vs. remote) and *how agents talk to it*
-(via tools, MCP, etc.). Each layer is independently importable.
+opendesk is a single Rust crate, `opendesk-rs`, with two binaries: `opendesk`
+(CLI, `serve`, pairing, relay, web UI) and `opendesk-mcp` (stdio MCP server).
+It separates *what a computer can do* (the `computer` module) from *where that
+computer lives* (local vs. remote) and *how agents talk to it* (MCP).
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Integrations   MCP  ·  Claude Code  ·  OpenAI  ·  LangChain │
+│  MCP server     mcp/server.rs — stdio JSON-RPC, tool list,   │
+│                 peer routing, input guard, MCP App viewport  │
 ├──────────────────────────────────────────────────────────────┤
-│  Tools          screenshot · mouse · keyboard · ui ·         │
-│                 clipboard · ocr · app · learn · schedule     │
+│  Tools          screenshot · mouse · keyboard · ui · app ·   │
+│                 clipboard · opendesk_exec · audit · learn ·  │
+│                 schedule · opendesk_* admin tools            │
 ├──────────────────────────────────────────────────────────────┤
-│  Computer       Computer ABC                                 │
-│                   ├─ LocalComputer  (the machine we're on)   │
-│                   └─ RemoteComputer (via the wire protocol)  │
-│                 ComputerDispatcher (server-side router)      │
+│  Computer       LocalComputer   (the machine we're on)       │
+│                 RemoteComputer  (via the wire protocol)      │
+│                 dispatch_call   (server-side method router)  │
 ├──────────────────────────────────────────────────────────────┤
 │  Remote         opendesk serve · pair · discover · connect   │
-│                 mDNS advertisement & browsing                │
+│                 mDNS · rendezvous relay · admin IPC · audit  │
 ├──────────────────────────────────────────────────────────────┤
-│  Protocol       frames · msgpack codec · peer (call-id mux)  │
-│                 transports: WebSocket (TCP) — future: QUIC   │
-│                 auth: X25519 + ChaCha20-Poly1305, pairing PSK│
+│  Protocol       frames · msgpack · WebSocket transport       │
+│                 X25519 + ChaCha20-Poly1305, PBKDF2 pairing   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 Three load-bearing properties:
 
-1. **Tools never know whether a Computer is local or remote.** The same tool
-   code runs against `LocalComputer` or `RemoteComputer`.
-2. **Bytes are bytes.** msgpack `bin` carries pixmaps, file contents, and
-   process output natively — no base64 anywhere on the wire.
+1. **Tools have a local and a remote path with the same behaviour.** The MCP
+   server calls `LocalComputer` for `local` and `RemoteComputer` for a paired
+   peer; on the peer, `dispatch_call` maps each protocol method back onto its
+   own `LocalComputer`.
+2. **Bytes are bytes.** msgpack `bin` carries screenshots natively — no base64
+   on the wire (MCP image results are base64, as MCP requires).
 3. **Trust is keys, not certs.** No CA-signed certificates required. Both
    peers hold long-lived X25519 keypairs that authenticate each connection.
 
@@ -42,6 +45,6 @@ Three load-bearing properties:
 |---|---|
 | Computer & Tools | [Computer & Tools](layers.md) |
 | Protocol | [Protocol Layer](protocol-layer.md) |
-| Remote & Integrations | [Remote & Integrations](remote-layer.md) |
+| Remote & MCP | [Remote & Integrations](remote-layer.md) |
 | Data Flow | [Data Flow](data-flow.md) |
 | Custom Tools | [Adding a Custom Tool](custom-tools.md) |

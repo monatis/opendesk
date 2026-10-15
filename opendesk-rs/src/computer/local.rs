@@ -31,6 +31,10 @@ pub struct ExecResult {
     pub stderr: String,
     pub exit_code: i32,
     pub success: bool,
+    /// The command hit its timeout; its process tree was killed and the
+    /// output is whatever it printed before that.
+    #[serde(default)]
+    pub timed_out: bool,
 }
 
 #[cfg(target_os = "windows")]
@@ -90,9 +94,45 @@ pub mod win_input {
     }
 }
 
+/// The shell invocation for `command`: PowerShell (default) or cmd on
+/// Windows, `sh` (or the named shell) elsewhere. Also returns a temp script
+/// to delete afterwards, for PowerShell scripts too long for a command line.
+pub(crate) fn shell_command(
+    command: &str,
+    shell: Option<&str>,
+) -> Result<(std::process::Command, Option<std::path::PathBuf>)> {
+    #[cfg(target_os = "windows")]
+    {
+        let shell_choice = shell.unwrap_or("powershell").to_lowercase();
+        if shell_choice == "cmd" || shell_choice == "cmd.exe" {
+            let mut c = std::process::Command::new("cmd.exe");
+            c.args(["/C", command]);
+            Ok((c, None))
+        } else {
+            super::process::powershell_command(command)
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut c = std::process::Command::new(shell.unwrap_or("sh"));
+        c.args(["-c", command]);
+        Ok((c, None))
+    }
+}
+
+/// Depth used for UI tree reads when the caller gives none.
+pub const DEFAULT_TREE_DEPTH: usize = 8;
+
 #[derive(Clone)]
 pub struct LocalComputer {
     pub privacy: std::sync::Arc<crate::computer::privacy::PrivacyController>,
+    held: std::sync::Arc<std::sync::Mutex<super::keys::HeldInput>>,
+    /// The last screenshot's pixel-to-desktop mapping (pixels dropped).
+    last_capture: std::sync::Arc<std::sync::Mutex<Option<xa11y::Screenshot>>>,
+    /// Running accessibility-event watch (see `watch`).
+    pub(crate) watcher: std::sync::Arc<std::sync::Mutex<Option<super::watch::EventWatcher>>>,
+    /// Background commands (see `jobs`).
+    pub(crate) jobs: std::sync::Arc<std::sync::Mutex<super::jobs::JobTable>>,
 }
 
 impl Default for LocalComputer {
@@ -105,6 +145,53 @@ impl LocalComputer {
     pub fn new() -> Self {
         Self {
             privacy: std::sync::Arc::new(crate::computer::privacy::PrivacyController::new()),
+            held: Default::default(),
+            last_capture: Default::default(),
+            watcher: Default::default(),
+            jobs: Default::default(),
+        }
+    }
+
+    /// Map a pixel of the last screenshot to desktop coordinates for input.
+    ///
+    /// Screenshot pixel (0, 0) is the top-left of the whole virtual desktop,
+    /// which is at a negative desktop position when a monitor sits left of
+    /// or above the primary one (and a resized capture is scaled too). Falls
+    /// back to the point unchanged when there is no usable capture, e.g. the
+    /// point is outside it or the display layout changed since.
+    pub fn image_to_screen(&self, x: i32, y: i32) -> (i32, i32) {
+        let mapped = self.last_capture.lock().ok().and_then(|cap| {
+            cap.as_ref()?
+                .image_to_desktop(Point::new(x, y))
+                .ok()
+                .map(|p| (p.x, p.y))
+        });
+        mapped.unwrap_or((x, y))
+    }
+
+    fn track_held(&self, update: impl FnOnce(&mut super::keys::HeldInput)) {
+        if let Ok(mut h) = self.held.lock() {
+            update(&mut h);
+        }
+    }
+
+    /// Release every key and mouse button left down via `keyboard_down` /
+    /// `mouse_down`, e.g. when the controller that pressed them disconnects.
+    pub fn release_held_input(&self) {
+        let held = self
+            .held
+            .lock()
+            .map(|mut h| std::mem::take(&mut *h))
+            .unwrap_or_default();
+        for key in held.keys.iter().rev() {
+            if let Err(e) = self.keyboard_up(key) {
+                tracing::warn!("releasing held key {key}: {e}");
+            }
+        }
+        for button in &held.buttons {
+            if let Err(e) = self.mouse_up(Some(button)) {
+                tracing::warn!("releasing held mouse button {button}: {e}");
+            }
         }
     }
 
@@ -163,7 +250,7 @@ impl LocalComputer {
         let width = shot.width;
         let height = shot.height;
 
-        match format.to_lowercase().as_str() {
+        let encoded = match format.to_lowercase().as_str() {
             "jpeg" | "jpg" => {
                 let q = if quality == 0 { 75 } else { quality.min(100) };
                 let mut rgb = Vec::with_capacity((shot.width * shot.height * 3) as usize);
@@ -180,13 +267,21 @@ impl LocalComputer {
                         image::ExtendedColorType::Rgb8,
                     )
                     .context("JPEG encoding failed")?;
-                Ok((out, "image/jpeg".to_string(), width, height))
+                (out, "image/jpeg".to_string(), width, height)
             }
             _ => {
                 let png_bytes = shot.to_png().context("PNG encoding failed")?;
-                Ok((png_bytes, "image/png".to_string(), width, height))
+                (png_bytes, "image/png".to_string(), width, height)
             }
+        };
+
+        // Keep only the coordinate mapping, so clicks on this image land on
+        // the right desktop pixel (see image_to_screen).
+        shot.pixels = Vec::new();
+        if let Ok(mut last) = self.last_capture.lock() {
+            *last = shot.mapping_available().then_some(shot);
         }
+        Ok(encoded)
     }
 
     // -----------------------------------------------------------------------
@@ -242,9 +337,14 @@ impl LocalComputer {
     }
 
     pub fn mouse_scroll(&self, x: i32, y: i32, dy: i32) -> Result<()> {
+        self.mouse_scroll_xy(x, y, 0, dy)
+    }
+
+    /// Scroll by ticks: positive `dy` up, positive `dx` right.
+    pub fn mouse_scroll_xy(&self, x: i32, y: i32, dx: i32, dy: i32) -> Result<()> {
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
         sim.mouse()
-            .scroll(Point { x, y }, ScrollDelta { dx: 0, dy })
+            .scroll(Point { x, y }, ScrollDelta { dx, dy })
             .map_err(|e| anyhow!("scroll failed: {e}"))
     }
 
@@ -257,7 +357,11 @@ impl LocalComputer {
         };
         sim.mouse()
             .down(btn)
-            .map_err(|e| anyhow!("mouse_down failed: {e}"))
+            .map_err(|e| anyhow!("mouse_down failed: {e}"))?;
+        self.track_held(|h| {
+            super::keys::HeldInput::press(&mut h.buttons, button.unwrap_or("left"))
+        });
+        Ok(())
     }
 
     pub fn mouse_up(&self, button: Option<&str>) -> Result<()> {
@@ -267,6 +371,9 @@ impl LocalComputer {
             "middle" => xa11y::MouseButton::Middle,
             _ => xa11y::MouseButton::Left,
         };
+        self.track_held(|h| {
+            super::keys::HeldInput::release(&mut h.buttons, button.unwrap_or("left"))
+        });
         sim.mouse()
             .up(btn)
             .map_err(|e| anyhow!("mouse_up failed: {e}"))
@@ -378,7 +485,10 @@ impl LocalComputer {
                         )
                     };
                     if sent != 2 {
-                        bail!("SendInput unicode injection failed for code unit 0x{:X}", code_unit);
+                        bail!(
+                            "SendInput unicode injection failed for code unit 0x{:X}",
+                            code_unit
+                        );
                     }
                 }
             }
@@ -395,33 +505,50 @@ impl LocalComputer {
     }
 
     pub fn keyboard_press(&self, key_str: &str) -> Result<()> {
-        if key_str.contains('+') || key_str.contains('-') {
-            let parts: Vec<&str> = key_str
-                .split(['+', '-'])
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .collect();
-            return self.keyboard_hotkey(&parts);
+        let parts = super::keys::split_chord(key_str);
+        match parts.as_slice() {
+            [] => bail!("empty key"),
+            [key] => self.press_single(key),
+            _ => {
+                let refs: Vec<&str> = parts.iter().map(String::as_str).collect();
+                self.keyboard_hotkey(&refs)
+            }
         }
+    }
 
+    fn press_single(&self, key: &str) -> Result<()> {
         #[cfg(target_os = "windows")]
         {
-            if let Some((vk, ext)) = parse_key_vk(key_str) {
-                win_send_vk(vk, ext, true)?;
-                std::thread::sleep(Duration::from_millis(15));
-                win_send_vk(vk, ext, false)?;
-                return Ok(());
+            let mut chars = key.chars();
+            if let (Some(c), None) = (chars.next(), chars.next()) {
+                // A literal character: press the key that types it on the
+                // target's layout, as a real keystroke. (Turkish-Q types "ı"
+                // on VK_I; and hooks such as screen-reader quick keys ignore
+                // injected Unicode packets, so those are only the fallback.)
+                return match super::keys::layout_key(c) {
+                    Some(lk) => send_chord(&layout_key_vks(lk)),
+                    None => self.keyboard_type(key),
+                };
+            }
+            if let Some((vk, ext)) = parse_key_vk(key) {
+                return send_chord(&[(vk, ext)]);
             }
         }
 
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
-        let key = parse_key(key_str).ok_or_else(|| anyhow!("unknown key: {key_str}"))?;
+        let k = parse_key(key).ok_or_else(|| anyhow!("unknown key: {key}"))?;
         sim.keyboard()
-            .press(key)
+            .press(k)
             .map_err(|e| anyhow!("press failed: {e}"))
     }
 
     pub fn keyboard_down(&self, key_str: &str) -> Result<()> {
+        self.keyboard_down_untracked(key_str)?;
+        self.track_held(|h| super::keys::HeldInput::press(&mut h.keys, key_str));
+        Ok(())
+    }
+
+    fn keyboard_down_untracked(&self, key_str: &str) -> Result<()> {
         #[cfg(target_os = "windows")]
         {
             if let Some((vk, ext)) = parse_key_vk(key_str) {
@@ -437,6 +564,7 @@ impl LocalComputer {
     }
 
     pub fn keyboard_up(&self, key_str: &str) -> Result<()> {
+        self.track_held(|h| super::keys::HeldInput::release(&mut h.keys, key_str));
         #[cfg(target_os = "windows")]
         {
             if let Some((vk, ext)) = parse_key_vk(key_str) {
@@ -452,46 +580,19 @@ impl LocalComputer {
     }
 
     pub fn keyboard_hotkey(&self, keys: &[&str]) -> Result<()> {
-        if keys.is_empty() {
-            return Ok(());
-        }
-        // Flatten any composite tokens like ["ctrl+s"] or ["ctrl", "shift+s"]
-        let mut flat_keys = Vec::new();
-        for k in keys {
-            for part in k.split(['+', '-']) {
-                let trimmed = part.trim();
-                if !trimmed.is_empty() {
-                    flat_keys.push(trimmed);
-                }
-            }
-        }
+        // Flatten composite tokens like ["ctrl+s"] or ["ctrl", "shift+s"].
+        let flat_keys: Vec<String> = keys
+            .iter()
+            .flat_map(|k| super::keys::split_chord(k))
+            .collect();
         if flat_keys.is_empty() {
-            return Ok(());
+            bail!("empty key combination");
         }
 
         #[cfg(target_os = "windows")]
         {
-            let mut vks = Vec::with_capacity(flat_keys.len());
-            let mut all_vk = true;
-            for k in &flat_keys {
-                if let Some(vk) = parse_key_vk(k) {
-                    vks.push(vk);
-                } else {
-                    all_vk = false;
-                    break;
-                }
-            }
-            if all_vk {
-                // Press down in sequence
-                for &(vk, ext) in &vks {
-                    win_send_vk(vk, ext, true)?;
-                }
-                std::thread::sleep(Duration::from_millis(20));
-                // Release in reverse order
-                for &(vk, ext) in vks.iter().rev() {
-                    win_send_vk(vk, ext, false)?;
-                }
-                return Ok(());
+            if let Some(vks) = chord_vks(&flat_keys) {
+                return send_chord(&vks);
             }
         }
 
@@ -501,7 +602,9 @@ impl LocalComputer {
             .map(|k| parse_key(k).ok_or_else(|| anyhow!("unknown key: {k}")))
             .collect::<Result<_, _>>()?;
 
-        let (target, modifiers) = parsed_keys.split_last().unwrap();
+        let (target, modifiers) = parsed_keys
+            .split_last()
+            .ok_or_else(|| anyhow!("empty key combination"))?;
         sim.keyboard()
             .chord(target.clone(), modifiers)
             .map_err(|e| anyhow!("chord failed: {e}"))
@@ -523,12 +626,7 @@ impl LocalComputer {
                         self.keyboard_hotkey(&keys)?;
                     }
                     serde_json::Value::String(s) => {
-                        let parts: Vec<&str> = s
-                            .split(['+', '-'])
-                            .map(|p| p.trim())
-                            .filter(|p| !p.is_empty())
-                            .collect();
-                        self.keyboard_hotkey(&parts)?;
+                        self.keyboard_hotkey(&[s.as_str()])?;
                     }
                     _ => {}
                 }
@@ -580,44 +678,15 @@ impl LocalComputer {
         timeout_secs: Option<u64>,
     ) -> Result<ExecResult> {
         let timeout = Duration::from_secs(timeout_secs.unwrap_or(30));
-
-        #[cfg(target_os = "windows")]
-        let mut cmd = {
-            let shell_choice = shell.unwrap_or("powershell").to_lowercase();
-            if shell_choice == "cmd" || shell_choice == "cmd.exe" {
-                let mut c = std::process::Command::new("cmd.exe");
-                c.args(["/C", command]);
-                c
-            } else {
-                let mut c = std::process::Command::new("powershell.exe");
-                c.args([
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    command,
-                ]);
-                c
-            }
-        };
-
-        #[cfg(not(target_os = "windows"))]
-        let mut cmd = {
-            let shell_choice = shell.unwrap_or("sh");
-            let mut c = std::process::Command::new(shell_choice);
-            c.args(["-c", command]);
-            c
-        };
-
-        Self::run_command_with_timeout(&mut cmd, timeout)
+        let (mut cmd, temp_script) = shell_command(command, shell)?;
+        let res = super::process::run_with_timeout(&mut cmd, timeout);
+        if let Some(path) = temp_script {
+            let _ = std::fs::remove_file(path);
+        }
+        res
     }
 
-    pub fn execute_argv(
-        &self,
-        argv: &[&str],
-        timeout_secs: Option<u64>,
-    ) -> Result<ExecResult> {
+    pub fn execute_argv(&self, argv: &[&str], timeout_secs: Option<u64>) -> Result<ExecResult> {
         if argv.is_empty() {
             bail!("empty argv");
         }
@@ -626,70 +695,14 @@ impl LocalComputer {
         if argv.len() > 1 {
             cmd.args(&argv[1..]);
         }
-        Self::run_command_with_timeout(&mut cmd, timeout)
-    }
-
-    fn run_command_with_timeout(
-        cmd: &mut std::process::Command,
-        timeout: Duration,
-    ) -> Result<ExecResult> {
-        let mut child = cmd
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| anyhow!("failed to spawn process: {e}"))?;
-
-        let mut stdout_handle = child.stdout.take();
-        let mut stderr_handle = child.stderr.take();
-
-        let stdout_thread = std::thread::spawn(move || {
-            let mut s = String::new();
-            if let Some(mut out) = stdout_handle.take() {
-                let _ = std::io::Read::read_to_string(&mut out, &mut s);
-            }
-            s
-        });
-
-        let stderr_thread = std::thread::spawn(move || {
-            let mut s = String::new();
-            if let Some(mut err) = stderr_handle.take() {
-                let _ = std::io::Read::read_to_string(&mut err, &mut s);
-            }
-            s
-        });
-
-        let start = std::time::Instant::now();
-        loop {
-            match child.try_wait()? {
-                Some(status) => {
-                    let stdout = stdout_thread.join().unwrap_or_default();
-                    let stderr = stderr_thread.join().unwrap_or_default();
-                    return Ok(ExecResult {
-                        stdout,
-                        stderr,
-                        exit_code: status.code().unwrap_or(-1),
-                        success: status.success(),
-                    });
-                }
-                None => {
-                    if start.elapsed() >= timeout {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        let _ = stdout_thread.join();
-                        let _ = stderr_thread.join();
-                        bail!("command timed out after {} seconds", timeout.as_secs());
-                    }
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-            }
-        }
+        super::process::run_with_timeout(&mut cmd, timeout)
     }
 
     // -----------------------------------------------------------------------
     // App management
     // -----------------------------------------------------------------------
 
-    fn find_app(name: &str) -> Result<App> {
+    pub(crate) fn find_app(name: &str) -> Result<App> {
         if let Ok(app) = App::by_name(name, Duration::from_millis(800)) {
             return Ok(app);
         }
@@ -734,20 +747,54 @@ impl LocalComputer {
 
     pub fn app_focus(&self, name: &str) -> Result<()> {
         let app = Self::find_app(name)?;
+        let window_titles: Vec<String> = app
+            .windows()
+            .map(|ws| ws.iter().filter_map(|w| w.name.clone()).collect())
+            .unwrap_or_default();
+
+        // "Activated" is not "in front": Windows' foreground lock can refuse
+        // the request while reporting success. Only report success once the
+        // app really owns the foreground window, so callers never type into
+        // whatever else is in front.
+        let in_front = || -> bool {
+            #[cfg(target_os = "windows")]
+            {
+                let deadline = std::time::Instant::now() + Duration::from_millis(1500);
+                loop {
+                    if let Some(fg) = super::foreground::foreground() {
+                        // UWP apps' windows belong to ApplicationFrameHost,
+                        // so a matching window title also counts.
+                        if app.pid == Some(fg.pid)
+                            || window_titles
+                                .iter()
+                                .any(|t| !t.is_empty() && *t == fg.title)
+                        {
+                            return true;
+                        }
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        return false;
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            true
+        };
 
         // Top-level windows implement WindowPattern / activate on Windows/macOS/Linux.
         // Trying to activate the root Application node directly fails on Windows UIA
         // with "Action activate not supported on application".
         if let Ok(windows) = app.windows() {
             for win in windows {
-                if win.activate().is_ok() {
+                if win.activate().is_ok() && in_front() {
                     return Ok(());
                 }
             }
         }
 
         // Fallback: try activating the application element directly
-        if app.as_element().activate().is_ok() {
+        if app.as_element().activate().is_ok() && in_front() {
             return Ok(());
         }
 
@@ -761,11 +808,16 @@ impl LocalComputer {
                 let _ = std::process::Command::new("powershell")
                     .args(["-NoProfile", "-Command", &script])
                     .output();
-                return Ok(());
+                if in_front() {
+                    return Ok(());
+                }
             }
         }
 
-        bail!("could not activate application '{name}'")
+        let now = super::foreground::foreground()
+            .map(|fg| format!("; the foreground window is '{}' ({})", fg.title, fg.process))
+            .unwrap_or_default();
+        bail!("could not bring application '{name}' to the foreground{now}")
     }
 
     pub fn app_close(&self, name: &str) -> Result<()> {
@@ -868,9 +920,11 @@ impl LocalComputer {
             None => App::foreground(Duration::from_secs(2))
                 .map_err(|e| anyhow!("no foreground app: {e}"))?,
         };
+        // `None` would walk the whole subtree (an entire browser page); the
+        // tools document a default depth of 8.
         let tree_node = app
             .as_element()
-            .tree(max_depth)
+            .tree(Some(max_depth.unwrap_or(DEFAULT_TREE_DEPTH)))
             .map_err(|e| anyhow!("dump tree failed: {e}"))?;
         let mut out = String::new();
         format_tree_node(&tree_node, 0, &mut out);
@@ -887,6 +941,25 @@ impl LocalComputer {
         locator
             .press()
             .map_err(|e| anyhow!("locator press '{selector}' failed: {e}"))
+    }
+
+    /// The value of the element matching `selector` (its name if it has no
+    /// value, e.g. a label).
+    pub fn ui_get_value(&self, app_name: Option<&str>, selector: &str) -> Result<String> {
+        let app = match app_name {
+            Some(name) => Self::find_app(name)?,
+            None => App::foreground(Duration::from_secs(2))
+                .map_err(|e| anyhow!("no foreground app: {e}"))?,
+        };
+        let el = app
+            .locator(selector)
+            .element()
+            .map_err(|e| anyhow!("no element matches '{selector}': {e}"))?;
+        Ok(el
+            .value
+            .clone()
+            .or_else(|| el.name.clone())
+            .unwrap_or_default())
     }
 
     pub fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {
@@ -946,6 +1019,76 @@ fn format_tree_node(node: &TreeNode, depth: usize, out: &mut String) {
     }
 }
 
+/// VKs for a chord. The final key may be punctuation, looked up on the
+/// target's layout (adding Shift when that layout needs it); letters and
+/// digits stay plain VKs, which is what shortcut handlers match.
+#[cfg(target_os = "windows")]
+fn chord_vks(keys: &[String]) -> Option<Vec<(u16, bool)>> {
+    const VK_SHIFT: u16 = 0x10;
+    let (target, modifiers) = keys.split_last()?;
+    let mut vks: Vec<(u16, bool)> = modifiers
+        .iter()
+        .map(|k| parse_key_vk(k))
+        .collect::<Option<_>>()?;
+    let mut chars = target.chars();
+    let punct = match (chars.next(), chars.next()) {
+        (Some(c), None) if !c.is_ascii_alphanumeric() => super::keys::layout_key(c),
+        _ => None,
+    };
+    match punct {
+        Some(lk) => {
+            if lk.shift && !vks.iter().any(|&(vk, _)| vk == VK_SHIFT) {
+                vks.push((VK_SHIFT, false));
+            }
+            vks.push((lk.vk, false));
+        }
+        None => vks.push(parse_key_vk(target)?),
+    }
+    Some(vks)
+}
+
+#[cfg(target_os = "windows")]
+fn layout_key_vks(lk: super::keys::LayoutKey) -> Vec<(u16, bool)> {
+    let mut vks = Vec::with_capacity(4);
+    if lk.ctrl {
+        vks.push((0x11, false));
+    }
+    if lk.alt {
+        vks.push((0x12, false));
+    }
+    if lk.shift {
+        vks.push((0x10, false));
+    }
+    vks.push((lk.vk, false));
+    vks
+}
+
+/// Press `vks` in order and release them in reverse. If a press fails, the
+/// keys already down are still released, so nothing is left stuck.
+#[cfg(target_os = "windows")]
+fn send_chord(vks: &[(u16, bool)]) -> Result<()> {
+    let mut pressed = 0;
+    let mut result = Ok(());
+    for &(vk, ext) in vks {
+        if let Err(e) = win_send_vk(vk, ext, true) {
+            result = Err(e);
+            break;
+        }
+        pressed += 1;
+    }
+    if result.is_ok() {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    for &(vk, ext) in vks[..pressed].iter().rev() {
+        if let Err(e) = win_send_vk(vk, ext, false)
+            && result.is_ok()
+        {
+            result = Err(e);
+        }
+    }
+    result
+}
+
 #[cfg(target_os = "windows")]
 pub fn win_send_vk(vk: u16, extended: bool, down: bool) -> Result<()> {
     let mut flags = 0u32;
@@ -960,16 +1103,15 @@ pub fn win_send_vk(vk: u16, extended: bool, down: bool) -> Result<()> {
         u: win_input::INPUT_UNION {
             ki: win_input::KEYBDINPUT {
                 w_vk: vk,
-                w_scan: 0,
+                w_scan: super::keys::scan_code(vk),
                 dw_flags: flags,
                 time: 0,
                 dw_extra_info: 0,
             },
         },
     };
-    let sent = unsafe {
-        win_input::SendInput(1, &input, std::mem::size_of::<win_input::INPUT>() as i32)
-    };
+    let sent =
+        unsafe { win_input::SendInput(1, &input, std::mem::size_of::<win_input::INPUT>() as i32) };
     if sent != 1 {
         bail!("SendInput failed for VK 0x{:X}", vk);
     }
@@ -1154,8 +1296,7 @@ mod tests {
                 { "hotkey": ["ctrl", "h"] }
             ]
         });
-        let steps: Vec<KeyboardStep> =
-            serde_json::from_value(json_seq["steps"].clone()).unwrap();
+        let steps: Vec<KeyboardStep> = serde_json::from_value(json_seq["steps"].clone()).unwrap();
         assert_eq!(steps.len(), 5);
         assert_eq!(steps[0].delay_ms, Some(100));
         assert_eq!(steps[2].key, Some("h".to_string()));
@@ -1166,7 +1307,11 @@ mod tests {
         let computer = LocalComputer::new();
         #[cfg(target_os = "windows")]
         let res = computer
-            .execute_command("Write-Output 'HELLO_OPENDESK_EXEC'", Some("powershell"), Some(10))
+            .execute_command(
+                "Write-Output 'HELLO_OPENDESK_EXEC'",
+                Some("powershell"),
+                Some(10),
+            )
             .unwrap();
         #[cfg(not(target_os = "windows"))]
         let res = computer
@@ -1178,6 +1323,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "types into whatever window is focused and overwrites the clipboard; run with --ignored on a test machine"]
     fn test_keyboard_type_preserves_clipboard() {
         let computer = LocalComputer::new();
         let initial_clip = "SECRET_SAVED_CLIPBOARD_DATA_12345";

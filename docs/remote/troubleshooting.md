@@ -20,12 +20,15 @@ You haven't paired anything. Run `opendesk pair` first; once one peer pairs, `se
 
 ---
 
-**The agent gets `Multiple peers paired (...) and no default set`.**
+**Tool calls land on the local machine instead of the remote one.**
 
-That's deliberate. Run `opendesk_use <name>` from the agent (or pass `peer: <name>` on each call) so opendesk knows where actions should land.
+Without a `peer:` argument, calls go to the peer chosen with `opendesk_use`,
+then the persistent default (`opendesk peers default NAME`), and otherwise to
+`local`. Run `opendesk_use <name>` from the agent, pass `peer: <name>` on each
+call, or set a persistent default.
 
 ---
 
 **Permissions on macOS.**
 
-`opendesk serve` needs Accessibility + Screen Recording permission to drive mouse/keyboard and capture the screen — same as the local CLI. Grant them to the Python / terminal binary running `opendesk serve`.
+`opendesk serve` needs Accessibility + Screen Recording permission to drive mouse/keyboard and capture the screen — same as the local CLI. Grant them to the terminal (or the `opendesk` binary) running `opendesk serve`; `opendesk check` reports what is missing.

@@ -1,6 +1,6 @@
 # opendesk
 
-**Open Computer Use Agent** — gives any AI agent eyes and hands on your desktop. Works with any MCP client (Claude Code, Cursor, Windsurf, Continue) and any AI framework (Anthropic SDK, OpenAI, LangChain). Runs on macOS, Linux, and Windows.
+**Open Computer Use Agent** — gives any AI agent eyes and hands on your desktop. Written in Rust (`opendesk-rs`). Works with any MCP client (Claude Code, Claude Desktop, Cursor, Windsurf, Continue) and any agent framework that can talk to an MCP server. Runs on macOS, Linux, and Windows.
 
 ```{toctree}
 :maxdepth: 2
