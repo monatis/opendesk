@@ -629,6 +629,7 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     caps.insert("system.privacy".to_string(), rmpv::Value::Boolean(true));
     // input.* honours a `guard` parameter (see computer::foreground).
     caps.insert("input.guard".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("ui.value".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
     if !desc.is_empty() {
@@ -1063,6 +1064,17 @@ pub(crate) async fn dispatch_call(
             computer
                 .ui_click(app_name, selector)
                 .map(|_| rmpv::Value::Nil)
+                .map_err(|e| e.to_string())
+        }
+        "ui.value" => {
+            let app_name = params.get("app").and_then(|v| v.as_str());
+            let selector = params
+                .get("selector")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'selector'")?;
+            computer
+                .ui_get_value(app_name, selector)
+                .map(rmpv::Value::from)
                 .map_err(|e| e.to_string())
         }
         "clipboard.read" => {

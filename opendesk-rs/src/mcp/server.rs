@@ -1808,6 +1808,60 @@ impl McpServer {
                             json!({ "type": "text", "text": format!("{prefix}Typed into '{selector}'.") }),
                         ])
                     }
+                    "click_menu" => {
+                        let menu = args
+                            .get("menu")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'menu' required"))?;
+                        let item = args
+                            .get("menu_item")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'menu_item' required"))?;
+                        if let Some(app_name) = app {
+                            remote.app_focus(app_name).await?;
+                        }
+                        tokio::time::sleep(Duration::from_millis(150)).await;
+                        remote
+                            .ui_click(app, menu)
+                            .await
+                            .map_err(|e| anyhow!("could not open menu {menu:?}: {e}"))?;
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        remote.ui_click(app, item).await.map_err(|e| {
+                            anyhow!("opened {menu:?} but could not click {item:?}: {e}")
+                        })?;
+                        Ok(vec![
+                            json!({ "type": "text", "text": format!("{prefix}Clicked {menu} → {item} in {}.", app.unwrap_or("app")) }),
+                        ])
+                    }
+                    "press_key" => {
+                        let key = args
+                            .get("key")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'key' required"))?;
+                        let mut chord: Vec<&str> = args
+                            .get("modifiers")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| arr.iter().filter_map(|x| x.as_str()).collect())
+                            .unwrap_or_default();
+                        if let Some(app_name) = app {
+                            remote.app_focus(app_name).await?;
+                        }
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        chord.push(key);
+                        remote.keyboard_hotkey(&chord).await?;
+                        Ok(vec![
+                            json!({ "type": "text", "text": format!("{prefix}Pressed {}.", chord.join("+")) }),
+                        ])
+                    }
+                    "get_value" => {
+                        let selector = args
+                            .get("selector")
+                            .or_else(|| args.get("title"))
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("'selector' or 'title' required"))?;
+                        let value = remote.ui_get_value(app, selector).await?;
+                        Ok(vec![json!({ "type": "text", "text": value })])
+                    }
                     _ => Err(anyhow!("Unknown remote ui action: {action}")),
                 }
             }

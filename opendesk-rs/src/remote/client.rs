@@ -665,6 +665,20 @@ impl RemoteComputer {
         Ok(())
     }
 
+    /// Value (or name) of the element matching `selector` on the peer.
+    pub async fn ui_get_value(&self, app_name: Option<&str>, selector: &str) -> Result<String> {
+        if !self.capabilities.contains_key("ui.value") {
+            bail!("this peer's opendesk is too old to read element values (ui.value); update it");
+        }
+        let mut params = HashMap::new();
+        params.insert("selector".to_string(), rmpv::Value::from(selector));
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
+        }
+        let res = self.call("ui.value", params).await?;
+        Ok(res.as_str().unwrap_or_default().to_string())
+    }
+
     pub async fn ui_type(&self, app_name: Option<&str>, selector: &str, text: &str) -> Result<()> {
         self.ui_click(app_name, selector).await?;
         self.keyboard_type(text).await?;
