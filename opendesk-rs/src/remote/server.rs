@@ -1146,17 +1146,11 @@ pub(crate) async fn dispatch_call(
                 (rmpv::Value::from("description"), rmpv::Value::from("")),
             ]))
         }
-        "system.environment" => Ok(rmpv::Value::Map(vec![
-            (
-                rmpv::Value::from("os"),
-                rmpv::Value::from(std::env::consts::OS),
-            ),
-            (rmpv::Value::from("os_version"), rmpv::Value::from("")),
-            (rmpv::Value::from("hostname"), rmpv::Value::from("")),
-            (rmpv::Value::from("locale"), rmpv::Value::from("")),
-            (rmpv::Value::from("timezone"), rmpv::Value::from("")),
-            (rmpv::Value::from("displays"), rmpv::Value::Array(vec![])),
-        ])),
+        // Also the client's liveness ping, so keep it cheap.
+        "system.environment" => {
+            rmpv::ext::to_value(crate::computer::environment::Environment::current())
+                .map_err(|e| e.to_string())
+        }
         "system.privacy" => {
             let lock_input = params
                 .get("lock_input")

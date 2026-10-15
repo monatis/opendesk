@@ -665,6 +665,21 @@ impl RemoteComputer {
         Ok(())
     }
 
+    /// The peer's environment, and how far its clock is ahead of ours (ms,
+    /// negative = behind), estimated at the midpoint of the round trip.
+    /// The offset is `None` for older peers that do not report their clock.
+    pub async fn environment(
+        &self,
+    ) -> Result<(crate::computer::environment::Environment, Option<i64>)> {
+        let t0 = chrono::Utc::now().timestamp_millis();
+        let res = self.call("system.environment", HashMap::new()).await?;
+        let t1 = chrono::Utc::now().timestamp_millis();
+        let env: crate::computer::environment::Environment = rmpv::ext::from_value(res)
+            .map_err(|e| anyhow!("malformed system.environment reply: {e}"))?;
+        let offset = (env.time_unix_ms > 0).then(|| env.time_unix_ms - (t0 + t1) / 2);
+        Ok((env, offset))
+    }
+
     /// Value (or name) of the element matching `selector` on the peer.
     pub async fn ui_get_value(&self, app_name: Option<&str>, selector: &str) -> Result<String> {
         if !self.capabilities.contains_key("ui.value") {

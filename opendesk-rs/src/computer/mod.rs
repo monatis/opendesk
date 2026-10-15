@@ -1,3 +1,4 @@
+pub mod environment;
 pub mod foreground;
 pub mod keys;
 pub mod local;

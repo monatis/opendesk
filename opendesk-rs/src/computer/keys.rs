@@ -176,6 +176,13 @@ pub fn layout_key(c: char) -> Option<LayoutKey> {
     scanned
 }
 
+/// Foreground window's keyboard layout handle as a number: the low word is
+/// the language id, the high word the layout (e.g. 0x041F041F, Turkish-Q).
+#[cfg(target_os = "windows")]
+pub fn foreground_layout_id() -> u32 {
+    win::foreground_layout() as usize as u32
+}
+
 /// Hardware scan code for `vk` on the foreground layout (0 if unknown).
 /// Some consumers (screen readers, games) read the scan code, not the VK.
 #[cfg(target_os = "windows")]

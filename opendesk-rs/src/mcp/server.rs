@@ -858,7 +858,7 @@ impl McpServer {
             }),
             json!({
                 "name": "opendesk_capabilities",
-                "description": "Show what the given peer's backend can do (input devices, screen capture, filesystem, etc.). Omit `peer` for the current default.",
+                "description": "Show what the given peer can do (the capabilities it advertises) and its environment: OS, locale, keyboard layout, time zone, clock offset from this machine, and displays with their scaling. Check it before typing or clicking on an unfamiliar peer. Omit `peer` for the current default.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -2475,15 +2475,34 @@ impl McpServer {
             session.resolve(peer_arg).await?
         };
 
-        if remote_opt.is_none() {
-            let text = "Peer: local\nBackend: xa11y\nProtocol: 1\nCapabilities:\n  - app_close\n  - app_focus\n  - app_list\n  - app_open\n  - clipboard_read\n  - clipboard_write\n  - keyboard_hold\n  - keyboard_hotkey\n  - keyboard_press\n  - keyboard_sequence\n  - keyboard_type\n  - mouse_click\n  - mouse_drag\n  - mouse_move\n  - mouse_scroll\n  - opendesk_exec\n  - screenshot\n  - ui_click\n  - ui_tree\n  - ui_type";
-            Ok(vec![json!({ "type": "text", "text": text })])
-        } else {
-            let text = format!(
-                "Peer: {resolved}\nBackend: opendesk-remote\nProtocol: 1\nCapabilities:\n  - app\n  - clipboard\n  - keyboard\n  - mouse\n  - opendesk_exec\n  - screenshot\n  - ui"
-            );
-            Ok(vec![json!({ "type": "text", "text": text })])
-        }
+        let text = match remote_opt {
+            None => format!(
+                "Peer: local\nBackend: xa11y\nProtocol: 1\n{}\nCapabilities:\n  - app_close\n  - app_focus\n  - app_list\n  - app_open\n  - clipboard_read\n  - clipboard_write\n  - keyboard_hold\n  - keyboard_hotkey\n  - keyboard_press\n  - keyboard_sequence\n  - keyboard_type\n  - mouse_click\n  - mouse_drag\n  - mouse_move\n  - mouse_scroll\n  - opendesk_exec\n  - screenshot\n  - ui_click\n  - ui_tree\n  - ui_type",
+                crate::computer::environment::Environment::current().describe(None)
+            ),
+            Some(remote) => {
+                // What the peer itself advertised, not a canned list.
+                let mut caps: Vec<&str> = remote
+                    .capabilities()
+                    .keys()
+                    .map(String::as_str)
+                    .filter(|k| *k != "description")
+                    .collect();
+                caps.sort_unstable();
+                let env = match remote.environment().await {
+                    Ok((env, offset)) => env.describe(offset),
+                    Err(e) => format!("Environment: unavailable ({e})"),
+                };
+                format!(
+                    "Peer: {resolved}\nBackend: opendesk-remote\nProtocol: 1\n{env}\nCapabilities:\n{}",
+                    caps.iter()
+                        .map(|c| format!("  - {c}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            }
+        };
+        Ok(vec![json!({ "type": "text", "text": text })])
     }
 
     async fn admin_disconnect(&self, args: &Value) -> Result<Vec<Value>> {
