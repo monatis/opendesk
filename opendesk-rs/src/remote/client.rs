@@ -693,6 +693,24 @@ impl RemoteComputer {
         }
     }
 
+    /// The peer's front window as viewer lines (see computer::viewer).
+    pub async fn window_text(&self, app_name: Option<&str>) -> Result<Vec<String>> {
+        self.require_cap("ui.text", "window text")?;
+        let mut params = HashMap::new();
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
+        }
+        let res = self.call("ui.text", params).await?;
+        Ok(res
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
     /// Wait on the peer until `selector` reaches `state` (see computer::watch).
     pub async fn ui_wait(
         &self,

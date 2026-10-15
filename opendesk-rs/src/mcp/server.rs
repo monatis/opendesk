@@ -685,11 +685,11 @@ impl McpServer {
             }),
             json!({
                 "name": "ui",
-                "description": "Interact with UI elements by name on any OS — no coordinates needed. ALWAYS try this before the mouse tool. Actions:\n  get_tree   — list all accessible elements in the app window\n  click      — click a button or element by its title\n  click_menu — click a menu item, e.g. File → Save\n  type       — type text (clipboard-paste, Unicode-safe)\n  press_key  — press a key or chord: key='return', modifiers=['command']\n  get_value  — read the current text value of a named element\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
+                "description": "Interact with UI elements by name on any OS — no coordinates needed. ALWAYS try this before the mouse tool. Actions:\n  window_text — the front window as plain text lines, like a screen reader's virtual viewer: classic dialogs by screen rows (labels beside values, buttons on their row), modern apps one element per line with role and state. Much cheaper than a screenshot; try it first to read a window.\n  get_tree   — list all accessible elements in the app window\n  click      — click a button or element by its title\n  click_menu — click a menu item, e.g. File → Save\n  type       — type text into an element (Unicode-safe; the clipboard is not used)\n  press_key  — press a key or chord: key='return', modifiers=['command']\n  get_value  — read the current text value of a named element\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["get_tree", "click", "click_menu", "type", "press_key", "get_value"], "description": "UI action to perform." },
+                        "action": { "type": "string", "enum": ["get_tree", "window_text", "click", "click_menu", "type", "press_key", "get_value"], "description": "UI action to perform." },
                         "app": { "type": "string", "description": "Application name / process name. macOS: process name as in Activity Monitor, e.g. 'TextEdit', 'Safari'. Linux: process or window title, e.g. 'gedit', 'firefox'. Windows: executable name or title, e.g. 'Notepad', 'notepad.exe'." },
                         "title": { "type": "string", "description": "Title or label of the UI element." },
                         "role": { "type": "string", "description": "Element role to narrow the search. macOS: 'button', 'text field', 'text area', 'checkbox'. Linux: 'push button', 'entry', 'text', 'check box'. Windows: 'Button', 'Edit', 'Text', 'CheckBox', 'ComboBox'." },
@@ -1429,6 +1429,16 @@ impl McpServer {
                             json!({ "type": "text", "text": format!("{prefix}Pressed {} in {}.", chord.join("+"), app.unwrap_or("app")) }),
                         ])
                     }
+                    "window_text" => {
+                        let computer = self.computer.clone();
+                        let app_owned = app.map(str::to_string);
+                        let lines = tokio::task::spawn_blocking(move || {
+                            computer.window_text(app_owned.as_deref())
+                        })
+                        .await??;
+                        Ok(vec![json!({ "type": "text", "text": lines.join("
+") })])
+                    }
                     "get_value" => {
                         // Used to ignore the element and dump the app's tree.
                         let selector = args
@@ -1872,6 +1882,13 @@ impl McpServer {
                         remote.keyboard_hotkey(&chord).await?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Pressed {}.", chord.join("+")) }),
+                        ])
+                    }
+                    "window_text" => {
+                        let lines = remote.window_text(app).await?;
+                        Ok(vec![
+                            json!({ "type": "text", "text": format!("{prefix}{}", lines.join("
+")) }),
                         ])
                     }
                     "get_value" => {

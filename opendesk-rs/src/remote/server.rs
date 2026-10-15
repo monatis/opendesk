@@ -632,6 +632,7 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     caps.insert("input.guard".to_string(), rmpv::Value::Boolean(true));
     caps.insert("ui.value".to_string(), rmpv::Value::Boolean(true));
     caps.insert("ui.wait".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("ui.text".to_string(), rmpv::Value::Boolean(true));
     caps.insert("events".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
@@ -1070,6 +1071,20 @@ pub(crate) async fn dispatch_call(
                 .ui_click(app_name, selector)
                 .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
+        }
+        "ui.text" => {
+            let app = params
+                .get("app")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let computer = computer.clone();
+            let lines = tokio::task::spawn_blocking(move || computer.window_text(app.as_deref()))
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| e.to_string())?;
+            Ok(rmpv::Value::Array(
+                lines.into_iter().map(rmpv::Value::from).collect(),
+            ))
         }
         "ui.wait" => {
             let app = params

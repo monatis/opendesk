@@ -5,4 +5,5 @@ pub mod local;
 pub mod permissions;
 pub mod privacy;
 pub mod process;
+pub mod viewer;
 pub mod watch;

@@ -464,6 +464,7 @@ async fn test_live_wait_and_events_over_rpc() -> Result<()> {
     let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
     assert!(remote.capabilities().contains_key("ui.wait"));
     assert!(remote.capabilities().contains_key("events"));
+    assert!(remote.capabilities().contains_key("ui.text"));
 
     let err = remote
         .ui_wait(
