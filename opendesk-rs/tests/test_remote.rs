@@ -6,13 +6,22 @@ use opendesk_rs::remote::rendezvous::RendezvousServer;
 use opendesk_rs::remote::server::OpendeskServer;
 use std::sync::Arc;
 
-/// Tests that round-trip the real system clipboard run one at a time;
-/// in parallel they overwrite each other's text.
-static CLIPBOARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// Round-trip an RPC that leaves the desktop alone (no clipboard, no input)
+/// and check the marker comes back.
+async fn assert_echo(remote: &opendesk_rs::remote::client::RemoteComputer, marker: &str) {
+    #[cfg(target_os = "windows")]
+    let shell = "cmd";
+    #[cfg(not(target_os = "windows"))]
+    let shell = "sh";
+    let res = remote
+        .exec(&format!("echo {marker}"), Some(shell), Some(20))
+        .await
+        .unwrap();
+    assert!(res.stdout.contains(marker), "{res:?}");
+}
 
 #[tokio::test]
 async fn test_live_pairing_and_rpc() -> Result<()> {
-    let _clipboard = CLIPBOARD.lock().await;
     let server_dir = tempfile::tempdir()?;
     let client_dir = tempfile::tempdir()?;
 
@@ -50,16 +59,13 @@ async fn test_live_pairing_and_rpc() -> Result<()> {
     assert_eq!(server_pub, s_id.public_bytes());
 
     // Test calling an RPC method on the newly paired remote computer
-    remote.clipboard_write("PAIRING_TEST_OK").await?;
-    let text = remote.clipboard_read().await?;
-    assert_eq!(text, "PAIRING_TEST_OK");
+    assert_echo(&remote, "PAIRING_TEST_OK").await;
 
     Ok(())
 }
 
 #[tokio::test]
 async fn test_live_reconnect_and_serve() -> Result<()> {
-    let _clipboard = CLIPBOARD.lock().await;
     let server_dir = tempfile::tempdir()?;
     let client_dir = tempfile::tempdir()?;
 
@@ -92,14 +98,7 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
     // Connect via authenticated static keys
     let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
 
-    // Test remote clipboard write and read
-    remote
-        .clipboard_write("OPENDESK_RUST_REMOTE_SUCCESS")
-        .await?;
-    let read_back = remote.clipboard_read().await?;
-    assert_eq!(read_back, "OPENDESK_RUST_REMOTE_SUCCESS");
-
-    // Test privacy RPC capabilities and set/get
+    // Advertised capabilities
     assert!(remote.capabilities().contains_key("system.privacy"));
     assert!(remote.capabilities().contains_key("process.exec"));
     assert!(remote.capabilities().contains_key("input.sequence"));
@@ -128,6 +127,48 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
     }];
     remote.keyboard_sequence(&seq_steps).await?;
 
+    // Abort server background loop
+    server_task.abort();
+    Ok(())
+}
+
+/// RPCs that act on this machine's real desktop: they overwrite the
+/// clipboard and briefly lock physical keyboard/mouse input.
+#[tokio::test]
+#[ignore = "overwrites the clipboard and locks physical input; run with --ignored on a test machine"]
+async fn test_live_desktop_rpcs() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18434;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+
+    remote
+        .clipboard_write("OPENDESK_RUST_REMOTE_SUCCESS")
+        .await?;
+    assert_eq!(
+        remote.clipboard_read().await?,
+        "OPENDESK_RUST_REMOTE_SUCCESS"
+    );
+
     let st = remote.set_privacy(true, false).await?;
     assert!(st.lock_input);
     let st_status = remote.get_privacy().await?;
@@ -135,7 +176,6 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
     let st_reset = remote.set_privacy(false, false).await?;
     assert!(!st_reset.lock_input);
 
-    // Abort server background loop
     server_task.abort();
     Ok(())
 }
@@ -196,7 +236,6 @@ async fn test_live_exec_timeout_returns_partial_output() -> Result<()> {
 
 #[tokio::test]
 async fn test_live_rendezvous_signaling_and_relay() -> Result<()> {
-    let _clipboard = CLIPBOARD.lock().await;
     let r_port = 18426;
 
     let r_server = RendezvousServer::new("127.0.0.1", r_port, Some("test-token".to_string()));
@@ -244,9 +283,7 @@ async fn test_live_rendezvous_signaling_and_relay() -> Result<()> {
     .await?;
 
     // Execute command through the relay!
-    remote.clipboard_write("RENDEZVOUS_RELAY_OK").await?;
-    let text = remote.clipboard_read().await?;
-    assert_eq!(text, "RENDEZVOUS_RELAY_OK");
+    assert_echo(&remote, "RENDEZVOUS_RELAY_OK").await;
 
     server_task.abort();
     r_task.abort();
@@ -271,7 +308,6 @@ async fn wait_for_count<F: Fn() -> usize>(
 
 #[tokio::test]
 async fn test_rendezvous_relay_sessions_do_not_leak_connections() -> Result<()> {
-    let _clipboard = CLIPBOARD.lock().await;
     let r_port = 18428;
 
     let r_server = Arc::new(RendezvousServer::new(
@@ -330,9 +366,7 @@ async fn test_rendezvous_relay_sessions_do_not_leak_connections() -> Result<()> 
             i
         );
 
-        let marker = format!("RELAY_LEAK_TEST_{}", i);
-        remote.clipboard_write(&marker).await?;
-        assert_eq!(remote.clipboard_read().await?, marker);
+        assert_echo(&remote, &format!("RELAY_LEAK_TEST_{}", i)).await;
 
         // Controller disconnects: both relay legs must be torn down.
         drop(remote);
