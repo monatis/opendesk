@@ -742,7 +742,12 @@ impl McpServer {
                         "timeout_secs": {
                             "type": "number",
                             "default": 30.0,
-                            "description": "Maximum execution time in seconds before terminating process (default: 30)."
+                            "description": "Maximum execution time in seconds; the whole process tree is killed after it (default: 30; for background jobs, no limit unless given)."
+                        },
+                        "background": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Start the command and return a job id immediately instead of waiting. Use `opendesk_job` to poll its output and status or kill it. For anything that may run longer than a few minutes."
                         },
                         "peer": {
                             "type": "string",
@@ -892,6 +897,21 @@ impl McpServer {
                 }
             }),
             json!({
+                "name": "opendesk_job",
+                "description": "Manage background commands started with `opendesk_exec` and `background: true`. `poll` returns the output produced since the last poll plus the job's status (with `wait_ms`, waits until there is output or the job ends); a finished job is forgotten once its final output is returned. `kill` ends the job's whole process tree. `list` shows known jobs.\n\nRoutes to the session's default peer unless 'peer' is provided.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["poll", "kill", "list"] },
+                        "job_id": { "type": "integer" },
+                        "wait_ms": { "type": "integer", "default": 0, "description": "For poll: wait up to this long (max 120000) for output or completion." },
+                        "peer": { "type": "string" }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                }
+            }),
+            json!({
                 "name": "opendesk_file",
                 "description": "Copy files between this machine and a remote peer, verified by SHA-256. `push` sends local_path to remote_path, `pull` fetches remote_path to local_path, `stat` shows a remote file's size and SHA-256. The destination is replaced only after the whole file arrives and its checksum matches, so an interrupted copy never leaves a half-written file. `~` in remote_path is the peer's home directory.",
                 "inputSchema": {
@@ -1000,6 +1020,10 @@ impl McpServer {
             "opendesk_guard" => return self.admin_guard(args).await,
             "opendesk_wait" => return self.admin_wait(args).await,
             "opendesk_file" => return self.admin_file(args).await,
+            "opendesk_job" => return self.admin_job(args).await,
+            "opendesk_exec" if args.get("background").and_then(|v| v.as_bool()) == Some(true) => {
+                return self.admin_exec_background(args).await;
+            }
             "opendesk_events" => return self.admin_events(args).await,
             "audit" => return self.execute_audit(args).await,
             "schedule" => return self.execute_schedule(args).await,
@@ -2575,6 +2599,160 @@ impl McpServer {
         Ok(vec![json!({ "type": "text", "text": msg })])
     }
 
+    async fn admin_exec_background(&self, args: &Value) -> Result<Vec<Value>> {
+        let command = args
+            .get("command")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("missing command"))?;
+        let shell = args.get("shell").and_then(|v| v.as_str());
+        // Unlike foreground exec, background jobs have no default limit.
+        let timeout = args
+            .get("timeout_secs")
+            .is_some()
+            .then(|| exec_timeout_arg(args))
+            .flatten();
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let id = match remote_opt {
+            Some(r) => r.job_start(command, shell, timeout).await?,
+            None => self.computer.job_start(
+                command,
+                shell,
+                timeout.map(std::time::Duration::from_secs),
+            )?,
+        };
+        let on = if target == "local" {
+            String::new()
+        } else {
+            format!(" on {target}")
+        };
+        Ok(vec![json!({
+            "type": "text",
+            "text": format!("Started job {id}{on}. Poll it with opendesk_job (action='poll', job_id={id}).")
+        })])
+    }
+
+    async fn admin_job(&self, args: &Value) -> Result<Vec<Value>> {
+        use crate::computer::process::JobPoll;
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'action' required"))?;
+        let job_id = || {
+            args.get("job_id")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| anyhow!("'job_id' required for {action}"))
+        };
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let poll_once = |id: u64| {
+            let remote = remote_opt.clone();
+            let computer = self.computer.clone();
+            async move {
+                match remote {
+                    Some(r) => r.job_poll(id).await,
+                    None => tokio::task::spawn_blocking(move || computer.job_poll(id)).await?,
+                }
+            }
+        };
+        let describe = |p: &JobPoll| {
+            let status = if p.running {
+                format!("running ({:.0} s)", p.elapsed_secs)
+            } else if p.timed_out {
+                "timed out (process tree killed)".to_string()
+            } else if p.killed {
+                "killed".to_string()
+            } else {
+                format!("exited with code {}", p.exit_code.unwrap_or(-1))
+            };
+            let mut s = format!("Job {} [{status}]: {}", p.job_id, p.command);
+            if !p.stdout.is_empty() {
+                s.push_str(&format!("\n--- new stdout ---\n{}", p.stdout.trim_end()));
+            }
+            if !p.stderr.is_empty() {
+                s.push_str(&format!("\n--- new stderr ---\n{}", p.stderr.trim_end()));
+            }
+            s
+        };
+        let text = match action {
+            "poll" => {
+                let id = job_id()?;
+                let wait = std::time::Duration::from_millis(
+                    args.get("wait_ms")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0)
+                        .min(120_000),
+                );
+                let deadline = std::time::Instant::now() + wait;
+                // Each poll drains output, so gather it across the wait.
+                let mut acc = poll_once(id).await?;
+                while acc.running
+                    && acc.stdout.is_empty()
+                    && acc.stderr.is_empty()
+                    && std::time::Instant::now() < deadline
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    let next = poll_once(id).await?;
+                    acc.stdout.push_str(&next.stdout);
+                    acc.stderr.push_str(&next.stderr);
+                    acc = JobPoll {
+                        stdout: std::mem::take(&mut acc.stdout),
+                        stderr: std::mem::take(&mut acc.stderr),
+                        ..next
+                    };
+                }
+                describe(&acc)
+            }
+            "kill" => {
+                let id = job_id()?;
+                let p = match &remote_opt {
+                    Some(r) => r.job_kill(id).await?,
+                    None => {
+                        let computer = self.computer.clone();
+                        tokio::task::spawn_blocking(move || computer.job_kill(id)).await??
+                    }
+                };
+                describe(&p)
+            }
+            "list" => {
+                let jobs = match &remote_opt {
+                    Some(r) => r.job_list().await?,
+                    None => self.computer.job_list()?,
+                };
+                if jobs.is_empty() {
+                    "No background jobs.".to_string()
+                } else {
+                    jobs.iter()
+                        .map(|j| {
+                            format!(
+                                "Job {} [{}]: {}",
+                                j.job_id,
+                                if j.running {
+                                    "running"
+                                } else {
+                                    "finished, not yet collected"
+                                },
+                                j.command
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            }
+            other => bail!("Unknown job action: {other}"),
+        };
+        let prefix = if target == "local" {
+            String::new()
+        } else {
+            format!("[on {target}] ")
+        };
+        Ok(vec![
+            json!({ "type": "text", "text": format!("{prefix}{text}") }),
+        ])
+    }
+
     async fn admin_file(&self, args: &Value) -> Result<Vec<Value>> {
         let action = args
             .get("action")
@@ -3194,9 +3372,10 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_guard"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_wait"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_file"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_job"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_events"));
 
-        assert_eq!(tools.len(), 24);
+        assert_eq!(tools.len(), 25);
     }
 
     #[cfg(target_os = "windows")]

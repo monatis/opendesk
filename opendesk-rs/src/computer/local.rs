@@ -94,6 +94,32 @@ pub mod win_input {
     }
 }
 
+/// The shell invocation for `command`: PowerShell (default) or cmd on
+/// Windows, `sh` (or the named shell) elsewhere. Also returns a temp script
+/// to delete afterwards, for PowerShell scripts too long for a command line.
+pub(crate) fn shell_command(
+    command: &str,
+    shell: Option<&str>,
+) -> Result<(std::process::Command, Option<std::path::PathBuf>)> {
+    #[cfg(target_os = "windows")]
+    {
+        let shell_choice = shell.unwrap_or("powershell").to_lowercase();
+        if shell_choice == "cmd" || shell_choice == "cmd.exe" {
+            let mut c = std::process::Command::new("cmd.exe");
+            c.args(["/C", command]);
+            Ok((c, None))
+        } else {
+            super::process::powershell_command(command)
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut c = std::process::Command::new(shell.unwrap_or("sh"));
+        c.args(["-c", command]);
+        Ok((c, None))
+    }
+}
+
 /// Depth used for UI tree reads when the caller gives none.
 pub const DEFAULT_TREE_DEPTH: usize = 8;
 
@@ -105,6 +131,8 @@ pub struct LocalComputer {
     last_capture: std::sync::Arc<std::sync::Mutex<Option<xa11y::Screenshot>>>,
     /// Running accessibility-event watch (see `watch`).
     pub(crate) watcher: std::sync::Arc<std::sync::Mutex<Option<super::watch::EventWatcher>>>,
+    /// Background commands (see `jobs`).
+    pub(crate) jobs: std::sync::Arc<std::sync::Mutex<super::jobs::JobTable>>,
 }
 
 impl Default for LocalComputer {
@@ -120,6 +148,7 @@ impl LocalComputer {
             held: Default::default(),
             last_capture: Default::default(),
             watcher: Default::default(),
+            jobs: Default::default(),
         }
     }
 
@@ -649,27 +678,7 @@ impl LocalComputer {
         timeout_secs: Option<u64>,
     ) -> Result<ExecResult> {
         let timeout = Duration::from_secs(timeout_secs.unwrap_or(30));
-
-        #[cfg(target_os = "windows")]
-        let (mut cmd, temp_script) = {
-            let shell_choice = shell.unwrap_or("powershell").to_lowercase();
-            if shell_choice == "cmd" || shell_choice == "cmd.exe" {
-                let mut c = std::process::Command::new("cmd.exe");
-                c.args(["/C", command]);
-                (c, None)
-            } else {
-                super::process::powershell_command(command)?
-            }
-        };
-
-        #[cfg(not(target_os = "windows"))]
-        let (mut cmd, temp_script): (_, Option<std::path::PathBuf>) = {
-            let shell_choice = shell.unwrap_or("sh");
-            let mut c = std::process::Command::new(shell_choice);
-            c.args(["-c", command]);
-            (c, None)
-        };
-
+        let (mut cmd, temp_script) = shell_command(command, shell)?;
         let res = super::process::run_with_timeout(&mut cmd, timeout);
         if let Some(path) = temp_script {
             let _ = std::fs::remove_file(path);

@@ -128,6 +128,150 @@ pub fn run_with_timeout(cmd: &mut Command, timeout: Duration) -> Result<ExecResu
     })
 }
 
+/// A command started in the background: poll it for new output and its exit
+/// status, or kill its whole process tree.
+pub struct BackgroundProcess {
+    pub command: String,
+    child: std::process::Child,
+    tree: ProcessTree,
+    stdout: SharedBuf,
+    stderr: SharedBuf,
+    started: Instant,
+    deadline: Option<Instant>,
+    exit: Option<std::process::ExitStatus>,
+    timed_out: bool,
+    killed: bool,
+    temp_script: Option<std::path::PathBuf>,
+}
+
+/// One poll's view of a background job.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(default)]
+pub struct JobPoll {
+    pub job_id: u64,
+    pub command: String,
+    pub running: bool,
+    pub exit_code: Option<i32>,
+    pub timed_out: bool,
+    pub killed: bool,
+    pub elapsed_secs: f64,
+    /// Output produced since the previous poll.
+    pub stdout: String,
+    pub stderr: String,
+}
+
+impl BackgroundProcess {
+    pub fn spawn(
+        cmd: &mut Command,
+        command: &str,
+        timeout: Option<Duration>,
+        temp_script: Option<std::path::PathBuf>,
+    ) -> Result<Self> {
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| anyhow!("failed to spawn process: {e}"))?;
+        let tree = ProcessTree::attach(&child);
+        let (stdout, _) = spawn_reader(child.stdout.take());
+        let (stderr, _) = spawn_reader(child.stderr.take());
+        let started = Instant::now();
+        Ok(Self {
+            command: command.to_string(),
+            child,
+            tree,
+            stdout,
+            stderr,
+            started,
+            deadline: timeout.map(|t| started + t),
+            exit: None,
+            timed_out: false,
+            killed: false,
+            temp_script,
+        })
+    }
+
+    fn refresh(&mut self) {
+        if self.exit.is_some() {
+            return;
+        }
+        if let Ok(Some(status)) = self.child.try_wait() {
+            self.finish(status);
+        } else if self.deadline.is_some_and(|d| Instant::now() >= d) {
+            self.timed_out = true;
+            self.kill();
+        }
+    }
+
+    fn finish(&mut self, status: std::process::ExitStatus) {
+        self.exit = Some(status);
+        if let Some(p) = self.temp_script.take() {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+
+    pub fn is_running(&mut self) -> bool {
+        self.refresh();
+        self.exit.is_none()
+    }
+
+    /// Kill the whole process tree.
+    pub fn kill(&mut self) {
+        if self.exit.is_some() {
+            return;
+        }
+        self.killed = true;
+        self.tree.kill(&mut self.child);
+        if let Ok(status) = self.child.wait() {
+            self.finish(status);
+        }
+    }
+
+    /// Status plus the output produced since the previous poll.
+    pub fn poll(&mut self, job_id: u64) -> JobPoll {
+        self.refresh();
+        let running = self.exit.is_none();
+        if !running {
+            // Let output still in flight arrive before the final read.
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let mut stderr = decode_output(&take_complete(&self.stderr, !running));
+        if self.timed_out && !running {
+            stderr.push_str("[opendesk] job timed out; its process tree was killed\n");
+        }
+        JobPoll {
+            job_id,
+            command: self.command.clone(),
+            running,
+            exit_code: self.exit.and_then(|s| s.code()),
+            timed_out: self.timed_out,
+            killed: self.killed,
+            elapsed_secs: self.started.elapsed().as_secs_f64(),
+            stdout: decode_output(&take_complete(&self.stdout, !running)),
+            stderr,
+        }
+    }
+}
+
+/// Drain `buf`, but keep a trailing incomplete UTF-8 sequence for the next
+/// read so a character split across polls is not garbled.
+fn take_complete(buf: &SharedBuf, everything: bool) -> Vec<u8> {
+    let Ok(mut b) = buf.lock() else {
+        return Vec::new();
+    };
+    let keep_from = match std::str::from_utf8(&b) {
+        Err(e) if !everything && e.error_len().is_none() => e.valid_up_to(),
+        _ => b.len(),
+    };
+    b.drain(..keep_from).collect()
+}
+
 type SharedBuf = Arc<Mutex<Vec<u8>>>;
 
 fn spawn_reader<R: Read + Send + 'static>(pipe: Option<R>) -> (SharedBuf, Option<JoinHandle<()>>) {

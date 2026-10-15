@@ -136,3 +136,25 @@ From the command line:
 opendesk push ./app.exe "~/bin/app.exe" --peer old-pc
 opendesk pull "~/logs/run.log" ./run.log --peer old-pc
 ```
+
+## Background jobs: `opendesk_exec` with `background: true`, and `opendesk_job`
+
+For anything that may run longer than a few minutes, start it in the
+background and poll it, instead of holding one long `opendesk_exec` open:
+
+```json
+{ "command": "C:/lab/run-batch.ps1", "background": true, "peer": "old-pc" }
+```
+
+returns a job id at once. Then `opendesk_job`:
+
+- `{"action": "poll", "job_id": 3, "wait_ms": 5000}` returns the output produced
+  since the previous poll and the status (running, exit code, timed out,
+  killed). With `wait_ms` it waits until there is new output or the job ends.
+  A finished job is forgotten once its final output has been returned.
+- `{"action": "kill", "job_id": 3}` kills the job's whole process tree.
+- `{"action": "list"}` shows known jobs.
+
+Background jobs have no time limit unless `timeout_secs` is given, and they
+keep running if the controller disconnects. Up to 16 can run at once per
+machine.

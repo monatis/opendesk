@@ -573,3 +573,71 @@ async fn test_live_file_push_and_pull_are_verified() -> Result<()> {
     server_task.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn test_live_background_jobs_over_rpc() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18437;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+
+    #[cfg(target_os = "windows")]
+    let (quick, long, shell) = (
+        "echo job-one & ping -n 2 127.0.0.1 >nul & echo job-two & exit 7",
+        "ping -n 60 127.0.0.1 >nul",
+        "cmd",
+    );
+    #[cfg(not(target_os = "windows"))]
+    let (quick, long, shell) = (
+        "echo job-one; sleep 1; echo job-two; exit 7",
+        "sleep 60",
+        "sh",
+    );
+
+    let id = remote.job_start(quick, Some(shell), None).await?;
+    let mut out = String::new();
+    let last = loop {
+        let p = remote.job_poll(id).await?;
+        out.push_str(&p.stdout);
+        if !p.running {
+            break p;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    };
+    assert!(out.contains("job-one") && out.contains("job-two"), "{out}");
+    assert_eq!(last.exit_code, Some(7));
+    // Collected once finished.
+    assert!(remote.job_poll(id).await.is_err());
+
+    let id = remote.job_start(long, Some(shell), None).await?;
+    assert!(
+        remote
+            .job_list()
+            .await?
+            .iter()
+            .any(|j| j.job_id == id && j.running)
+    );
+    let killed = remote.job_kill(id).await?;
+    assert!(killed.killed && !killed.running, "{killed:?}");
+
+    server_task.abort();
+    Ok(())
+}

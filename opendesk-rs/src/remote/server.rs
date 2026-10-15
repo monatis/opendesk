@@ -634,6 +634,7 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     caps.insert("ui.wait".to_string(), rmpv::Value::Boolean(true));
     caps.insert("ui.text".to_string(), rmpv::Value::Boolean(true));
     caps.insert("fs.transfer".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("process.jobs".to_string(), rmpv::Value::Boolean(true));
     caps.insert("events".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
@@ -1078,6 +1079,47 @@ pub(crate) async fn dispatch_call(
                 .ui_click(app_name, selector)
                 .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
+        }
+        "process.start" => {
+            let command = params
+                .get("command")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'command'")?;
+            let shell = params.get("shell").and_then(|v| v.as_str());
+            let timeout = params
+                .get("timeout_secs")
+                .and_then(|v| v.as_u64())
+                .map(Duration::from_secs);
+            let id = computer
+                .job_start(command, shell, timeout)
+                .map_err(|e| e.to_string())?;
+            Ok(rmpv::Value::Map(vec![(
+                rmpv::Value::from("job_id"),
+                rmpv::Value::from(id),
+            )]))
+        }
+        "process.poll" | "process.kill" => {
+            let id = params
+                .get("job_id")
+                .and_then(|v| v.as_u64())
+                .ok_or("missing 'job_id'")?;
+            let computer = computer.clone();
+            let kill = method == "process.kill";
+            let poll = tokio::task::spawn_blocking(move || {
+                if kill {
+                    computer.job_kill(id)
+                } else {
+                    computer.job_poll(id)
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+            rmpv::ext::to_value(poll).map_err(|e| e.to_string())
+        }
+        "process.jobs" => {
+            let list = computer.job_list().map_err(|e| e.to_string())?;
+            rmpv::ext::to_value(list).map_err(|e| e.to_string())
         }
         "fs.stat" | "fs.read" | "fs.write" | "fs.commit" => {
             use crate::computer::files;

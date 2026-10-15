@@ -693,6 +693,52 @@ impl RemoteComputer {
         }
     }
 
+    /// Start `command` in the background on the peer; returns its job id.
+    pub async fn job_start(
+        &self,
+        command: &str,
+        shell: Option<&str>,
+        timeout_secs: Option<u64>,
+    ) -> Result<u64> {
+        self.require_cap("process.jobs", "background jobs")?;
+        let mut params = HashMap::new();
+        params.insert("command".to_string(), rmpv::Value::from(command));
+        if let Some(s) = shell {
+            params.insert("shell".to_string(), rmpv::Value::from(s));
+        }
+        if let Some(t) = timeout_secs {
+            params.insert("timeout_secs".to_string(), rmpv::Value::from(t));
+        }
+        let res = self.call("process.start", params).await?;
+        value_get(&res, "job_id")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| anyhow!("process.start returned no job id"))
+    }
+
+    async fn job_call(&self, method: &str, id: u64) -> Result<crate::computer::process::JobPoll> {
+        self.require_cap("process.jobs", "background jobs")?;
+        let mut params = HashMap::new();
+        params.insert("job_id".to_string(), rmpv::Value::from(id));
+        let res = self.call(method, params).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed {method} reply: {e}"))
+    }
+
+    /// New output since the last poll, and the job's status.
+    pub async fn job_poll(&self, id: u64) -> Result<crate::computer::process::JobPoll> {
+        self.job_call("process.poll", id).await
+    }
+
+    /// Kill the job's whole process tree; returns its final output.
+    pub async fn job_kill(&self, id: u64) -> Result<crate::computer::process::JobPoll> {
+        self.job_call("process.kill", id).await
+    }
+
+    pub async fn job_list(&self) -> Result<Vec<crate::computer::process::JobPoll>> {
+        self.require_cap("process.jobs", "background jobs")?;
+        let res = self.call("process.jobs", HashMap::new()).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed process.jobs reply: {e}"))
+    }
+
     /// Size and SHA-256 of a file on the peer (`~` = the peer's home).
     pub async fn file_stat(&self, path: &str) -> Result<crate::computer::files::FileStat> {
         self.require_cap("fs.transfer", "file transfer")?;
