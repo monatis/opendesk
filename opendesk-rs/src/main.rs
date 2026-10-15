@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -300,7 +300,12 @@ enum Commands {
     /// Execute a command directly on local or remote peer
     Exec {
         /// Command string to execute
-        command: String,
+        #[arg(required_unless_present = "file", conflicts_with = "file")]
+        command: Option<String>,
+        /// Read the command from a local script file instead (sidesteps
+        /// quoting in the local shell)
+        #[arg(long)]
+        file: Option<PathBuf>,
         /// Optional peer name (defaults to 'local')
         #[arg(long)]
         peer: Option<String>,
@@ -652,6 +657,7 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Exec {
             command,
+            file,
             peer,
             shell,
             timeout,
@@ -664,8 +670,17 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 false
             };
+            let command = match (command, file) {
+                (Some(c), _) => c,
+                (None, Some(path)) => {
+                    let text = std::fs::read_to_string(&path)
+                        .with_context(|| format!("failed to read {}", path.display()))?;
+                    text.strip_prefix('\u{feff}').unwrap_or(&text).to_string()
+                }
+                (None, None) => bail!("provide a command or --file"),
+            };
 
-            if is_remote {
+            let res = if is_remote {
                 let peer_name = peer.unwrap();
                 let r_cfg = resolve_rendezvous_config(
                     home.as_deref(),
@@ -684,28 +699,25 @@ async fn main() -> anyhow::Result<()> {
                     home.as_deref(),
                 )
                 .await?;
-                let res = remote.exec(&command, shell.as_deref(), Some(timeout)).await?;
-                if !res.stdout.is_empty() {
-                    print!("{}", res.stdout);
-                }
-                if !res.stderr.is_empty() {
-                    eprint!("{}", res.stderr);
-                }
-                if res.exit_code != 0 {
-                    std::process::exit(res.exit_code);
-                }
+                remote
+                    .exec(&command, shell.as_deref(), Some(timeout))
+                    .await?
             } else {
                 let computer = opendesk_rs::computer::local::LocalComputer::new();
-                let res = computer.execute_command(&command, shell.as_deref(), Some(timeout))?;
-                if !res.stdout.is_empty() {
-                    print!("{}", res.stdout);
-                }
-                if !res.stderr.is_empty() {
-                    eprint!("{}", res.stderr);
-                }
-                if res.exit_code != 0 {
-                    std::process::exit(res.exit_code);
-                }
+                computer.execute_command(&command, shell.as_deref(), Some(timeout))?
+            };
+            if !res.stdout.is_empty() {
+                print!("{}", res.stdout);
+            }
+            if !res.stderr.is_empty() {
+                eprint!("{}", res.stderr);
+            }
+            if res.timed_out {
+                // Same convention as coreutils `timeout`.
+                std::process::exit(124);
+            }
+            if res.exit_code != 0 {
+                std::process::exit(res.exit_code);
             }
         }
 

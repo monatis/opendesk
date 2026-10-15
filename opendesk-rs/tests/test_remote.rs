@@ -135,6 +135,58 @@ async fn test_live_reconnect_and_serve() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_live_exec_timeout_returns_partial_output() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18432;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+
+    #[cfg(target_os = "windows")]
+    let (cmd, shell) = (
+        "Write-Output \"partial \"\"quoted\"\"\"; Start-Sleep 30",
+        "powershell",
+    );
+    #[cfg(not(target_os = "windows"))]
+    let (cmd, shell) = ("echo 'partial \"quoted\"'; sleep 30", "sh");
+
+    let start = std::time::Instant::now();
+    let res = remote.exec(cmd, Some(shell), Some(2)).await?;
+    assert!(start.elapsed() < std::time::Duration::from_secs(15));
+    assert!(res.timed_out, "{res:?}");
+    assert!(!res.success);
+    assert!(res.stdout.contains("partial \"quoted\""), "{res:?}");
+
+    // The session is still usable after a timed-out command.
+    let res = remote
+        .exec("echo still-alive", Some(shell), Some(20))
+        .await?;
+    assert!(res.stdout.contains("still-alive"), "{res:?}");
+    assert!(!res.timed_out);
+
+    server_task.abort();
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_live_rendezvous_signaling_and_relay() -> Result<()> {
     let r_port = 18426;
 

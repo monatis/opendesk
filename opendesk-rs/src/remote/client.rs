@@ -523,6 +523,9 @@ impl RemoteComputer {
             stderr,
             exit_code,
             success,
+            timed_out: value_get(&res, "timed_out")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         })
     }
 
@@ -557,6 +560,9 @@ impl RemoteComputer {
             stderr,
             exit_code,
             success,
+            timed_out: value_get(&res, "timed_out")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         })
     }
 

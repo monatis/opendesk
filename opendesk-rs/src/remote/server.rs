@@ -878,16 +878,21 @@ pub(crate) async fn dispatch_call(
                 let action = value_get(step_val, "action")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
-                let keys = value_get(step_val, "keys").and_then(|v| v.as_array()).map(|arr| {
-                    arr.iter()
-                        .filter_map(|item| item.as_str().map(|s| s.to_string()))
-                        .collect::<Vec<_>>()
-                });
+                let keys = value_get(step_val, "keys")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                            .collect::<Vec<_>>()
+                    });
                 let hotkey = value_get(step_val, "hotkey").and_then(|v| {
                     if let Some(arr) = v.as_array() {
                         let jarr: Vec<serde_json::Value> = arr
                             .iter()
-                            .filter_map(|item| item.as_str().map(|s| serde_json::Value::String(s.to_string())))
+                            .filter_map(|item| {
+                                item.as_str()
+                                    .map(|s| serde_json::Value::String(s.to_string()))
+                            })
                             .collect();
                         Some(serde_json::Value::Array(jarr))
                     } else if let Some(s) = v.as_str() {
@@ -911,32 +916,46 @@ pub(crate) async fn dispatch_call(
                 .map_err(|e| e.to_string())
         }
         "process.exec" | "process.shell" => {
-            let cmd_str = params.get("command").and_then(|v| v.as_str());
-            let shell = params.get("shell").and_then(|v| v.as_str());
+            let command = params
+                .get("command")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let shell = params
+                .get("shell")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
             let timeout_secs = params.get("timeout_secs").and_then(|v| v.as_u64());
-
-            if let Some(argv) = params.get("argv").and_then(|v| v.as_array()) {
-                let argv_strs: Vec<&str> = argv.iter().filter_map(|v| v.as_str()).collect();
-                if !argv_strs.is_empty() {
-                    let res = computer
-                        .execute_argv(&argv_strs, timeout_secs)
-                        .map_err(|e| e.to_string())?;
-                    return Ok(rmpv::Value::Map(vec![
-                        (rmpv::Value::from("stdout"), rmpv::Value::from(res.stdout)),
-                        (rmpv::Value::from("stderr"), rmpv::Value::from(res.stderr)),
-                        (
-                            rmpv::Value::from("exit_code"),
-                            rmpv::Value::from(res.exit_code as i64),
-                        ),
-                        (rmpv::Value::from("success"), rmpv::Value::Boolean(res.success)),
-                    ]));
-                }
+            let argv: Vec<String> = params
+                .get("argv")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if argv.is_empty() && command.is_none() {
+                return Err("missing 'command'".to_string());
             }
 
-            let command = cmd_str.ok_or("missing 'command'")?;
-            let res = computer
-                .execute_command(command, shell, timeout_secs)
-                .map_err(|e| e.to_string())?;
+            // Commands can run for many minutes; keep them off the async
+            // runtime so the session loop stays responsive.
+            let computer = computer.clone();
+            let res = tokio::task::spawn_blocking(move || {
+                if argv.is_empty() {
+                    computer.execute_command(
+                        command.as_deref().unwrap_or_default(),
+                        shell.as_deref(),
+                        timeout_secs,
+                    )
+                } else {
+                    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+                    computer.execute_argv(&argv, timeout_secs)
+                }
+            })
+            .await
+            .map_err(|e| format!("exec task failed: {e}"))?
+            .map_err(|e| e.to_string())?;
             Ok(rmpv::Value::Map(vec![
                 (rmpv::Value::from("stdout"), rmpv::Value::from(res.stdout)),
                 (rmpv::Value::from("stderr"), rmpv::Value::from(res.stderr)),
@@ -944,7 +963,14 @@ pub(crate) async fn dispatch_call(
                     rmpv::Value::from("exit_code"),
                     rmpv::Value::from(res.exit_code as i64),
                 ),
-                (rmpv::Value::from("success"), rmpv::Value::Boolean(res.success)),
+                (
+                    rmpv::Value::from("success"),
+                    rmpv::Value::Boolean(res.success),
+                ),
+                (
+                    rmpv::Value::from("timed_out"),
+                    rmpv::Value::Boolean(res.timed_out),
+                ),
             ]))
         }
         "apps.open" => {

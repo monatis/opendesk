@@ -1398,30 +1398,19 @@ impl McpServer {
                     .get("command")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| anyhow!("missing command"))?;
-                let shell = args.get("shell").and_then(|v| v.as_str());
-                let timeout_secs = args
-                    .get("timeout_secs")
-                    .and_then(|v| v.as_f64())
-                    .map(|s| s as u64);
-                let res = self
-                    .computer
-                    .execute_command(command, shell, timeout_secs)?;
-                let out_text = format!(
-                    "Exit code: {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
-                    res.exit_code,
-                    if res.stdout.trim().is_empty() {
-                        "(empty)"
-                    } else {
-                        res.stdout.trim()
-                    },
-                    if res.stderr.trim().is_empty() {
-                        "(empty)"
-                    } else {
-                        res.stderr.trim()
-                    },
-                );
+                let shell = args
+                    .get("shell")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let timeout_secs = exec_timeout_arg(args);
+                let computer = self.computer.clone();
+                let command = command.to_string();
+                let res = tokio::task::spawn_blocking(move || {
+                    computer.execute_command(&command, shell.as_deref(), timeout_secs)
+                })
+                .await??;
                 Ok(vec![
-                    json!({ "type": "text", "text": format!("{prefix}{out_text}") }),
+                    json!({ "type": "text", "text": format!("{prefix}{}", format_exec_result(&res)) }),
                 ])
             }
 
@@ -1784,27 +1773,9 @@ impl McpServer {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| anyhow!("missing command"))?;
                 let shell = args.get("shell").and_then(|v| v.as_str());
-                let timeout_secs = args
-                    .get("timeout_secs")
-                    .and_then(|v| v.as_f64())
-                    .map(|s| s as u64);
-                let res = remote.exec(command, shell, timeout_secs).await?;
-                let out_text = format!(
-                    "Exit code: {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
-                    res.exit_code,
-                    if res.stdout.trim().is_empty() {
-                        "(empty)"
-                    } else {
-                        res.stdout.trim()
-                    },
-                    if res.stderr.trim().is_empty() {
-                        "(empty)"
-                    } else {
-                        res.stderr.trim()
-                    },
-                );
+                let res = remote.exec(command, shell, exec_timeout_arg(args)).await?;
                 Ok(vec![
-                    json!({ "type": "text", "text": format!("{prefix}{out_text}") }),
+                    json!({ "type": "text", "text": format!("{prefix}{}", format_exec_result(&res)) }),
                 ])
             }
             _ => Err(anyhow!("Unknown remote tool: {name}")),
@@ -2710,6 +2681,35 @@ impl McpServer {
             _ => Err(anyhow!("Unknown learn action: {action}")),
         }
     }
+}
+
+/// `timeout_secs` as whole seconds, rounded up so e.g. 0.5 is not 0.
+fn exec_timeout_arg(args: &Value) -> Option<u64> {
+    args.get("timeout_secs")
+        .and_then(|v| v.as_f64())
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .map(|s| s.ceil() as u64)
+}
+
+fn format_exec_result(res: &crate::computer::local::ExecResult) -> String {
+    let or_empty = |s: &str| {
+        let t = s.trim();
+        if t.is_empty() {
+            "(empty)".to_string()
+        } else {
+            t.to_string()
+        }
+    };
+    let status = if res.timed_out {
+        "TIMED OUT (process tree killed; output below is partial)".to_string()
+    } else {
+        res.exit_code.to_string()
+    };
+    format!(
+        "Exit code: {status}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        or_empty(&res.stdout),
+        or_empty(&res.stderr),
+    )
 }
 
 fn parse_region(args: &Value) -> Option<xa11y::Rect> {

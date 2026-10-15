@@ -31,6 +31,10 @@ pub struct ExecResult {
     pub stderr: String,
     pub exit_code: i32,
     pub success: bool,
+    /// The command hit its timeout; its process tree was killed and the
+    /// output is whatever it printed before that.
+    #[serde(default)]
+    pub timed_out: bool,
 }
 
 #[cfg(target_os = "windows")]
@@ -378,7 +382,10 @@ impl LocalComputer {
                         )
                     };
                     if sent != 2 {
-                        bail!("SendInput unicode injection failed for code unit 0x{:X}", code_unit);
+                        bail!(
+                            "SendInput unicode injection failed for code unit 0x{:X}",
+                            code_unit
+                        );
                     }
                 }
             }
@@ -582,42 +589,33 @@ impl LocalComputer {
         let timeout = Duration::from_secs(timeout_secs.unwrap_or(30));
 
         #[cfg(target_os = "windows")]
-        let mut cmd = {
+        let (mut cmd, temp_script) = {
             let shell_choice = shell.unwrap_or("powershell").to_lowercase();
             if shell_choice == "cmd" || shell_choice == "cmd.exe" {
                 let mut c = std::process::Command::new("cmd.exe");
                 c.args(["/C", command]);
-                c
+                (c, None)
             } else {
-                let mut c = std::process::Command::new("powershell.exe");
-                c.args([
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    command,
-                ]);
-                c
+                super::process::powershell_command(command)?
             }
         };
 
         #[cfg(not(target_os = "windows"))]
-        let mut cmd = {
+        let (mut cmd, temp_script): (_, Option<std::path::PathBuf>) = {
             let shell_choice = shell.unwrap_or("sh");
             let mut c = std::process::Command::new(shell_choice);
             c.args(["-c", command]);
-            c
+            (c, None)
         };
 
-        Self::run_command_with_timeout(&mut cmd, timeout)
+        let res = super::process::run_with_timeout(&mut cmd, timeout);
+        if let Some(path) = temp_script {
+            let _ = std::fs::remove_file(path);
+        }
+        res
     }
 
-    pub fn execute_argv(
-        &self,
-        argv: &[&str],
-        timeout_secs: Option<u64>,
-    ) -> Result<ExecResult> {
+    pub fn execute_argv(&self, argv: &[&str], timeout_secs: Option<u64>) -> Result<ExecResult> {
         if argv.is_empty() {
             bail!("empty argv");
         }
@@ -626,63 +624,7 @@ impl LocalComputer {
         if argv.len() > 1 {
             cmd.args(&argv[1..]);
         }
-        Self::run_command_with_timeout(&mut cmd, timeout)
-    }
-
-    fn run_command_with_timeout(
-        cmd: &mut std::process::Command,
-        timeout: Duration,
-    ) -> Result<ExecResult> {
-        let mut child = cmd
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| anyhow!("failed to spawn process: {e}"))?;
-
-        let mut stdout_handle = child.stdout.take();
-        let mut stderr_handle = child.stderr.take();
-
-        let stdout_thread = std::thread::spawn(move || {
-            let mut s = String::new();
-            if let Some(mut out) = stdout_handle.take() {
-                let _ = std::io::Read::read_to_string(&mut out, &mut s);
-            }
-            s
-        });
-
-        let stderr_thread = std::thread::spawn(move || {
-            let mut s = String::new();
-            if let Some(mut err) = stderr_handle.take() {
-                let _ = std::io::Read::read_to_string(&mut err, &mut s);
-            }
-            s
-        });
-
-        let start = std::time::Instant::now();
-        loop {
-            match child.try_wait()? {
-                Some(status) => {
-                    let stdout = stdout_thread.join().unwrap_or_default();
-                    let stderr = stderr_thread.join().unwrap_or_default();
-                    return Ok(ExecResult {
-                        stdout,
-                        stderr,
-                        exit_code: status.code().unwrap_or(-1),
-                        success: status.success(),
-                    });
-                }
-                None => {
-                    if start.elapsed() >= timeout {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        let _ = stdout_thread.join();
-                        let _ = stderr_thread.join();
-                        bail!("command timed out after {} seconds", timeout.as_secs());
-                    }
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-            }
-        }
+        super::process::run_with_timeout(&mut cmd, timeout)
     }
 
     // -----------------------------------------------------------------------
@@ -967,9 +909,8 @@ pub fn win_send_vk(vk: u16, extended: bool, down: bool) -> Result<()> {
             },
         },
     };
-    let sent = unsafe {
-        win_input::SendInput(1, &input, std::mem::size_of::<win_input::INPUT>() as i32)
-    };
+    let sent =
+        unsafe { win_input::SendInput(1, &input, std::mem::size_of::<win_input::INPUT>() as i32) };
     if sent != 1 {
         bail!("SendInput failed for VK 0x{:X}", vk);
     }
@@ -1154,8 +1095,7 @@ mod tests {
                 { "hotkey": ["ctrl", "h"] }
             ]
         });
-        let steps: Vec<KeyboardStep> =
-            serde_json::from_value(json_seq["steps"].clone()).unwrap();
+        let steps: Vec<KeyboardStep> = serde_json::from_value(json_seq["steps"].clone()).unwrap();
         assert_eq!(steps.len(), 5);
         assert_eq!(steps[0].delay_ms, Some(100));
         assert_eq!(steps[2].key, Some("h".to_string()));
@@ -1166,7 +1106,11 @@ mod tests {
         let computer = LocalComputer::new();
         #[cfg(target_os = "windows")]
         let res = computer
-            .execute_command("Write-Output 'HELLO_OPENDESK_EXEC'", Some("powershell"), Some(10))
+            .execute_command(
+                "Write-Output 'HELLO_OPENDESK_EXEC'",
+                Some("powershell"),
+                Some(10),
+            )
             .unwrap();
         #[cfg(not(target_os = "windows"))]
         let res = computer
