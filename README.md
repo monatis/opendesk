@@ -93,6 +93,7 @@ When connected via MCP, the agent receives a rich, deterministic set of desktop 
 | **`opendesk_guard`** | Sets a foreground-window guard: `mouse`/`keyboard` input is refused unless the expected window (title/process) is in front, so keystrokes never land in the wrong app. Also available per call as `guard`. |
 | **`opendesk_wait`** / **`opendesk_events`** | Wait until an element is attached/visible/enabled/focused/... instead of sleeping, and read an app's accessibility event log (focus, value, state, window, menu and live-region changes). |
 | **`opendesk_exec`** | Runs a shell command on the target. Timeouts kill the whole process tree and return the partial output. |
+| **`opendesk_file`** | Pushes and pulls files to and from a peer in verified chunks (SHA-256); the destination is only replaced once the whole file checks out. Also `opendesk push` / `opendesk pull`. |
 | **`mouse`** | Pixel-accurate pointer movements (`action="move"`), clicks (`action="click"`), drags (`action="drag"`), and vertical/horizontal scrolling (`action="scroll"`). |
 | **`app`** | Launches processes (`action="open"`), brings windows to foreground (`action="focus"`), closes windows/processes (`action="close"`), and enumerates running applications (`action="list"`). |
 | **`clipboard`** | Reads (`action="read"`) and writes (`action="write"`) UTF-8 text from/to system clipboard. |

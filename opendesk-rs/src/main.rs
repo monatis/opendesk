@@ -322,6 +322,46 @@ enum Commands {
         #[arg(long)]
         home: Option<PathBuf>,
     },
+
+    /// Copy a local file to a peer (verified by SHA-256; `~` = the peer's home)
+    Push {
+        local: PathBuf,
+        remote: String,
+        #[arg(long)]
+        peer: String,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
+
+    /// Copy a file from a peer to this machine (verified by SHA-256)
+    Pull {
+        remote: String,
+        local: PathBuf,
+        #[arg(long)]
+        peer: String,
+        #[arg(long)]
+        rendezvous: Option<String>,
+        #[arg(long)]
+        rendezvous_token: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
+}
+
+/// Connect to a paired peer, using the configured rendezvous unless given.
+async fn connect_peer(
+    peer: &str,
+    rendezvous: Option<&str>,
+    rendezvous_token: Option<&str>,
+    home: Option<&std::path::Path>,
+) -> anyhow::Result<opendesk_rs::remote::client::RemoteComputer> {
+    let r_cfg = resolve_rendezvous_config(home, rendezvous, rendezvous_token);
+    let r_url = (!r_cfg.url.is_empty()).then_some(r_cfg.url.as_str());
+    remote_connect(Some(peer), r_url, r_cfg.token.as_deref(), home).await
 }
 
 #[derive(Subcommand)]
@@ -719,6 +759,53 @@ async fn main() -> anyhow::Result<()> {
             if res.exit_code != 0 {
                 std::process::exit(res.exit_code);
             }
+        }
+
+        Commands::Push {
+            local,
+            remote,
+            peer,
+            rendezvous,
+            rendezvous_token,
+            home,
+        } => {
+            let r = connect_peer(
+                &peer,
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+                home.as_deref(),
+            )
+            .await?;
+            let st = r.push_file(&local, &remote).await?;
+            println!(
+                "{} -> {peer}:{} ({} bytes, sha256 {})",
+                local.display(),
+                st.path,
+                st.size,
+                st.sha256
+            );
+        }
+
+        Commands::Pull {
+            remote,
+            local,
+            peer,
+            rendezvous,
+            rendezvous_token,
+            home,
+        } => {
+            let r = connect_peer(
+                &peer,
+                rendezvous.as_deref(),
+                rendezvous_token.as_deref(),
+                home.as_deref(),
+            )
+            .await?;
+            let st = r.pull_file(&remote, &local).await?;
+            println!(
+                "{peer}:{remote} -> {} ({} bytes, sha256 {})",
+                st.path, st.size, st.sha256
+            );
         }
 
         Commands::Discover {

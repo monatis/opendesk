@@ -633,6 +633,7 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     caps.insert("ui.value".to_string(), rmpv::Value::Boolean(true));
     caps.insert("ui.wait".to_string(), rmpv::Value::Boolean(true));
     caps.insert("ui.text".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("fs.transfer".to_string(), rmpv::Value::Boolean(true));
     caps.insert("events".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
@@ -681,8 +682,14 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
                         };
 
                         if !no_audit {
+                            // Binary payloads (file chunks) never reach the
+                            // summary; converting them to JSON is pure cost.
                             let params_val = rmpv_to_json(&rmpv::Value::Map(
-                                req.params.iter().map(|(k, v)| (rmpv::Value::from(k.as_str()), v.clone())).collect()
+                                req.params
+                                    .iter()
+                                    .filter(|(_, v)| !matches!(v, rmpv::Value::Binary(_)))
+                                    .map(|(k, v)| (rmpv::Value::from(k.as_str()), v.clone()))
+                                    .collect()
                             ));
                             audit.record_call(
                                 peer_public,
@@ -1071,6 +1078,42 @@ pub(crate) async fn dispatch_call(
                 .ui_click(app_name, selector)
                 .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
+        }
+        "fs.stat" | "fs.read" | "fs.write" | "fs.commit" => {
+            use crate::computer::files;
+            let path = params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'path'")?
+                .to_string();
+            let offset = params.get("offset").and_then(|v| v.as_u64()).unwrap_or(0);
+            let method = method.to_string();
+            let data = params
+                .get("data")
+                .and_then(|v| v.as_slice())
+                .map(<[u8]>::to_vec)
+                .unwrap_or_default();
+            let len = params
+                .get("length")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(files::CHUNK as u64) as usize;
+            let sha = params
+                .get("sha256")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            // Hashing and disk I/O can take a while for large files.
+            tokio::task::spawn_blocking(move || -> anyhow::Result<rmpv::Value> {
+                Ok(match method.as_str() {
+                    "fs.stat" => rmpv::ext::to_value(files::stat(&path)?)?,
+                    "fs.read" => rmpv::Value::Binary(files::read_chunk(&path, offset, len)?),
+                    "fs.write" => rmpv::Value::from(files::write_chunk(&path, offset, &data)?),
+                    _ => rmpv::ext::to_value(files::commit(&path, &sha)?)?,
+                })
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("{e:#}"))
         }
         "ui.text" => {
             let app = params

@@ -693,6 +693,103 @@ impl RemoteComputer {
         }
     }
 
+    /// Size and SHA-256 of a file on the peer (`~` = the peer's home).
+    pub async fn file_stat(&self, path: &str) -> Result<crate::computer::files::FileStat> {
+        self.require_cap("fs.transfer", "file transfer")?;
+        let mut params = HashMap::new();
+        params.insert("path".to_string(), rmpv::Value::from(path));
+        let res = self.call("fs.stat", params).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed fs.stat reply: {e}"))
+    }
+
+    /// Copy a local file to `remote` on the peer. The peer writes a part file
+    /// and only replaces `remote` once the SHA-256 of what it received
+    /// matches this file's.
+    pub async fn push_file(
+        &self,
+        local: &Path,
+        remote: &str,
+    ) -> Result<crate::computer::files::FileStat> {
+        use crate::computer::files;
+        self.require_cap("fs.transfer", "file transfer")?;
+        let sha = files::sha256_file(local)?;
+        let mut file = tokio::fs::File::open(local)
+            .await
+            .with_context(|| format!("open {}", local.display()))?;
+        let mut offset = 0u64;
+        let mut buf = vec![0u8; files::CHUNK];
+        loop {
+            use tokio::io::AsyncReadExt;
+            let mut filled = 0;
+            while filled < buf.len() {
+                let n = file.read(&mut buf[filled..]).await?;
+                if n == 0 {
+                    break;
+                }
+                filled += n;
+            }
+            // Always send the first chunk, so empty files are created too.
+            if filled == 0 && offset > 0 {
+                break;
+            }
+            let mut params = HashMap::new();
+            params.insert("path".to_string(), rmpv::Value::from(remote));
+            params.insert("offset".to_string(), rmpv::Value::from(offset));
+            params.insert(
+                "data".to_string(),
+                rmpv::Value::Binary(buf[..filled].to_vec()),
+            );
+            self.call("fs.write", params).await?;
+            offset += filled as u64;
+            if filled < buf.len() {
+                break;
+            }
+        }
+        let mut params = HashMap::new();
+        params.insert("path".to_string(), rmpv::Value::from(remote));
+        params.insert("sha256".to_string(), rmpv::Value::from(sha.as_str()));
+        let res = self.call("fs.commit", params).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed fs.commit reply: {e}"))
+    }
+
+    /// Copy `remote` from the peer to a local file, verified against the
+    /// peer's SHA-256 before it replaces `local`.
+    pub async fn pull_file(
+        &self,
+        remote: &str,
+        local: &Path,
+    ) -> Result<crate::computer::files::FileStat> {
+        use crate::computer::files;
+        let st = self.file_stat(remote).await?;
+        if !st.exists || st.is_dir {
+            bail!("{} is not a file on the peer", st.path);
+        }
+        let local_str = local
+            .to_str()
+            .ok_or_else(|| anyhow!("local path is not valid UTF-8"))?
+            .to_string();
+        let mut offset = 0u64;
+        loop {
+            let mut params = HashMap::new();
+            params.insert("path".to_string(), rmpv::Value::from(remote));
+            params.insert("offset".to_string(), rmpv::Value::from(offset));
+            params.insert("length".to_string(), rmpv::Value::from(files::CHUNK as u64));
+            let res = self.call("fs.read", params).await?;
+            let chunk = res.as_slice().unwrap_or_default().to_vec();
+            if chunk.is_empty() && offset > 0 {
+                break;
+            }
+            let (path, at, data) = (local_str.clone(), offset, chunk.clone());
+            tokio::task::spawn_blocking(move || files::write_chunk(&path, at, &data)).await??;
+            offset += chunk.len() as u64;
+            if chunk.len() < files::CHUNK || offset >= st.size {
+                break;
+            }
+        }
+        let (path, sha) = (local_str, st.sha256.clone());
+        tokio::task::spawn_blocking(move || files::commit(&path, &sha)).await?
+    }
+
     /// The peer's front window as viewer lines (see computer::viewer).
     pub async fn window_text(&self, app_name: Option<&str>) -> Result<Vec<String>> {
         self.require_cap("ui.text", "window text")?;

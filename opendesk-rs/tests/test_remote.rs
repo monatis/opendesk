@@ -496,3 +496,80 @@ async fn test_live_wait_and_events_over_rpc() -> Result<()> {
     server_task.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn test_live_file_push_and_pull_are_verified() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let files_dir = tempfile::tempdir()?;
+    let port = 18436;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+
+    // 2.5 MiB: three chunks, the last one partial.
+    let data: Vec<u8> = (0..(2 * 1024 * 1024 + 512 * 1024))
+        .map(|i| (i % 253) as u8)
+        .collect();
+    let local = files_dir.path().join("big.bin");
+    std::fs::write(&local, &data)?;
+    let on_peer = files_dir.path().join("peer").join("big-copy.bin");
+    let on_peer_str = on_peer.to_str().unwrap();
+
+    // Replaces an existing file at the destination.
+    std::fs::create_dir_all(on_peer.parent().unwrap())?;
+    std::fs::write(&on_peer, b"old contents")?;
+    let st = remote.push_file(&local, on_peer_str).await?;
+    assert_eq!(st.size, data.len() as u64);
+    assert_eq!(std::fs::read(&on_peer)?, data);
+    assert_eq!(remote.file_stat(on_peer_str).await?.sha256, st.sha256);
+
+    let back = files_dir.path().join("back").join("big-back.bin");
+    let st2 = remote.pull_file(on_peer_str, &back).await?;
+    assert_eq!(st2.sha256, st.sha256);
+    assert_eq!(std::fs::read(&back)?, data);
+
+    // Empty files survive both directions.
+    let empty = files_dir.path().join("empty.txt");
+    std::fs::write(&empty, b"")?;
+    let empty_peer = files_dir.path().join("peer").join("empty-copy.txt");
+    remote
+        .push_file(&empty, empty_peer.to_str().unwrap())
+        .await?;
+    assert_eq!(std::fs::read(&empty_peer)?.len(), 0);
+    let empty_back = files_dir.path().join("empty-back.txt");
+    remote
+        .pull_file(empty_peer.to_str().unwrap(), &empty_back)
+        .await?;
+    assert_eq!(std::fs::read(&empty_back)?.len(), 0);
+
+    // Missing remote files are a clear error.
+    let err = remote
+        .pull_file(
+            files_dir.path().join("nope.bin").to_str().unwrap(),
+            &files_dir.path().join("x"),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("is not a file"), "{err}");
+
+    server_task.abort();
+    Ok(())
+}

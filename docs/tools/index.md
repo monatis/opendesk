@@ -115,3 +115,24 @@ Shows the capabilities a peer advertises and its environment: OS version,
 locale, keyboard layout of the foreground window, time zone, the clock offset
 from this machine, and each display's position, size and scaling. Check it
 before typing or clicking on an unfamiliar peer.
+
+## File transfer: `opendesk_file`
+
+Copies files between this machine and a remote peer, verified by SHA-256.
+
+- `{"action": "push", "local_path": "C:/build/app.exe", "remote_path": "~/bin/app.exe"}`
+- `{"action": "pull", "remote_path": "~/logs/run.log", "local_path": "./run.log"}`
+- `{"action": "stat", "remote_path": "~/bin/app.exe"}` reports size and SHA-256.
+
+Data moves in 1 MiB chunks into `<destination>.opendesk-part`; the destination
+is replaced only after the whole file's checksum matches, so an interrupted or
+corrupted copy never leaves a half-written file. `~` in `remote_path` is the
+peer's home directory. Replacing a file another program has open (for example a
+running `.exe` on Windows) fails with a clear error.
+
+From the command line:
+
+```bash
+opendesk push ./app.exe "~/bin/app.exe" --peer old-pc
+opendesk pull "~/logs/run.log" ./run.log --peer old-pc
+```

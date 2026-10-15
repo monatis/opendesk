@@ -892,6 +892,21 @@ impl McpServer {
                 }
             }),
             json!({
+                "name": "opendesk_file",
+                "description": "Copy files between this machine and a remote peer, verified by SHA-256. `push` sends local_path to remote_path, `pull` fetches remote_path to local_path, `stat` shows a remote file's size and SHA-256. The destination is replaced only after the whole file arrives and its checksum matches, so an interrupted copy never leaves a half-written file. `~` in remote_path is the peer's home directory.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["push", "pull", "stat"] },
+                        "local_path": { "type": "string", "description": "Path on this machine (push: source, pull: destination)." },
+                        "remote_path": { "type": "string", "description": "Path on the peer, e.g. 'C:/Users/me/x.txt' or '~/x.txt'." },
+                        "peer": { "type": "string", "description": "Remote peer; defaults to the session's default peer." }
+                    },
+                    "required": ["action", "remote_path"],
+                    "additionalProperties": false
+                }
+            }),
+            json!({
                 "name": "opendesk_wait",
                 "description": "Wait until a UI element reaches a state, instead of sleeping a fixed time after an action. Returns as soon as the condition holds (with the element and how long it took), or an error after `timeout_secs`. Example: after clicking Save, wait for selector `dialog` to be `detached`.\n\nRoutes to the session's default peer unless 'peer' is provided.",
                 "inputSchema": {
@@ -984,6 +999,7 @@ impl McpServer {
             "opendesk_privacy" => return self.admin_privacy(args).await,
             "opendesk_guard" => return self.admin_guard(args).await,
             "opendesk_wait" => return self.admin_wait(args).await,
+            "opendesk_file" => return self.admin_file(args).await,
             "opendesk_events" => return self.admin_events(args).await,
             "audit" => return self.execute_audit(args).await,
             "schedule" => return self.execute_schedule(args).await,
@@ -2559,6 +2575,56 @@ impl McpServer {
         Ok(vec![json!({ "type": "text", "text": msg })])
     }
 
+    async fn admin_file(&self, args: &Value) -> Result<Vec<Value>> {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'action' required"))?;
+        let remote_path = args
+            .get("remote_path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'remote_path' required"))?;
+        let local_path = || {
+            args.get("local_path")
+                .and_then(|v| v.as_str())
+                .map(std::path::PathBuf::from)
+                .ok_or_else(|| anyhow!("'local_path' required for {action}"))
+        };
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let remote = remote_opt.ok_or_else(|| {
+            anyhow!("opendesk_file copies to or from a remote peer; '{target}' is this machine")
+        })?;
+        let describe = |st: &crate::computer::files::FileStat| {
+            format!("{} ({} bytes, sha256 {})", st.path, st.size, st.sha256)
+        };
+        let text = match action {
+            "push" => {
+                let local = local_path()?;
+                let st = remote.push_file(&local, remote_path).await?;
+                format!("Pushed {} to {target}:{}", local.display(), describe(&st))
+            }
+            "pull" => {
+                let local = local_path()?;
+                let st = remote.pull_file(remote_path, &local).await?;
+                format!("Pulled {target}:{remote_path} to {}", describe(&st))
+            }
+            "stat" => {
+                let st = remote.file_stat(remote_path).await?;
+                if !st.exists {
+                    format!("{target}:{} does not exist", st.path)
+                } else if st.is_dir {
+                    format!("{target}:{} is a directory", st.path)
+                } else {
+                    format!("{target}:{}", describe(&st))
+                }
+            }
+            other => bail!("Unknown file action: {other}"),
+        };
+        Ok(vec![json!({ "type": "text", "text": text })])
+    }
+
     async fn admin_wait(&self, args: &Value) -> Result<Vec<Value>> {
         let selector = args
             .get("selector")
@@ -3127,9 +3193,10 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_privacy"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_guard"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_wait"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_file"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_events"));
 
-        assert_eq!(tools.len(), 23);
+        assert_eq!(tools.len(), 24);
     }
 
     #[cfg(target_os = "windows")]
