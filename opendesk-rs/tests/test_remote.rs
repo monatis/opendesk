@@ -243,3 +243,99 @@ async fn test_live_rendezvous_signaling_and_relay() -> Result<()> {
     r_task.abort();
     Ok(())
 }
+
+/// Polls `f` until it returns `expected` or `timeout` elapses; returns the last value seen.
+async fn wait_for_count<F: Fn() -> usize>(
+    f: F,
+    expected: usize,
+    timeout: std::time::Duration,
+) -> usize {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        let n = f();
+        if n == expected || tokio::time::Instant::now() >= deadline {
+            return n;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+}
+
+#[tokio::test]
+async fn test_rendezvous_relay_sessions_do_not_leak_connections() -> Result<()> {
+    let r_port = 18428;
+
+    let r_server = Arc::new(RendezvousServer::new(
+        "127.0.0.1",
+        r_port,
+        Some("test-token".to_string()),
+    ));
+    let r_clone = r_server.clone();
+    let r_task = tokio::spawn(async move { r_clone.serve_forever().await });
+
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+
+    let server_trusted = TrustedPeers::new(Some(server_dir.path()));
+    server_trusted.add(&client_id.public_bytes(), "my-client", "")?;
+
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+
+    let r_url = format!("ws://127.0.0.1:{}", r_port);
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        18429,
+        Some(server_dir.path()),
+        vec![r_url.clone()],
+        Some("test-token".to_string()),
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+
+    // Only the agent's long-lived control connection should be open.
+    let timeout = std::time::Duration::from_secs(5);
+    let baseline = wait_for_count(|| r_server.active_connections(), 1, timeout).await;
+    assert_eq!(baseline, 1, "agent control connection did not register");
+
+    for i in 0..5 {
+        let remote = remote_connect(
+            Some("my-server"),
+            Some(&r_url),
+            Some("test-token"),
+            Some(client_dir.path()),
+        )
+        .await?;
+
+        // Controller leg + agent leg + control connection.
+        let during = wait_for_count(|| r_server.active_connections(), 3, timeout).await;
+        assert_eq!(
+            during, 3,
+            "unexpected relay connection count in session {}",
+            i
+        );
+
+        let marker = format!("RELAY_LEAK_TEST_{}", i);
+        remote.clipboard_write(&marker).await?;
+        assert_eq!(remote.clipboard_read().await?, marker);
+
+        // Controller disconnects: both relay legs must be torn down.
+        drop(remote);
+        let after = wait_for_count(|| r_server.active_connections(), 1, timeout).await;
+        assert_eq!(
+            after, 1,
+            "relay connections leaked after closing session {}",
+            i
+        );
+        assert_eq!(r_server.active_sessions().await, 0);
+    }
+
+    server_task.abort();
+    r_task.abort();
+    Ok(())
+}
