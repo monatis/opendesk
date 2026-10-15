@@ -117,6 +117,13 @@ impl RemoteComputer {
         if self.is_broken() {
             return Err(ConnectionError::Send(anyhow!("connection to peer is closed")).into());
         }
+        if method == "input.pointer" {
+            // Callers pass coordinates read off this peer's screenshots; the
+            // peer maps them onto its desktop. Older peers ignore the tag.
+            params
+                .entry("space".to_string())
+                .or_insert_with(|| rmpv::Value::from("image"));
+        }
         if method.starts_with("input.") {
             let guard = self.input_guard.lock().ok().and_then(|g| g.clone());
             if let Some(guard) = guard {
@@ -219,7 +226,31 @@ impl RemoteComputer {
         format: Option<&str>,
         quality: Option<u8>,
     ) -> Result<(Vec<u8>, String)> {
+        self.screenshot_region_format(target, None, format, quality)
+            .await
+    }
+
+    /// Like `screenshot_format`, limited to `region` (desktop coordinates)
+    /// when given. Peers without region support return the full screen.
+    pub async fn screenshot_region_format(
+        &self,
+        target: Option<&str>,
+        region: Option<xa11y::Rect>,
+        format: Option<&str>,
+        quality: Option<u8>,
+    ) -> Result<(Vec<u8>, String)> {
         let mut params = HashMap::new();
+        if let Some(r) = region {
+            params.insert(
+                "region".to_string(),
+                rmpv::Value::Map(vec![
+                    (rmpv::Value::from("x"), rmpv::Value::from(r.x)),
+                    (rmpv::Value::from("y"), rmpv::Value::from(r.y)),
+                    (rmpv::Value::from("width"), rmpv::Value::from(r.width)),
+                    (rmpv::Value::from("height"), rmpv::Value::from(r.height)),
+                ]),
+            );
+        }
         if let Some(t) = target {
             params.insert("display_id".to_string(), rmpv::Value::from(t));
         }

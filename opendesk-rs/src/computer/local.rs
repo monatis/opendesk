@@ -101,6 +101,8 @@ pub const DEFAULT_TREE_DEPTH: usize = 8;
 pub struct LocalComputer {
     pub privacy: std::sync::Arc<crate::computer::privacy::PrivacyController>,
     held: std::sync::Arc<std::sync::Mutex<super::keys::HeldInput>>,
+    /// The last screenshot's pixel-to-desktop mapping (pixels dropped).
+    last_capture: std::sync::Arc<std::sync::Mutex<Option<xa11y::Screenshot>>>,
 }
 
 impl Default for LocalComputer {
@@ -114,7 +116,25 @@ impl LocalComputer {
         Self {
             privacy: std::sync::Arc::new(crate::computer::privacy::PrivacyController::new()),
             held: Default::default(),
+            last_capture: Default::default(),
         }
+    }
+
+    /// Map a pixel of the last screenshot to desktop coordinates for input.
+    ///
+    /// Screenshot pixel (0, 0) is the top-left of the whole virtual desktop,
+    /// which is at a negative desktop position when a monitor sits left of
+    /// or above the primary one (and a resized capture is scaled too). Falls
+    /// back to the point unchanged when there is no usable capture, e.g. the
+    /// point is outside it or the display layout changed since.
+    pub fn image_to_screen(&self, x: i32, y: i32) -> (i32, i32) {
+        let mapped = self.last_capture.lock().ok().and_then(|cap| {
+            cap.as_ref()?
+                .image_to_desktop(Point::new(x, y))
+                .ok()
+                .map(|p| (p.x, p.y))
+        });
+        mapped.unwrap_or((x, y))
     }
 
     fn track_held(&self, update: impl FnOnce(&mut super::keys::HeldInput)) {
@@ -198,7 +218,7 @@ impl LocalComputer {
         let width = shot.width;
         let height = shot.height;
 
-        match format.to_lowercase().as_str() {
+        let encoded = match format.to_lowercase().as_str() {
             "jpeg" | "jpg" => {
                 let q = if quality == 0 { 75 } else { quality.min(100) };
                 let mut rgb = Vec::with_capacity((shot.width * shot.height * 3) as usize);
@@ -215,13 +235,21 @@ impl LocalComputer {
                         image::ExtendedColorType::Rgb8,
                     )
                     .context("JPEG encoding failed")?;
-                Ok((out, "image/jpeg".to_string(), width, height))
+                (out, "image/jpeg".to_string(), width, height)
             }
             _ => {
                 let png_bytes = shot.to_png().context("PNG encoding failed")?;
-                Ok((png_bytes, "image/png".to_string(), width, height))
+                (png_bytes, "image/png".to_string(), width, height)
             }
+        };
+
+        // Keep only the coordinate mapping, so clicks on this image land on
+        // the right desktop pixel (see image_to_screen).
+        shot.pixels = Vec::new();
+        if let Ok(mut last) = self.last_capture.lock() {
+            *last = shot.mapping_available().then_some(shot);
         }
+        Ok(encoded)
     }
 
     // -----------------------------------------------------------------------
@@ -1278,6 +1306,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "types into whatever window is focused and overwrites the clipboard; run with --ignored on a test machine"]
     fn test_keyboard_type_preserves_clipboard() {
         let computer = LocalComputer::new();
         let initial_clip = "SECRET_SAVED_CLIPBOARD_DATA_12345";

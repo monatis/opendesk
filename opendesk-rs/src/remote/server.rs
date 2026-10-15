@@ -735,8 +735,17 @@ pub(crate) async fn dispatch_call(
                 .get("max_dim")
                 .and_then(|v| v.as_i64())
                 .map(|d| d as u32);
+            let region = params.get("region").and_then(|r| {
+                let int = |k: &str| value_get(r, k).and_then(|v| v.as_i64());
+                Some(xa11y::Rect {
+                    x: int("x")? as i32,
+                    y: int("y")? as i32,
+                    width: int("width")?.max(1) as u32,
+                    height: int("height")?.max(1) as u32,
+                })
+            });
             let (bytes, mime, width, height) = computer
-                .screenshot_format(None, fmt, quality, max_dim)
+                .screenshot_format(region, fmt, quality, max_dim)
                 .map_err(|e| e.to_string())?;
             // Transmit pure native MessagePack binary bytes (bin) - matching Python Pixmap
             Ok(rmpv::Value::Map(vec![
@@ -764,6 +773,13 @@ pub(crate) async fn dispatch_call(
                 .and_then(|p| value_get(p, "y"))
                 .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
                 .unwrap_or(0.0) as i32;
+            // `space: "image"` = pixels of this machine's last screenshot,
+            // which need mapping onto the desktop (negative-origin monitors).
+            let (x, y) = if params.get("space").and_then(|v| v.as_str()) == Some("image") {
+                computer.image_to_screen(x, y)
+            } else {
+                (x, y)
+            };
             match action {
                 "click" => {
                     let btn = evt

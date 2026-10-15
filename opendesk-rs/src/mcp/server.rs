@@ -5,7 +5,7 @@ use crate::protocol::storage::{TrustedPeers, default_home, resolve_rendezvous_co
 use crate::remote::audit::AuditLog;
 use crate::remote::client::{ConnectionError, RemoteComputer, connect as remote_connect};
 use crate::remote::discovery::discover;
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use data_encoding::BASE64;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -495,7 +495,15 @@ impl McpServer {
                     .ok_or_else(|| anyhow!("missing tool name"))?;
 
                 let args = params.get("arguments").cloned().unwrap_or(json!({}));
-                let (content, is_error) = match self.call_tool(tool_name, &args).await {
+                let result = self.call_tool(tool_name, &args).await;
+                // `settle_ms`: let the UI react before the agent looks again.
+                if result.is_ok()
+                    && matches!(tool_name, "mouse" | "keyboard")
+                    && let Some(ms) = args.get("settle_ms").and_then(|v| v.as_u64())
+                {
+                    tokio::time::sleep(Duration::from_millis(ms.min(30_000))).await;
+                }
+                let (content, is_error) = match result {
                     Ok(c) => {
                         let has_err = c.iter().any(|item| {
                             item.get("text")
@@ -549,7 +557,7 @@ impl McpServer {
         vec![
             json!({
                 "name": "screenshot",
-                "description": "Capture a screenshot of the current screen or a sub-region. Returns the image so you can observe the current UI state before deciding which action to take next. Call this frequently to verify that previous actions had the intended effect.\n\nOptions:\n  show_cursor=true  — draw a red dot at the current cursor position\n  marks=true        — overlay numbered boxes on all interactive elements (Set-of-Marks); the output lists each mark so you can say 'click mark 3' instead of guessing pixel coordinates\n  zoom=[x0,y0,x1,y1] — return a cropped close-up of a screen region\n  save_path         — write the PNG to disk\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
+                "description": "Capture a screenshot of the current screen or a sub-region. Returns the image so you can observe the current UI state before deciding which action to take next. Call this frequently to verify that previous actions had the intended effect.\n\nOptions:\n  show_cursor=true  — also report the current cursor position\n  zoom=[x0,y0,x1,y1] — return a cropped close-up of a screen region\n  save_path         — write the image to disk\n\nMouse coordinates you read off the most recent screenshot (including a zoom/region capture) are mapped to the desktop automatically, also with monitors left of or above the primary one.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -565,12 +573,7 @@ impl McpServer {
                         "show_cursor": {
                             "type": "boolean",
                             "default": false,
-                            "description": "When true, overlays a red dot at the current cursor position."
-                        },
-                        "marks": {
-                            "type": "boolean",
-                            "default": false,
-                            "description": "When true, draws numbered bounding boxes (Set-of-Marks) over all interactive UI elements. Uses the platform accessibility API."
+                            "description": "When true, also reports the current cursor position in the text output."
                         },
                         "zoom": {
                             "type": "array",
@@ -595,7 +598,7 @@ impl McpServer {
             }),
             json!({
                 "name": "mouse",
-                "description": "Control the mouse: move to a position, click (left/right/middle), double-click, triple-click, scroll, or drag from one point to another. Always provide image_width and image_height from the screenshot tool output for correct Retina/HiDPI coordinate translation.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
+                "description": "Control the mouse: move to a position, click (left/right/middle), double-click, triple-click, scroll, or drag from one point to another. Use pixel coordinates from the most recent screenshot of the same machine; they are mapped onto its desktop automatically.\n\nRoutes to the session's default peer unless 'peer' is provided. See `opendesk_peers` to list available targets.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -614,12 +617,9 @@ impl McpServer {
                         "y": { "type": "integer", "default": 0, "description": "Y coordinate as it appears in the screenshot." },
                         "end_x": { "type": "integer", "description": "Target X for drag action." },
                         "end_y": { "type": "integer", "description": "Target Y for drag action." },
-                        "image_width": { "type": "integer", "description": "Width of the screenshot the coordinates were read from. ALWAYS provide this for correct Retina/HiDPI scaling." },
-                        "image_height": { "type": "integer", "description": "Height of the screenshot. Provide alongside image_width." },
                         "direction": { "type": "string", "enum": ["up", "down", "left", "right"], "description": "Scroll direction. Used with action='scroll'." },
                         "amount": { "type": "integer", "default": 3, "description": "Scroll amount in clicks." },
-                        "duration": { "type": "number", "default": 0.25, "description": "Movement duration in seconds." },
-                        "settle_ms": { "type": "integer", "default": 500, "description": "Milliseconds to wait after the action for the UI to settle." },
+                        "settle_ms": { "type": "integer", "description": "Optional. Milliseconds to wait after the action for the UI to settle before returning." },
                         "guard": guard_schema(),
                         "peer": {
                             "type": "string",
@@ -656,8 +656,7 @@ impl McpServer {
                                 }
                             }
                         },
-                        "interval": { "type": "number", "default": 0.02, "description": "Seconds between keystrokes (action='type')." },
-                        "settle_ms": { "type": "integer", "default": 300, "description": "Milliseconds to wait after the action." },
+                        "settle_ms": { "type": "integer", "description": "Optional. Milliseconds to wait after the action before returning." },
                         "hold_duration": { "type": "number", "default": 1.0, "description": "Seconds to hold key for action='hold'." },
                         "guard": guard_schema(),
                         "peer": {
@@ -1021,7 +1020,7 @@ impl McpServer {
 
                 let mut text_lines = vec![
                     format!("{prefix}Captured {width}x{height} screenshot{zoom_desc}{region_desc}{saved_desc}."),
-                    "Mouse coordinates: pass image_width=... and image_height=... to the mouse tool for correct Retina scaling.".to_string(),
+                    "Mouse coordinates: use pixel positions from this image; they are mapped to the desktop automatically.".to_string(),
                 ];
 
                 if args
@@ -1062,6 +1061,8 @@ impl McpServer {
 
                 let x = args.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
                 let y = args.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                // Coordinates are screenshot pixels; map them to the desktop.
+                let (x, y) = self.computer.image_to_screen(x, y);
 
                 match action {
                     "move" => {
@@ -1127,6 +1128,7 @@ impl McpServer {
                             .or_else(|| args.get("to_y"))
                             .and_then(|v| v.as_i64())
                             .unwrap_or(0) as i32;
+                        let (to_x, to_y) = self.computer.image_to_screen(to_x, to_y);
                         self.computer.mouse_drag(x, y, to_x, to_y)?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Dragged from ({x}, {y}) to ({to_x}, {to_y}).") }),
@@ -1540,14 +1542,17 @@ impl McpServer {
                     .get("quality")
                     .and_then(|v| v.as_u64())
                     .map(|q| q as u8);
-                let (bytes, mime) = remote.screenshot_format(None, Some(fmt), quality).await?;
+                let (bytes, mime) = remote
+                    .screenshot_region_format(None, parse_region(args), Some(fmt), quality)
+                    .await?;
                 let b64 = BASE64.encode(&bytes);
                 let mut saved_desc = String::new();
                 if let Some(save_path) = args.get("save_path").and_then(|v| v.as_str()) {
                     if let Some(parent) = std::path::Path::new(save_path).parent() {
                         let _ = std::fs::create_dir_all(parent);
                     }
-                    let _ = std::fs::write(save_path, &bytes);
+                    std::fs::write(save_path, &bytes)
+                        .with_context(|| format!("failed to save screenshot to {save_path}"))?;
                     saved_desc = format!(" -> saved to {save_path}");
                 }
                 Ok(vec![
