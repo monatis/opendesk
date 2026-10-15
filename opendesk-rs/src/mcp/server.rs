@@ -892,6 +892,37 @@ impl McpServer {
                 }
             }),
             json!({
+                "name": "opendesk_wait",
+                "description": "Wait until a UI element reaches a state, instead of sleeping a fixed time after an action. Returns as soon as the condition holds (with the element and how long it took), or an error after `timeout_secs`. Example: after clicking Save, wait for selector `dialog` to be `detached`.\n\nRoutes to the session's default peer unless 'peer' is provided.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "selector": { "type": "string", "description": "Accessibility selector, e.g. 'button[name=\"OK\"]' or a name." },
+                        "state": { "type": "string", "enum": ["attached", "detached", "visible", "hidden", "enabled", "disabled", "focused", "unfocused"], "default": "visible" },
+                        "app": { "type": "string", "description": "Application to search; defaults to the foreground app." },
+                        "timeout_secs": { "type": "number", "default": 10, "description": "Give up after this long (max 120)." },
+                        "peer": { "type": "string" }
+                    },
+                    "required": ["selector"],
+                    "additionalProperties": false
+                }
+            }),
+            json!({
+                "name": "opendesk_events",
+                "description": "Event log of what changed in an app: focus moves, value/name/state changes, windows and menus opening or closing, live-region announcements. `start` begins watching an app (default: foreground), `read` returns the events since the last read (with `wait_ms`, waits for the first one, so act-then-read sees the reaction), `stop` ends the watch.\n\nRoutes to the session's default peer unless 'peer' is provided.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["start", "read", "stop"] },
+                        "app": { "type": "string", "description": "For start: the application to watch; defaults to the foreground app." },
+                        "wait_ms": { "type": "integer", "default": 0, "description": "For read: wait up to this long for the first event (max 120000)." },
+                        "peer": { "type": "string" }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                }
+            }),
+            json!({
                 "name": "opendesk_guard",
                 "description": "Set a default foreground-window guard for this session's `mouse` and `keyboard` calls (local and remote). While set, input is refused with an error unless the target machine's foreground window matches, so keystrokes never land in a chat, browser or terminal that took focus. A `guard` argument on an individual call overrides it.",
                 "inputSchema": {
@@ -952,6 +983,8 @@ impl McpServer {
             "opendesk_disconnect" => return self.admin_disconnect(args).await,
             "opendesk_privacy" => return self.admin_privacy(args).await,
             "opendesk_guard" => return self.admin_guard(args).await,
+            "opendesk_wait" => return self.admin_wait(args).await,
+            "opendesk_events" => return self.admin_events(args).await,
             "audit" => return self.execute_audit(args).await,
             "schedule" => return self.execute_schedule(args).await,
             "learn" => return self.execute_learn(args).await,
@@ -2521,6 +2554,107 @@ impl McpServer {
         Ok(vec![json!({ "type": "text", "text": msg })])
     }
 
+    async fn admin_wait(&self, args: &Value) -> Result<Vec<Value>> {
+        let selector = args
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'selector' required"))?
+            .to_string();
+        let state = args
+            .get("state")
+            .and_then(|v| v.as_str())
+            .unwrap_or("visible")
+            .to_string();
+        let app = args.get("app").and_then(|v| v.as_str()).map(str::to_string);
+        let timeout = std::time::Duration::from_secs_f64(
+            args.get("timeout_secs")
+                .and_then(|v| v.as_f64())
+                .filter(|s| s.is_finite() && *s > 0.0)
+                .unwrap_or(10.0)
+                .min(120.0),
+        );
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let text = match remote_opt {
+            Some(remote) => {
+                remote
+                    .ui_wait(app.as_deref(), &selector, &state, timeout)
+                    .await?
+            }
+            None => {
+                let computer = self.computer.clone();
+                tokio::task::spawn_blocking(move || {
+                    computer.ui_wait(app.as_deref(), &selector, &state, timeout)
+                })
+                .await??
+            }
+        };
+        let prefix = if target == "local" {
+            String::new()
+        } else {
+            format!("[on {target}] ")
+        };
+        Ok(vec![
+            json!({ "type": "text", "text": format!("{prefix}{text}") }),
+        ])
+    }
+
+    async fn admin_events(&self, args: &Value) -> Result<Vec<Value>> {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("'action' required"))?;
+        let app = args.get("app").and_then(|v| v.as_str()).map(str::to_string);
+        let wait = std::time::Duration::from_millis(
+            args.get("wait_ms")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                .min(120_000),
+        );
+        let (remote_opt, target) = self
+            .resolve_remote(args.get("peer").and_then(|v| v.as_str()))
+            .await?;
+        let computer = self.computer.clone();
+        let text = match (action, remote_opt) {
+            ("start", Some(r)) => format!(
+                "Watching events from {}.",
+                r.events_start(app.as_deref()).await?
+            ),
+            ("start", None) => {
+                let app =
+                    tokio::task::spawn_blocking(move || computer.events_start(app.as_deref()))
+                        .await??;
+                format!("Watching events from {app}.")
+            }
+            ("read", Some(r)) => r.events_read(wait).await?.describe(),
+            ("read", None) => tokio::task::spawn_blocking(move || computer.events_read(wait))
+                .await??
+                .describe(),
+            ("stop", Some(r)) => if r.events_stop().await? {
+                "Event watch stopped."
+            } else {
+                "No event watch was running."
+            }
+            .to_string(),
+            ("stop", None) => if computer.events_stop() {
+                "Event watch stopped."
+            } else {
+                "No event watch was running."
+            }
+            .to_string(),
+            (other, _) => bail!("Unknown events action: {other}"),
+        };
+        let prefix = if target == "local" {
+            String::new()
+        } else {
+            format!("[on {target}] ")
+        };
+        Ok(vec![
+            json!({ "type": "text", "text": format!("{prefix}{text}") }),
+        ])
+    }
+
     async fn admin_guard(&self, args: &Value) -> Result<Vec<Value>> {
         let action = args
             .get("action")
@@ -2961,8 +3095,10 @@ mod tests {
         assert!(tools.iter().any(|t| t["name"] == "opendesk_app_api"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_privacy"));
         assert!(tools.iter().any(|t| t["name"] == "opendesk_guard"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_wait"));
+        assert!(tools.iter().any(|t| t["name"] == "opendesk_events"));
 
-        assert_eq!(tools.len(), 21);
+        assert_eq!(tools.len(), 23);
     }
 
     #[cfg(target_os = "windows")]

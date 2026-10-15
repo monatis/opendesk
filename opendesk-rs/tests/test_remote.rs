@@ -433,3 +433,65 @@ async fn test_live_input_guard_is_enforced_by_the_peer() -> Result<()> {
     server_task.abort();
     Ok(())
 }
+
+/// Read-only: watches whatever app is in front and waits on an element that
+/// does not exist. Nothing is typed, clicked or opened.
+#[cfg(target_os = "windows")]
+#[tokio::test]
+async fn test_live_wait_and_events_over_rpc() -> Result<()> {
+    let server_dir = tempfile::tempdir()?;
+    let client_dir = tempfile::tempdir()?;
+    let port = 18435;
+
+    let server_id = Identity::load_or_create(Some(server_dir.path()))?;
+    let client_id = Identity::load_or_create(Some(client_dir.path()))?;
+    TrustedPeers::new(Some(server_dir.path())).add(&client_id.public_bytes(), "my-client", "")?;
+    let client_trusted = TrustedPeers::new(Some(client_dir.path()));
+    client_trusted.add(&server_id.public_bytes(), "my-server", "")?;
+    client_trusted.cache_endpoint(&server_id.public_bytes(), "127.0.0.1", port)?;
+
+    let server = Arc::new(OpendeskServer::new(
+        "127.0.0.1",
+        port,
+        Some(server_dir.path()),
+        vec![],
+        None,
+    )?);
+    let s_clone = server.clone();
+    let server_task = tokio::spawn(async move { s_clone.serve_forever().await });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let remote = remote_connect(Some("my-server"), None, None, Some(client_dir.path())).await?;
+    assert!(remote.capabilities().contains_key("ui.wait"));
+    assert!(remote.capabilities().contains_key("events"));
+
+    let err = remote
+        .ui_wait(
+            None,
+            "button[name=\"opendesk-no-such-element-7f3a\"]",
+            "attached",
+            std::time::Duration::from_millis(500),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("did not become attached"), "{err}");
+
+    // Reading before a watch is an error; after start it returns a batch.
+    assert!(remote.events_read(std::time::Duration::ZERO).await.is_err());
+    if remote.events_start(None).await.is_ok() {
+        let batch = remote
+            .events_read(std::time::Duration::from_millis(200))
+            .await?;
+        assert!(!batch.app.is_empty(), "{batch:?}");
+        assert!(remote.events_stop().await?);
+    }
+
+    // Environment comes back with real values and a clock offset.
+    let (env, offset) = remote.environment().await?;
+    assert!(!env.os_version.is_empty(), "{env:?}");
+    assert!(offset.is_some_and(|o| o.abs() < 5_000), "{offset:?}");
+
+    server_task.abort();
+    Ok(())
+}

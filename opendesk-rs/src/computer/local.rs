@@ -103,6 +103,8 @@ pub struct LocalComputer {
     held: std::sync::Arc<std::sync::Mutex<super::keys::HeldInput>>,
     /// The last screenshot's pixel-to-desktop mapping (pixels dropped).
     last_capture: std::sync::Arc<std::sync::Mutex<Option<xa11y::Screenshot>>>,
+    /// Running accessibility-event watch (see `watch`).
+    pub(crate) watcher: std::sync::Arc<std::sync::Mutex<Option<super::watch::EventWatcher>>>,
 }
 
 impl Default for LocalComputer {
@@ -117,6 +119,7 @@ impl LocalComputer {
             privacy: std::sync::Arc::new(crate::computer::privacy::PrivacyController::new()),
             held: Default::default(),
             last_capture: Default::default(),
+            watcher: Default::default(),
         }
     }
 
@@ -685,7 +688,7 @@ impl LocalComputer {
     // App management
     // -----------------------------------------------------------------------
 
-    fn find_app(name: &str) -> Result<App> {
+    pub(crate) fn find_app(name: &str) -> Result<App> {
         if let Ok(app) = App::by_name(name, Duration::from_millis(800)) {
             return Ok(app);
         }

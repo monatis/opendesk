@@ -604,6 +604,7 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
             // A controller that drops mid-gesture must not leave Ctrl/Alt or
             // a mouse button held down on this machine.
             self.0.release_held_input();
+            self.0.events_stop();
             self.0.reset_privacy();
         }
     }
@@ -630,6 +631,8 @@ pub(crate) async fn run_session_loop<T: Transport + ?Sized>(
     // input.* honours a `guard` parameter (see computer::foreground).
     caps.insert("input.guard".to_string(), rmpv::Value::Boolean(true));
     caps.insert("ui.value".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("ui.wait".to_string(), rmpv::Value::Boolean(true));
+    caps.insert("events".to_string(), rmpv::Value::Boolean(true));
 
     let desc = read_description(home);
     if !desc.is_empty() {
@@ -1066,6 +1069,59 @@ pub(crate) async fn dispatch_call(
                 .map(|_| rmpv::Value::Nil)
                 .map_err(|e| e.to_string())
         }
+        "ui.wait" => {
+            let app = params
+                .get("app")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let selector = params
+                .get("selector")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'selector'")?
+                .to_string();
+            let state = params
+                .get("state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("visible")
+                .to_string();
+            let timeout = Duration::from_millis(
+                params
+                    .get("timeout_ms")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(10_000),
+            );
+            let computer = computer.clone();
+            tokio::task::spawn_blocking(move || {
+                computer.ui_wait(app.as_deref(), &selector, &state, timeout)
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map(rmpv::Value::from)
+            .map_err(|e| e.to_string())
+        }
+        "events.start" => {
+            let app = params
+                .get("app")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let computer = computer.clone();
+            tokio::task::spawn_blocking(move || computer.events_start(app.as_deref()))
+                .await
+                .map_err(|e| e.to_string())?
+                .map(rmpv::Value::from)
+                .map_err(|e| e.to_string())
+        }
+        "events.read" => {
+            let wait =
+                Duration::from_millis(params.get("wait_ms").and_then(|v| v.as_u64()).unwrap_or(0));
+            let computer = computer.clone();
+            let batch = tokio::task::spawn_blocking(move || computer.events_read(wait))
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| e.to_string())?;
+            rmpv::ext::to_value(batch).map_err(|e| e.to_string())
+        }
+        "events.stop" => Ok(rmpv::Value::Boolean(computer.events_stop())),
         "ui.value" => {
             let app_name = params.get("app").and_then(|v| v.as_str());
             let selector = params

@@ -680,6 +680,64 @@ impl RemoteComputer {
         Ok((env, offset))
     }
 
+    fn require_cap(&self, cap: &str, what: &str) -> Result<()> {
+        if self.capabilities.contains_key(cap) {
+            Ok(())
+        } else {
+            bail!("this peer's opendesk is too old for {what} ({cap}); update it")
+        }
+    }
+
+    /// Wait on the peer until `selector` reaches `state` (see computer::watch).
+    pub async fn ui_wait(
+        &self,
+        app_name: Option<&str>,
+        selector: &str,
+        state: &str,
+        timeout: Duration,
+    ) -> Result<String> {
+        self.require_cap("ui.wait", "waiting on UI state")?;
+        let mut params = HashMap::new();
+        params.insert("selector".to_string(), rmpv::Value::from(selector));
+        params.insert("state".to_string(), rmpv::Value::from(state));
+        params.insert(
+            "timeout_ms".to_string(),
+            rmpv::Value::from(timeout.as_millis() as u64),
+        );
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
+        }
+        let res = self.call("ui.wait", params).await?;
+        Ok(res.as_str().unwrap_or_default().to_string())
+    }
+
+    pub async fn events_start(&self, app_name: Option<&str>) -> Result<String> {
+        self.require_cap("events", "event logs")?;
+        let mut params = HashMap::new();
+        if let Some(app) = app_name {
+            params.insert("app".to_string(), rmpv::Value::from(app));
+        }
+        let res = self.call("events.start", params).await?;
+        Ok(res.as_str().unwrap_or_default().to_string())
+    }
+
+    pub async fn events_read(&self, wait: Duration) -> Result<crate::computer::watch::EventBatch> {
+        self.require_cap("events", "event logs")?;
+        let mut params = HashMap::new();
+        params.insert(
+            "wait_ms".to_string(),
+            rmpv::Value::from(wait.as_millis() as u64),
+        );
+        let res = self.call("events.read", params).await?;
+        rmpv::ext::from_value(res).map_err(|e| anyhow!("malformed events.read reply: {e}"))
+    }
+
+    pub async fn events_stop(&self) -> Result<bool> {
+        self.require_cap("events", "event logs")?;
+        let res = self.call("events.stop", HashMap::new()).await?;
+        Ok(res.as_bool().unwrap_or(false))
+    }
+
     /// Value (or name) of the element matching `selector` on the peer.
     pub async fn ui_get_value(&self, app_name: Option<&str>, selector: &str) -> Result<String> {
         if !self.capabilities.contains_key("ui.value") {
