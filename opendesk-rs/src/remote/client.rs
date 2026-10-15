@@ -400,6 +400,11 @@ impl RemoteComputer {
     }
 
     pub async fn mouse_scroll(&self, x: i32, y: i32, delta_y: i32) -> Result<()> {
+        self.mouse_scroll_xy(x, y, 0, delta_y).await
+    }
+
+    /// Scroll by ticks: positive `delta_y` up, positive `delta_x` right.
+    pub async fn mouse_scroll_xy(&self, x: i32, y: i32, delta_x: i32, delta_y: i32) -> Result<()> {
         let evt = vec![
             (rmpv::Value::from("action"), rmpv::Value::from("scroll")),
             (
@@ -409,7 +414,7 @@ impl RemoteComputer {
                     (rmpv::Value::from("y"), rmpv::Value::from(y)),
                 ]),
             ),
-            (rmpv::Value::from("dx"), rmpv::Value::from(0.0)),
+            (rmpv::Value::from("dx"), rmpv::Value::from(delta_x as f64)),
             (rmpv::Value::from("dy"), rmpv::Value::from(delta_y as f64)),
         ];
         let mut params = HashMap::new();

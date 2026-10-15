@@ -80,3 +80,38 @@ The CLI exits with the command's exit code, or `124` on timeout.
 ---
 
 Start with the primary interaction tool: [ui →](ui.md)
+
+## Waiting for the UI: `opendesk_wait` and `opendesk_events`
+
+Instead of sleeping a fixed time after an action, wait for its effect.
+
+`opendesk_wait` blocks until an element reaches a state, then returns the
+element and how long it took; it fails after `timeout_secs` (default 10,
+max 120). States: `attached`, `detached`, `visible`, `hidden`, `enabled`,
+`disabled`, `focused`, `unfocused`.
+
+```json
+{ "selector": "button[name=\"OK\"]", "state": "detached", "app": "notepad", "timeout_secs": 5 }
+```
+
+`opendesk_events` keeps an event log for one app (default: the foreground
+app): focus moves, value/name/state changes, structure changes, windows and
+menus opening or closing, and live-region announcements.
+
+- `{"action": "start", "app": "chrome"}` begins watching (restarting any watch).
+- `{"action": "read", "wait_ms": 2000}` returns the events since the last read,
+  waiting up to `wait_ms` for the first one, so "act, then read" sees the
+  reaction. The log keeps the latest 2000 events and reports how many were
+  dropped.
+- `{"action": "stop"}` ends the watch. A peer also stops it when the
+  controller's session ends.
+
+Both route to a remote peer like the other tools (`peer`), as long as that
+peer's opendesk advertises the `ui.wait` / `events` capabilities.
+
+## Peer environment: `opendesk_capabilities`
+
+Shows the capabilities a peer advertises and its environment: OS version,
+locale, keyboard layout of the foreground window, time zone, the clock offset
+from this machine, and each display's position, size and scaling. Check it
+before typing or clicking on an unfamiliar peer.

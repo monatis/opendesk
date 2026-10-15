@@ -799,12 +799,14 @@ pub(crate) async fn dispatch_call(
                     .map(|_| rmpv::Value::Nil)
                     .map_err(|e| e.to_string()),
                 "scroll" => {
-                    let dy = evt
-                        .and_then(|e| value_get(e, "dy"))
-                        .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
-                        .unwrap_or(0.0) as i32;
+                    let delta = |k: &str| {
+                        evt.and_then(|e| value_get(e, k))
+                            .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+                            .unwrap_or(0.0) as i32
+                    };
+                    let (dx, dy) = (delta("dx"), delta("dy"));
                     computer
-                        .mouse_scroll(x, y, dy)
+                        .mouse_scroll_xy(x, y, dx, dy)
                         .map(|_| rmpv::Value::Nil)
                         .map_err(|e| e.to_string())
                 }

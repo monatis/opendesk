@@ -27,7 +27,7 @@ OpenDesk has transitioned from its prototype Python implementation to a **100% n
 | **Memory Footprint** | ~60MB – 120MB RSS | **~8MB – 18MB RSS** |
 | **UI Automation** | Flat tag lists with loose control resolution | **Deep hierarchical accessibility trees (`xa11y`) with role & value attributes** |
 | **Wire Protocol** | Base64-inflated JSON strings | **Zero-overhead native MessagePack binary (`bin`) with X25519 + ChaCha20-Poly1305** |
-| **Input Reliability** | WinUI 3 buffer drops under raw keystroke loops | **Atomic clipboard paste engine + layout-independent modifier chords** |
+| **Input Reliability** | WinUI 3 buffer drops under raw keystroke loops | **Unicode SendInput typing (clipboard untouched) + keys pressed for the target's real keyboard layout** |
 
 ---
 
@@ -86,16 +86,19 @@ When connected via MCP, the agent receives a rich, deterministic set of desktop 
 
 | Tool | Capabilities |
 | :--- | :--- |
-| **`screenshot`** | Captures display as PNG or lightweight JPEG with configurable quality (`format="jpeg"`, `quality=75`). Supports multi-monitor selection, Set-of-Marks overlay, and region crops. |
+| **`screenshot`** | Captures display as PNG or lightweight JPEG with configurable quality (`format="jpeg"`, `quality=75`). Captures the whole virtual desktop (all monitors) or a region/zoom crop; mouse coordinates read off it are mapped back to the desktop automatically. |
 | **`opendesk_view`** | Opens the interactive OpenDesk MCP App remote desktop viewport inline in supported hosts (**Goose**, **Claude Desktop**, custom web harnesses) for live observation, peer switching, and human-in-the-loop control. |
 | **`ui`** | Inspects hierarchical accessibility trees (`action="get_tree"`), clicks elements by semantic role/title (`action="click"`), and types into active controls (`action="type"`). |
-| **`keyboard`** | Types text via atomic Unicode paste (`action="type"`), presses single keys (`action="press"`), executes modifier chords (`action="hotkey"`, e.g. `ctrl+s`), or holds keys (`action="hold"`). |
+| **`keyboard`** | Types Unicode text without touching the clipboard (`action="type"`), presses keys and chords (`action="press"`/`"hotkey"`, e.g. `ctrl+s`, `ctrl+-`; characters use the target's real keyboard layout), holds keys (`action="hold"`), or runs timed sequences (`action="sequence"`). |
+| **`opendesk_guard`** | Sets a foreground-window guard: `mouse`/`keyboard` input is refused unless the expected window (title/process) is in front, so keystrokes never land in the wrong app. Also available per call as `guard`. |
+| **`opendesk_wait`** / **`opendesk_events`** | Wait until an element is attached/visible/enabled/focused/... instead of sleeping, and read an app's accessibility event log (focus, value, state, window, menu and live-region changes). |
+| **`opendesk_exec`** | Runs a shell command on the target. Timeouts kill the whole process tree and return the partial output. |
 | **`mouse`** | Pixel-accurate pointer movements (`action="move"`), clicks (`action="click"`), drags (`action="drag"`), and vertical/horizontal scrolling (`action="scroll"`). |
 | **`app`** | Launches processes (`action="open"`), brings windows to foreground (`action="focus"`), closes windows/processes (`action="close"`), and enumerates running applications (`action="list"`). |
 | **`clipboard`** | Reads (`action="read"`) and writes (`action="write"`) UTF-8 text from/to system clipboard. |
-| **`audit`** | Queries tamper-evident local server activity logs (`action="query"`). |
-| **`schedule`** | Schedules background task executions on cron or interval timers (`action="create"`, `action="list"`, `action="cancel"`). |
-| **Remote Peer Routing** | `opendesk_peers`, `opendesk_use`, and `opendesk_status`. Every tool accepts an optional `peer="peer-name"` parameter to seamlessly target remote machines over encrypted RPC. |
+| **`audit`** | Shows (`action="show"`) or replays (`action="replay"`) the session audit log. |
+| **`schedule`** | Stores named schedules (`action="add"`, `"list"`, `"remove"`). This build does not execute them. |
+| **Remote Peer Routing** | `opendesk_peers`, `opendesk_use`, `opendesk_status`, and `opendesk_capabilities` (what a peer supports, plus its locale, keyboard layout, displays and clock offset). Every tool accepts an optional `peer="peer-name"` parameter to seamlessly target remote machines over encrypted RPC. |
 
 ---
 

@@ -1174,14 +1174,8 @@ impl McpServer {
                             .get("direction")
                             .and_then(|v| v.as_str())
                             .unwrap_or("up");
-                        let dy = if let Some(custom_dy) = args.get("dy").and_then(|v| v.as_i64()) {
-                            custom_dy as i32
-                        } else if dir == "down" {
-                            -amount
-                        } else {
-                            amount
-                        };
-                        self.computer.mouse_scroll(x, y, dy)?;
+                        let (dx, dy) = scroll_delta(args, dir, amount);
+                        self.computer.mouse_scroll_xy(x, y, dx, dy)?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Scrolled {dir} {amount} click(s) at ({x}, {y}).") }),
                         ])
@@ -1671,14 +1665,8 @@ impl McpServer {
                             .get("direction")
                             .and_then(|v| v.as_str())
                             .unwrap_or("up");
-                        let dy = if let Some(custom_dy) = args.get("dy").and_then(|v| v.as_i64()) {
-                            custom_dy as i32
-                        } else if dir == "down" {
-                            -amount
-                        } else {
-                            amount
-                        };
-                        remote.mouse_scroll(x, y, dy).await?;
+                        let (dx, dy) = scroll_delta(args, dir, amount);
+                        remote.mouse_scroll_xy(x, y, dx, dy).await?;
                         Ok(vec![
                             json!({ "type": "text", "text": format!("{prefix}Scrolled {dir} {amount} click(s) at ({x}, {y}).") }),
                         ])
@@ -2970,6 +2958,22 @@ impl McpServer {
     }
 }
 
+/// Scroll ticks for a `mouse` scroll: explicit `dx`/`dy` win, else
+/// `direction` × `amount`. Positive dy scrolls up, positive dx right
+/// (xa11y's convention). left/right used to scroll up.
+fn scroll_delta(args: &Value, dir: &str, amount: i32) -> (i32, i32) {
+    let explicit = |k: &str| args.get(k).and_then(|v| v.as_i64()).map(|v| v as i32);
+    if explicit("dx").is_some() || explicit("dy").is_some() {
+        return (explicit("dx").unwrap_or(0), explicit("dy").unwrap_or(0));
+    }
+    match dir {
+        "down" => (0, -amount),
+        "left" => (-amount, 0),
+        "right" => (amount, 0),
+        _ => (0, amount),
+    }
+}
+
 /// `timeout_secs` as whole seconds, rounded up so e.g. 0.5 is not 0.
 fn exec_timeout_arg(args: &Value) -> Option<u64> {
     args.get("timeout_secs")
@@ -3049,6 +3053,16 @@ fn parse_region(args: &Value) -> Option<xa11y::Rect> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scroll_directions_map_to_axes() {
+        let none = json!({});
+        assert_eq!(scroll_delta(&none, "up", 3), (0, 3));
+        assert_eq!(scroll_delta(&none, "down", 3), (0, -3));
+        assert_eq!(scroll_delta(&none, "left", 3), (-3, 0));
+        assert_eq!(scroll_delta(&none, "right", 3), (3, 0));
+        assert_eq!(scroll_delta(&json!({ "dx": 5 }), "up", 3), (5, 0));
+    }
 
     #[tokio::test]
     async fn test_mcp_initialize() {

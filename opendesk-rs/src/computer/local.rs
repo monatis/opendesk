@@ -308,9 +308,14 @@ impl LocalComputer {
     }
 
     pub fn mouse_scroll(&self, x: i32, y: i32, dy: i32) -> Result<()> {
+        self.mouse_scroll_xy(x, y, 0, dy)
+    }
+
+    /// Scroll by ticks: positive `dy` up, positive `dx` right.
+    pub fn mouse_scroll_xy(&self, x: i32, y: i32, dx: i32, dy: i32) -> Result<()> {
         let sim = input_sim().map_err(|e| anyhow!("input_sim unavailable: {e}"))?;
         sim.mouse()
-            .scroll(Point { x, y }, ScrollDelta { dx: 0, dy })
+            .scroll(Point { x, y }, ScrollDelta { dx, dy })
             .map_err(|e| anyhow!("scroll failed: {e}"))
     }
 
